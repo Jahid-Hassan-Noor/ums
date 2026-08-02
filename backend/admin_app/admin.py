@@ -1,0 +1,52 @@
+from django.contrib import admin
+from .models import (
+    AcademicEvent,
+    AuditLog,
+    Building,
+    Center,
+    ClassGroup,
+    ClassMeeting,
+    Course,
+    CourseLabGroup,
+    CourseOffering,
+    CourseTutorialGroup,
+    Department,
+    Hostel,
+    HostelRoom,
+    IELTSSession,
+    ImportJob,
+    Program,
+    ReportExport,
+    Room,
+    School,
+    Semester,
+    SemesterHoliday,
+    SystemSetting,
+    Unit,
+    Venue,
+)
+
+admin.site.register(AcademicEvent)
+admin.site.register(AuditLog)
+admin.site.register(Building)
+admin.site.register(Center)
+admin.site.register(ClassGroup)
+admin.site.register(ClassMeeting)
+admin.site.register(Course)
+admin.site.register(CourseLabGroup)
+admin.site.register(CourseOffering)
+admin.site.register(CourseTutorialGroup)
+admin.site.register(Department)
+admin.site.register(Hostel)
+admin.site.register(HostelRoom)
+admin.site.register(IELTSSession)
+admin.site.register(ImportJob)
+admin.site.register(Program)
+admin.site.register(ReportExport)
+admin.site.register(Room)
+admin.site.register(School)
+admin.site.register(Semester)
+admin.site.register(SemesterHoliday)
+admin.site.register(SystemSetting)
+admin.site.register(Unit)
+admin.site.register(Venue)

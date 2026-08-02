@@ -1,0 +1,48 @@
+# Ignore dependency folders anywhere
+node_modules/
+**/node_modules/
+frontend/node_modules/
+
+# Ignore docs and semantic files
+docs/
+**/docs/
+*.md
+*.txt
+*.rst
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.svg
+
+# Ignore config/docs that trigger semantic extraction
+*.yml
+*.yaml
+*.toml
+*.ini
+*.cfg
+*.html
+*.htm
+*.xml
+*.csv
+*.tsv
+
+# Ignore build/cache folders
+.git/
+.venv/
+venv/
+__pycache__/
+dist/
+build/
+.next/
+out/
+coverage/
+static/
+media/
+uploads/
+graphify-out/

@@ -1,0 +1,198 @@
+name: portal
+
+services:
+  postgresql:
+    container_name: portal_postgresql
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PORTAL_DB_NAME:-portal_db}
+      POSTGRES_USER: ${PORTAL_DB_USER:-portal_user}
+      POSTGRES_PASSWORD: ${PORTAL_DB_PASSWORD:?Set PORTAL_DB_PASSWORD in .env}
+    volumes:
+      - portal_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  redis:
+    container_name: portal_redis
+    image: redis:8.8.0-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - portal_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  backend:
+    container_name: portal_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-portal-local}/portal-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,nginx,backend,frontend}
+      DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU Portal <no-reply@aiu.edu.my>}
+      EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-10}
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-60}
+      DB_NAME: ${PORTAL_DB_NAME:-portal_db}
+      DB_USER: ${PORTAL_DB_USER:-portal_user}
+      DB_PASSWORD: ${PORTAL_DB_PASSWORD:?Set PORTAL_DB_PASSWORD in .env}
+      DB_HOST: ${PORTAL_DB_HOST:-postgresql}
+      DB_PORT: ${PORTAL_DB_PORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      MEDIA_ROOT: /app/media
+      STATIC_ROOT: /app/staticfiles
+    volumes:
+      - portal_media_data:/app/media
+      - portal_static_data:/app/staticfiles
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('127.0.0.1', 8000), 3).close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  celery_worker:
+    container_name: portal_celery_worker
+    image: ${DOCKERHUB_NAMESPACE:-portal-local}/portal-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    user: "65534:65534"
+    entrypoint: []
+    command: celery -A core worker --loglevel=INFO --concurrency=2
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU Portal <no-reply@aiu.edu.my>}
+      EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-10}
+      DB_NAME: ${PORTAL_DB_NAME:-portal_db}
+      DB_USER: ${PORTAL_DB_USER:-portal_user}
+      DB_PASSWORD: ${PORTAL_DB_PASSWORD:?Set PORTAL_DB_PASSWORD in .env}
+      DB_HOST: ${PORTAL_DB_HOST:-postgresql}
+      DB_PORT: ${PORTAL_DB_PORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_beat:
+    container_name: portal_celery_beat
+    image: ${DOCKERHUB_NAMESPACE:-portal-local}/portal-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    user: "65534:65534"
+    entrypoint: []
+    command: celery -A core beat --loglevel=INFO --schedule=/tmp/celerybeat-schedule
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU Portal <no-reply@aiu.edu.my>}
+      EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-10}
+      DB_NAME: ${PORTAL_DB_NAME:-portal_db}
+      DB_USER: ${PORTAL_DB_USER:-portal_user}
+      DB_PASSWORD: ${PORTAL_DB_PASSWORD:?Set PORTAL_DB_PASSWORD in .env}
+      DB_HOST: ${PORTAL_DB_HOST:-postgresql}
+      DB_PORT: ${PORTAL_DB_PORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    container_name: portal_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+    image: ${DOCKERHUB_NAMESPACE:-portal-local}/portal-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      BACKEND_API_URL: ${BACKEND_API_URL:-http://backend:8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  nginx:
+    container_name: portal_nginx
+    image: nginx:1.30.3-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    volumes:
+      - ./deploy/nginx/portal.local.conf:/etc/nginx/conf.d/default.conf:ro
+      - portal_static_data:/var/www/static:ro
+      - portal_media_data:/var/www/media:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  portal_postgres_data:
+    name: portal_postgres_data
+  portal_redis_data:
+    name: portal_redis_data
+  portal_media_data:
+    name: portal_media_data
+  portal_static_data:
+    name: portal_static_data

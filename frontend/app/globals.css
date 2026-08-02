@@ -1,0 +1,562 @@
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@source "./**/*.{js,ts,jsx,tsx,mdx}";
+@source "../components/**/*.{js,ts,jsx,tsx,mdx}";
+@source "../hooks/**/*.{js,ts,jsx,tsx,mdx}";
+@source "../lib/**/*.{js,ts,jsx,tsx,mdx}";
+@source "../types/**/*.{js,ts,jsx,tsx,mdx}";
+@source "../node_modules/mina-scheduler/dist/index.js";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-default-50: var(--muted);
+  --color-default-100: var(--secondary);
+  --color-default-200: var(--border);
+  --color-default-300: var(--input);
+  --color-default-400: var(--muted-foreground);
+  --color-default-500: var(--foreground);
+  --color-default-600: var(--foreground);
+  --color-primary-50: oklch(0.97 0.014 254.604);
+  --color-primary-100: oklch(0.932 0.032 255.585);
+  --color-primary-200: oklch(0.882 0.059 254.128);
+  --color-primary-300: oklch(0.809 0.105 251.813);
+  --color-primary-400: oklch(0.707 0.165 254.624);
+  --color-primary-500: oklch(0.623 0.214 259.815);
+  --color-primary-600: oklch(0.546 0.245 262.881);
+  --color-secondary-500: oklch(0.769 0.188 70.08);
+  --color-success-500: oklch(0.696 0.17 162.48);
+  --color-warning-500: oklch(0.769 0.188 70.08);
+  --color-danger-500: var(--destructive);
+  --radius: 0.625rem;
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.21 0.006 285.885);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.705 0.015 286.067);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.21 0.006 285.885);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.705 0.015 286.067);
+}
+
+.dark {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.552 0.016 285.938);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.21 0.006 285.885);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.274 0.006 286.033);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.552 0.016 285.938);
+}
+
+input:is(
+  [type="date"],
+  [type="datetime-local"],
+  [type="month"],
+  [type="week"],
+  [type="time"]
+) {
+  color-scheme: light;
+}
+
+.dark input:is(
+  [type="date"],
+  [type="datetime-local"],
+  [type="month"],
+  [type="week"],
+  [type="time"]
+) {
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+.mina-scheduler-panel [data-slot="tabList"] {
+  background: var(--muted) !important;
+  color: var(--foreground);
+}
+
+.mina-scheduler-panel [data-slot="cursor"] {
+  background: var(--background) !important;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+}
+
+.mina-scheduler-panel {
+  --mina-scheduler-row-height: 64px;
+  --mina-scheduler-visible-start: 544px;
+  --mina-scheduler-visible-height: 896px;
+  --mina-scheduler-label-line-height: calc(
+    (var(--mina-scheduler-visible-height) - 3rem) / 14
+  );
+  --mina-scheduler-time-labels: "08:30\A 09:30\A 10:30\A 11:30\A 12:30\A 13:30\A 14:30\A 15:30\A 16:30\A 17:30\A 18:30\A 19:30\A 20:30\A 21:30\A 22:30";
+  --mina-scheduler-week-label-width: 12.5%;
+}
+
+.mina-scheduler-panel [data-slot="tab"],
+.mina-scheduler-panel [data-slot="tabContent"] {
+  color: var(--muted-foreground) !important;
+}
+
+.mina-scheduler-panel [data-slot="tab"][aria-selected="true"],
+.mina-scheduler-panel [data-slot="tab"][data-selected="true"],
+.mina-scheduler-panel [data-slot="tabContent"][data-selected="true"] {
+  color: var(--foreground) !important;
+}
+
+.mina-scheduler-panel .bg-black.bg-opacity-50,
+.mina-scheduler-panel .bg-default-100.opacity-0,
+.mina-scheduler-panel .bg-default-200.opacity-0 {
+  display: none !important;
+}
+
+.mina-scheduler-panel [style*="opacity: 0"] {
+  opacity: 1 !important;
+}
+
+.mina-scheduler-panel [style*="translateY(20px)"],
+.mina-scheduler-panel [style*="scale(0.9)"] {
+  transform: none !important;
+}
+
+.mina-scheduler-panel [class*="top-[-5px]"][class*="right-0"] {
+  display: none !important;
+}
+
+/* Hide Mina's hover time indicator line/chip in day/week views. */
+.mina-scheduler-panel
+  [class*="h-[3px]"][class*="bg-primary-300"][class*="pointer-events-none"],
+.mina-scheduler-panel [class*="vertical-abs-center"][class*="uppercase"] {
+  display: none !important;
+}
+
+/* Show only 08:30 through 22:30 (14 hours) in day/week time grids. */
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"] {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(var(--mina-scheduler-row-height) - 1px),
+    var(--border) calc(var(--mina-scheduler-row-height) - 1px)
+      var(--mina-scheduler-row-height)
+  );
+  height: var(--mina-scheduler-visible-height);
+  overflow: hidden;
+  position: relative;
+}
+
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"]
+  > div[class*="rounded-xl"][class*="ease-in-out"] {
+  min-height: 1536px;
+  transform: translateY(
+    calc(var(--mina-scheduler-visible-start) * -1)
+  ) !important;
+}
+
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"]
+  > div[class*="rounded-xl"][class*="ease-in-out"]
+  > div:first-child,
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"]
+  > div[class*="rounded-xl"][class*="ease-in-out"]
+  > div:first-child
+  > div {
+  color: transparent !important;
+}
+
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"]
+  > div[class*="rounded-xl"][class*="ease-in-out"]
+  > div:last-child
+  > div {
+  border-bottom-color: transparent !important;
+}
+
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"],
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"] {
+  background-color: var(--muted);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(var(--mina-scheduler-row-height) - 1px),
+    var(--border) calc(var(--mina-scheduler-row-height) - 1px)
+      var(--mina-scheduler-row-height)
+  );
+  height: var(--mina-scheduler-visible-height);
+  overflow: hidden;
+  position: relative;
+}
+
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-1"],
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-7"],
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-1"],
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-7"] {
+  transform: translateY(
+    calc(var(--mina-scheduler-visible-start) * -1)
+  ) !important;
+}
+
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-1"],
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-7"],
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-1"],
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-7"] {
+  background-color: transparent !important;
+}
+
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-1"],
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-1"]
+  > div,
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-1"],
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-1"]
+  > div {
+  color: transparent !important;
+}
+
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-7"]
+  [class*="h-16"],
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]
+  > div[class*="col-span-7"]
+  [class*="h-16"] {
+  border-bottom-color: transparent !important;
+}
+
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"]::before,
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"]::after,
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]::before,
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]::after,
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]::before,
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]::after {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  pointer-events: none;
+  position: absolute;
+  z-index: 60;
+}
+
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"]::before {
+  content: var(--mina-scheduler-time-labels);
+  left: 1rem;
+  line-height: var(--mina-scheduler-label-line-height);
+  top: 0.65rem;
+  white-space: pre;
+}
+
+.mina-scheduler-panel
+  .all-day-events
+  + div[class*="rounded-md"][class*="bg-default-50"]::after {
+  content: none;
+}
+
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]::before,
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]::before {
+  content: var(--mina-scheduler-time-labels);
+  left: 0;
+  line-height: var(--mina-scheduler-label-line-height);
+  text-align: center;
+  top: 0.65rem;
+  white-space: pre;
+  width: var(--mina-scheduler-week-label-width);
+}
+
+.mina-scheduler-panel
+  .all-week-events
+  + div
+  + div[class*="grid-cols-8"][class*="gap-0"]
+  > div[class*="col-span-7"]
+  > div[class*="grid-cols-8"][class*="col-span-8"]::after,
+.mina-scheduler-panel.mina-week-view
+  div[class*="grid-cols-8"][class*="col-span-8"]::after {
+  content: none;
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.8s ease-out both;
+}
+
+.animate-float-slow {
+  animation: float-slow 3s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.bg-campus {
+  background-image:
+    radial-gradient(
+      circle at 20% 20%,
+      rgba(255, 184, 77, 0.25),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 80% 0%,
+      rgba(76, 139, 245, 0.22),
+      transparent 45%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(248, 250, 252, 1) 0%,
+      rgba(240, 244, 255, 1) 55%,
+      rgba(252, 243, 236, 1) 100%
+    );
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.08) 1px, transparent 1px);
+  background-size: 120px 120px;
+  mask-image: radial-gradient(circle at 30% 20%, black 0%, transparent 65%);
+}
+
+.dark .bg-campus {
+  background-image:
+    radial-gradient(
+      circle at 15% 20%,
+      rgba(16, 185, 129, 0.18),
+      transparent 45%
+    ),
+    radial-gradient(
+      circle at 85% 10%,
+      rgba(251, 191, 36, 0.18),
+      transparent 40%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(2, 6, 23, 1) 0%,
+      rgba(15, 23, 42, 1) 55%,
+      rgba(17, 24, 39, 1) 100%
+    );
+}
+
+.dark .bg-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.18) 1px, transparent 1px);
+  background-size: 140px 140px;
+  mask-image: radial-gradient(circle at 30% 20%, black 0%, transparent 65%);
+}

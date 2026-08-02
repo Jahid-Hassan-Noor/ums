@@ -1,0 +1,36 @@
+from django.urls import path
+from teacher_app.views import *
+
+
+urlpatterns = [
+    path("", TeacherUms.as_view()),
+    path("assignments", TeacherAssignments.as_view()),
+    path("assignments/create", TeacherAssignmentCreate.as_view()),
+    path("assignments/feedback", TeacherAssignmentFeedback.as_view()),
+    path("assignments/submissions", TeacherAssignmentSubmissions.as_view()),
+    path("assignments/<str:assignment_id>", TeacherAssignmentDetail.as_view()),
+    path("assignments/<str:assignment_id>/submissions", TeacherAssignmentSubmissionsDetail.as_view()),
+    path("attendance", TeacherAttendance.as_view()),
+    path("attendance/corrections", TeacherAttendanceCorrections.as_view()),
+    path("attendance/create", TeacherAttendanceCreate.as_view()),
+    path("attendance/sessions", TeacherAttendanceSessions.as_view()),
+    path("calendar", TeacherCalendar.as_view()),
+    path("courses", TeacherCourses.as_view()),
+    path("courses/current", TeacherCoursesCurrent.as_view()),
+    path("courses/previous", TeacherCoursesPrevious.as_view()),
+    path("courses/<str:course_id>", TeacherCourseDetail.as_view()),
+    path("courses/<str:course_id>/assignments", TeacherCourseAssignments.as_view()),
+    path("courses/<str:course_id>/attendance", TeacherCourseAttendance.as_view()),
+    path("courses/<str:course_id>/resources", TeacherCourseResources.as_view()),
+    path("courses/<str:course_id>/roster", TeacherCourseRoster.as_view()),
+    path("dashboard", TeacherDashboard.as_view()),
+    path("leave-requests", TeacherLeaveRequests.as_view()),
+    path("notifications", TeacherNotifications.as_view()),
+    path("results", TeacherResults.as_view()),
+    path("results/completed", TeacherResultsCompleted.as_view()),
+    path("results/draft", TeacherResultsDraft.as_view()),
+    path("results/submit", TeacherResultsSubmit.as_view()),
+    path("timetable", TeacherTimetable.as_view()),
+    path("venue-bookings", TeacherVenueBookings.as_view()),
+    path("venue-bookings/<int:pk>/cancel", TeacherVenueBookingCancel.as_view()),
+]

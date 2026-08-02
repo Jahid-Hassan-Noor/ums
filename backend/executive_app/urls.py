@@ -1,0 +1,37 @@
+from django.urls import path
+from executive_app.views import *
+
+
+urlpatterns = [
+    path("", ExecutiveUms.as_view()),
+    path("audit-log", ExecutiveAuditLog.as_view()),
+    path("calendar", ExecutiveCalendar.as_view()),
+    path("courses", ExecutiveCourses.as_view()),
+    path("courses/add", ExecutiveCoursesAdd.as_view()),
+    path("courses/all", ExecutiveCoursesAll.as_view()),
+    path("courses/offer", ExecutiveCoursesOffer.as_view()),
+    path("courses/offered", ExecutiveCoursesOffered.as_view()),
+    path("dashboard", ExecutiveDashboard.as_view()),
+    path("evaluations/templates", ExecutiveEvaluationTemplates.as_view()),
+    path("evaluations/templates/<int:pk>", ExecutiveEvaluationTemplateDetail.as_view()),
+    path("evaluations/surveys", ExecutiveEvaluationSurveys.as_view()),
+    path("evaluations/surveys/<int:pk>", ExecutiveEvaluationSurveyDetail.as_view()),
+    path("evaluations/surveys/<int:pk>/export", ExecutiveEvaluationSurveyExport.as_view()),
+    path("manage", ExecutiveManage.as_view()),
+    path("manage/schedule", ExecutiveManageSchedule.as_view()),
+    path("manage/students", ExecutiveManageStudents.as_view()),
+    path("manage/teachers", ExecutiveManageTeachers.as_view()),
+    path("notifications", ExecutiveNotifications.as_view()),
+    path("organization", ExecutiveOrganization.as_view()),
+    path("programs", ExecutivePrograms.as_view()),
+    path("reports", ExecutiveReports.as_view()),
+    path("reports/students/export", ExecutiveStudentsReportExport.as_view()),
+    path("reports/teachers/export", ExecutiveTeachersReportExport.as_view()),
+    path("reports/final-results/export", ExecutiveFinalResultsReportExport.as_view()),
+    path("results", ExecutiveResults.as_view()),
+    path("results/previous", ExecutiveResultsPrevious.as_view()),
+    path("results/publication", ExecutiveResultsPublication.as_view()),
+    path("results/review", ExecutiveResultsReview.as_view()),
+    path("results/semester", ExecutiveResultsSemester.as_view()),
+    path("statistics", ExecutiveStatistics.as_view()),
+]

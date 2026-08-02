@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">UMS logo</title>
+  <desc id="desc">Generic University Management System logo.</desc>
+  <rect width="128" height="128" rx="28" fill="#f8fafc"/>
+  <rect x="14" y="14" width="100" height="100" rx="22" fill="#0f766e"/>
+  <path d="M34 43h12v30c0 6 4 10 10 10s10-4 10-10V43h12v31c0 13-9 21-22 21s-22-8-22-21V43Z" fill="#ffffff"/>
+  <path d="M84 43h12v51H84V43Z" fill="#ccfbf1"/>
+  <path d="M34 32h62v8H34z" fill="#99f6e4"/>
+  <path d="M30 99h68v8H30z" fill="#134e4a"/>
+</svg>
