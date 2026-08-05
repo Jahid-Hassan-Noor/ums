@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
+import { formatUmsMoney } from "@/lib/ums-settings"
 import { PlanStatusBadge, InstallmentStatusBadge } from "@/components/accountant/ledger/ledger-badges"
 import { LedgerNav } from "@/components/accountant/ledger/ledger-nav"
 
@@ -19,6 +21,8 @@ type PaymentPlan = { id: number; student: StudentRef; description: string; total
 function formatDate(value: string | null) { return value ? new Date(value).toLocaleDateString() : "—" }
 
 export function AccountantLedgerPlansPage() {
+  const settings = usePublicUmsSettings()
+  const currencyCode = settings.localization.currency_code || "USD"
   const [plans, setPlans] = useState<PaymentPlan[]>([])
   const [studentOptions, setStudentOptions] = useState<StudentRef[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,7 +54,12 @@ export function AccountantLedgerPlansPage() {
       .finally(() => setLoading(false))
   }, [loadData])
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refresh()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [refresh])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -148,7 +157,7 @@ export function AccountantLedgerPlansPage() {
                     {studentOptions.map((s) => <option key={s.id} value={s.id}>{s.name} - {s.identifier}</option>)}
                   </select>
                 </div>
-                <div className="space-y-2"><Label>Total Amount (RM)</Label><Input type="number" min="0.01" step="0.01" value={form.total_amount} onChange={(e) => setForm((f) => ({ ...f, total_amount: e.target.value }))} required /></div>
+                <div className="space-y-2"><Label>Total Amount ({currencyCode})</Label><Input type="number" min="0.01" step="0.01" value={form.total_amount} onChange={(e) => setForm((f) => ({ ...f, total_amount: e.target.value }))} required /></div>
                 <div className="space-y-2"><Label>Installments</Label><Input type="number" min="2" max="24" value={form.installment_count} onChange={(e) => setForm((f) => ({ ...f, installment_count: e.target.value }))} required /></div>
                 <div className="space-y-2">
                   <Label>Frequency</Label>
@@ -179,7 +188,7 @@ export function AccountantLedgerPlansPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <PlanStatusBadge status={plan.status} />
-                    <span className="text-sm font-medium">{plan.total_amount}</span>
+                    <span className="text-sm font-medium">{formatUmsMoney(plan.total_amount, settings, plan.currency)}</span>
                   </div>
                 </div>
               </CardHeader>
@@ -194,7 +203,7 @@ export function AccountantLedgerPlansPage() {
                       <div key={inst.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
                         <div className="flex items-center gap-3">
                           <span className="font-medium">#{inst.installment_number}</span>
-                          <span>{inst.amount}</span>
+                          <span>{formatUmsMoney(inst.amount, settings, plan.currency)}</span>
                           <span className="text-muted-foreground">Due: {formatDate(inst.due_date)}</span>
                           {inst.paid_at ? <span className="text-muted-foreground">Paid: {formatDate(inst.paid_at)}</span> : null}
                         </div>

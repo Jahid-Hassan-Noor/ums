@@ -199,7 +199,7 @@ class NotificationServiceTests(TestCase):
     @override_settings(
         EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
         FRONTEND_BASE_URL="http://portal.test",
-        DEFAULT_FROM_EMAIL="AIU Portal <portal@example.com>",
+        DEFAULT_FROM_EMAIL="University Portal <portal@example.com>",
     )
     def test_notify_profile_can_send_email_when_requested(self):
         student = self.create_profile("email_service_student", Profile.ROLE_STUDENT)
@@ -212,14 +212,15 @@ class NotificationServiceTests(TestCase):
             verb="A test event also sent email.",
             data={"object_id": 43},
             url="/student/dashboard",
-            email_subject="AIU Portal notification",
+            email_subject="University Portal notification",
             email_message="A test notification is ready.",
         )
 
         self.assertEqual(student.notifications.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].subject, "AIU Portal notification")
+        self.assertEqual(mail.outbox[0].subject, "University Portal notification")
         self.assertIn("A test notification is ready.", mail.outbox[0].body)
+        self.assertIn("Open in University Portal:", mail.outbox[0].body)
         self.assertIn("http://portal.test/student/dashboard", mail.outbox[0].body)
 
     def test_notify_roles_excludes_inactive_profiles(self):
@@ -480,7 +481,7 @@ class DueReminderTests(TestCase):
     @override_settings(
         EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
         FRONTEND_BASE_URL="http://portal.test",
-        DEFAULT_FROM_EMAIL="AIU Portal <portal@example.com>",
+        DEFAULT_FROM_EMAIL="University Portal <portal@example.com>",
     )
     def test_required_sec_set_reminders_are_created_once_for_open_and_closing_surveys(self):
         opened_survey = self._evaluation_survey(

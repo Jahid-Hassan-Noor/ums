@@ -34,6 +34,12 @@ import { ValueBarChart } from "@/components/charts/value-bar-chart"
 import { useIsDarkMode } from "@/hooks/use-dark-mode"
 import { apiFetch } from "@/lib/auth"
 import { loadApplyApplications, type ApplyApplication } from "@/lib/apply"
+import {
+  DEFAULT_UMS_PUBLIC_SETTINGS,
+  formatUmsMoney,
+  loadPublicUmsSettings,
+  type UmsPublicSettings,
+} from "@/lib/ums-settings"
 import type { UserRole } from "@/lib/ums-roles"
 
 type StatisticsRole = Exclude<UserRole, "admin" | "executive">
@@ -220,11 +226,6 @@ type AccountantCompensationPayload = {
 }
 
 const numberFormatter = new Intl.NumberFormat("en-US")
-const currencyFormatter = new Intl.NumberFormat("en-MY", {
-  currency: "MYR",
-  maximumFractionDigits: 2,
-  style: "currency",
-})
 
 const statusLabels: Record<string, string> = {
   addressed: "Addressed",
@@ -261,8 +262,11 @@ function formatNumber(value: number) {
   return numberFormatter.format(Math.round(Number.isFinite(value) ? value : 0))
 }
 
-function formatMoney(value: unknown) {
-  return currencyFormatter.format(toNumber(value))
+function formatMoney(
+  value: unknown,
+  settings: UmsPublicSettings = DEFAULT_UMS_PUBLIC_SETTINGS
+) {
+  return formatUmsMoney(toNumber(value), settings)
 }
 
 function toNumber(value: unknown) {
@@ -452,14 +456,16 @@ async function loadApplicantStatistics(): Promise<RoleStatisticsData> {
   }
 }
 
-async function loadStudentStatistics(): Promise<RoleStatisticsData> {
+async function loadStudentStatistics(
+  settings: UmsPublicSettings
+): Promise<RoleStatisticsData> {
   const [dashboardResult, attendanceResult, assignmentsResult, registrationsResult, ticketsResult] =
     await Promise.all([
       optionalLoad("Dashboard", () => apiFetch<StudentDashboardPayload>("/student/dashboard")),
       optionalLoad("Attendance report", () => apiFetch<StudentAttendancePayload>("/student/attendance/report")),
       optionalLoad("Assignments", () => apiFetch<StudentAssignmentsPayload>("/student/assignments")),
       optionalLoad("Registrations", () => apiFetch<StudentRegistrationsPayload>("/student/registration/requests")),
-      optionalLoad("ICT tickets", () => apiFetch<StudentTicketsPayload>("/ict-helpdesk/student/tickets")),
+      optionalLoad("Service desk tickets", () => apiFetch<StudentTicketsPayload>("/ict-helpdesk/student/tickets")),
     ])
   const courses = attendanceResult.data?.courses ?? []
   const attended = sum(courses.map((course) => toNumber(course.attended)))
@@ -479,24 +485,24 @@ async function loadStudentStatistics(): Promise<RoleStatisticsData> {
   return {
     title: "Student Statistics",
     badge: "Own academic and service records",
-    summary: "Attendance, assignments, registration status, canteen usage, and ICT ticket activity.",
+    summary: "Attendance, assignments, registration status, canteen usage, and service desk ticket activity.",
     breadcrumb: roleBreadcrumb("student"),
     metrics: [
       metric("Average Attendance", `${averageAttendance}%`, `${formatNumber(totalClasses)} recorded class sessions.`, CalendarDays, "text-emerald-500"),
       metric("Open Assignments", formatNumber(toNumber(assignmentCounts.upcoming) + toNumber(assignmentCounts.overdue)), "Upcoming and overdue assignment work.", ClipboardList, "text-amber-500"),
       metric("Registrations", formatNumber(registrations.length), "Course registration requests in the active view.", BookOpen, "text-sky-500"),
-      metric("Canteen Balance", formatMoney(canteenAccount?.balance), "Current monthly student allowance balance.", WalletCards, "text-violet-500"),
+      metric("Canteen Balance", formatMoney(canteenAccount?.balance, settings), "Current monthly student allowance balance.", WalletCards, "text-violet-500"),
     ],
     charts: [
       chart("Attendance Mix", "Present, late, and absent records across visible courses", ["Present", "Late", "Absent"], [attended, late, absent], "student-attendance-gradient", "#10b981", "#34d399", "Attendance Records", "Largest Bucket"),
       chart("Assignment Flow", "Current student assignment queue by status", ["Upcoming", "Overdue", "Submitted", "Graded"], [toNumber(assignmentCounts.upcoming), toNumber(assignmentCounts.overdue), toNumber(assignmentCounts.submitted), toNumber(assignmentCounts.graded)], "student-assignment-gradient", "#f59e0b", "#fbbf24", "Assignments", "Largest Queue"),
       chart("Registration Status", "Course registration outcomes in the selected term", ["Pending", "Approved", "Rejected", "Dropped"], [registrationCounts.pending, registrationCounts.approved, registrationCounts.rejected, registrationCounts.dropped], "student-registration-gradient", "#0ea5e9", "#38bdf8", "Registrations", "Largest Status"),
-      chart("ICT Ticket Status", "Helpdesk issues submitted by you", ["Submitted", "Addressed", "Progress", "Solved"], [ticketCounts.submitted, ticketCounts.addressed, ticketCounts.in_progress, ticketCounts.solved], "student-ticket-gradient", "#8b5cf6", "#a78bfa", "Tickets", "Largest Status"),
+      chart("Service Desk Ticket Status", "Helpdesk issues submitted by you", ["Submitted", "Addressed", "Progress", "Solved"], [ticketCounts.submitted, ticketCounts.addressed, ticketCounts.in_progress, ticketCounts.solved], "student-ticket-gradient", "#8b5cf6", "#a78bfa", "Tickets", "Largest Status"),
     ],
     insights: [
       insight("Attendance risk", `${averageAttendance}%`, averageAttendance >= 80 ? "Attendance is above the usual intervention threshold." : "Attendance should be reviewed before it affects course standing.", averageAttendance >= 80 || totalClasses === 0 ? "healthy" : averageAttendance >= 70 ? "watch" : "risk"),
       insight("Overdue assignments", formatNumber(toNumber(assignmentCounts.overdue)), "Assignments currently past due.", toNumber(assignmentCounts.overdue) ? "risk" : "healthy"),
-      insight("Open ICT tickets", formatNumber(ticketCounts.submitted + ticketCounts.addressed + ticketCounts.in_progress), "Support items still moving through ICT.", ticketCounts.submitted + ticketCounts.addressed + ticketCounts.in_progress ? "watch" : "healthy"),
+      insight("Open service desk tickets", formatNumber(ticketCounts.submitted + ticketCounts.addressed + ticketCounts.in_progress), "Support items still moving through the service desk.", ticketCounts.submitted + ticketCounts.addressed + ticketCounts.in_progress ? "watch" : "healthy"),
     ],
     warnings: warningsFrom([dashboardResult, attendanceResult, assignmentsResult, registrationsResult, ticketsResult]),
   }
@@ -571,7 +577,7 @@ async function loadLibrarianStatistics(): Promise<RoleStatisticsData> {
   }
 }
 
-async function loadCatererStatistics(): Promise<RoleStatisticsData> {
+async function loadCatererStatistics(settings: UmsPublicSettings): Promise<RoleStatisticsData> {
   const dashboard = await apiFetch<CatererDashboardPayload>("/canteen/dashboard")
   const summary = dashboard.summary ?? {}
   return {
@@ -581,8 +587,8 @@ async function loadCatererStatistics(): Promise<RoleStatisticsData> {
     breadcrumb: roleBreadcrumb("caterer"),
     metrics: [
       metric("Eligible Students", formatNumber(toNumber(summary.eligible_students)), "Students initialized for this allowance month.", Users, "text-sky-500"),
-      metric("Allocated", formatMoney(summary.allocated), "Total student canteen allocation.", WalletCards, "text-emerald-500"),
-      metric("Spent", formatMoney(summary.spent), "Canteen purchases completed this month.", BriefcaseBusiness, "text-amber-500"),
+      metric("Allocated", formatMoney(summary.allocated, settings), "Total student canteen allocation.", WalletCards, "text-emerald-500"),
+      metric("Spent", formatMoney(summary.spent, settings), "Canteen purchases completed this month.", BriefcaseBusiness, "text-amber-500"),
       metric("Transactions", formatNumber(toNumber(summary.transactions)), "Completed checkout records.", BarChart3, "text-violet-500"),
     ],
     charts: [
@@ -591,7 +597,7 @@ async function loadCatererStatistics(): Promise<RoleStatisticsData> {
     ],
     insights: [
       insight("Utilization", percentage(toNumber(summary.spent), toNumber(summary.allocated) + toNumber(summary.manual_additions)), "Share of available monthly canteen funds already spent.", "watch"),
-      insight("Manual additions", formatMoney(summary.manual_additions), "Admin-added balance in this month.", toNumber(summary.manual_additions) ? "watch" : "healthy"),
+      insight("Manual additions", formatMoney(summary.manual_additions, settings), "Admin-added balance in this month.", toNumber(summary.manual_additions) ? "watch" : "healthy"),
     ],
   }
 }
@@ -603,17 +609,17 @@ async function loadTechnicianStatistics(): Promise<RoleStatisticsData> {
   const categoryRows = topCounts(tickets, (ticket) => ticket.category_label)
   return {
     title: "Technician Statistics",
-    badge: "ICT helpdesk analytics",
+    badge: "Service desk analytics",
     summary: "Ticket status distribution, category demand, and open support workload.",
     breadcrumb: roleBreadcrumb("technician"),
     metrics: [
-      metric("Total Tickets", formatNumber(toNumber(summary.total)), "All ICT helpdesk tickets.", Wrench, "text-sky-500"),
+      metric("Total Tickets", formatNumber(toNumber(summary.total)), "All service desk tickets.", Wrench, "text-sky-500"),
       metric("Submitted", formatNumber(toNumber(summary.submitted)), "New issues awaiting first action.", ClipboardList, "text-amber-500"),
       metric("In Progress", formatNumber(toNumber(summary.in_progress)), "Tickets actively being handled.", BarChart3, "text-violet-500"),
-      metric("Solved", formatNumber(toNumber(summary.solved)), "Tickets completed by ICT.", CheckCircle2, "text-emerald-500"),
+      metric("Solved", formatNumber(toNumber(summary.solved)), "Tickets completed by the service team.", CheckCircle2, "text-emerald-500"),
     ],
     charts: [
-      chart("Ticket Status", "ICT helpdesk workload by current status", ["Submitted", "Addressed", "Progress", "Solved"], [toNumber(summary.submitted), toNumber(summary.addressed), toNumber(summary.in_progress), toNumber(summary.solved)], "technician-status-gradient", "#8b5cf6", "#a78bfa", "Tickets", "Largest Status"),
+      chart("Ticket Status", "Service desk workload by current status", ["Submitted", "Addressed", "Progress", "Solved"], [toNumber(summary.submitted), toNumber(summary.addressed), toNumber(summary.in_progress), toNumber(summary.solved)], "technician-status-gradient", "#8b5cf6", "#a78bfa", "Tickets", "Largest Status"),
       chart("Ticket Categories", "Most common request categories", categoryRows.map(([label]) => label), categoryRows.map(([, value]) => value), "technician-category-gradient", "#0ea5e9", "#38bdf8", "Category Records", "Largest Category"),
     ],
     insights: [
@@ -623,7 +629,7 @@ async function loadTechnicianStatistics(): Promise<RoleStatisticsData> {
   }
 }
 
-async function loadAccountantStatistics(): Promise<RoleStatisticsData> {
+async function loadAccountantStatistics(settings: UmsPublicSettings): Promise<RoleStatisticsData> {
   const [dashboardResult, ledgerResult, canteenResult, compensationResult] = await Promise.all([
     optionalLoad("Finance dashboard", () => apiFetch<AccountantDashboardPayload>("/finance/dashboard")),
     optionalLoad("Ledger dashboard", () => apiFetch<AccountantLedgerDashboardPayload>("/finance/ledger/dashboard")),
@@ -647,9 +653,9 @@ async function loadAccountantStatistics(): Promise<RoleStatisticsData> {
     summary: "Subscription state, ledger balances, canteen allowance money, and HR compensation approval activity.",
     breadcrumb: roleBreadcrumb("accountant"),
     metrics: [
-      metric("Outstanding Balance", formatMoney(ledger.total_outstanding), `${formatNumber(toNumber(ledger.students_with_balance))} students with balance.`, WalletCards, "text-amber-500"),
+      metric("Outstanding Balance", formatMoney(ledger.total_outstanding, settings), `${formatNumber(toNumber(ledger.students_with_balance))} students with balance.`, WalletCards, "text-amber-500"),
       metric("Ledger Entries", formatNumber(toNumber(ledger.total_entries ?? summary.ledger_entries)), "Finance debit, credit, waiver, and reversal entries.", ClipboardList, "text-sky-500"),
-      metric("Canteen Allocated", formatMoney(canteen.allocated), `${formatNumber(toNumber(canteen.eligible_students))} eligible students this month.`, Users, "text-emerald-500"),
+      metric("Canteen Allocated", formatMoney(canteen.allocated, settings), `${formatNumber(toNumber(canteen.eligible_students))} eligible students this month.`, Users, "text-emerald-500"),
       metric("Pending HR Requests", formatNumber(toNumber(compensationSummary.pending)), "Salary and bonus changes waiting for Accountant approval.", BriefcaseBusiness, "text-violet-500"),
     ],
     charts: [
@@ -672,13 +678,14 @@ async function loadAccountantStatistics(): Promise<RoleStatisticsData> {
 }
 
 async function loadRoleStatistics(role: StatisticsRole) {
+  const settings = await loadPublicUmsSettings()
   if (role === "applicant") return loadApplicantStatistics()
-  if (role === "student") return loadStudentStatistics()
+  if (role === "student") return loadStudentStatistics(settings)
   if (role === "teacher") return loadTeacherStatistics()
   if (role === "librarian") return loadLibrarianStatistics()
-  if (role === "caterer") return loadCatererStatistics()
+  if (role === "caterer") return loadCatererStatistics(settings)
   if (role === "technician") return loadTechnicianStatistics()
-  return loadAccountantStatistics()
+  return loadAccountantStatistics(settings)
 }
 
 function levelBadgeClass(level: InsightDefinition["level"]) {

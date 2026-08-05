@@ -1,19 +1,17 @@
-import type { Metadata } from "next"
-import { Network } from "lucide-react"
-
-import {
-  FeatureGrid,
-  PageBand,
-  PublicHero,
-  PublicPage,
-  SectionHeading,
-} from "@/components/public/public-site"
 import { ManagedPublicPage } from "@/components/public/managed-public-page"
-import { getPublicPageByPath, getPublicUnits } from "@/lib/public-api"
+import { PublicCmsFallbackPage } from "@/components/public/public-cms-fallback-page"
+import {
+  generatePublicPageMetadata,
+  getPublicPageByPath,
+  getPublicUnits,
+} from "@/lib/public-api"
 
-export const metadata: Metadata = {
-  title: "Units | AIU Portal",
-  description: "AIU units directory.",
+export function generateMetadata() {
+  return generatePublicPageMetadata(
+    "/units",
+    "Units",
+    "Public directory of active units."
+  )
 }
 
 export default async function UnitsPage() {
@@ -26,56 +24,27 @@ export default async function UnitsPage() {
     return (
       <ManagedPublicPage
         page={managedPage}
-        fallback={{
-          active: "/directories",
-          eyebrow: "Units",
-          image: "/images/aiu/campus-3zeros.jpg",
-        }}
+        fallback={{ active: "/directories", eyebrow: "Units" }}
       />
     )
   }
 
   return (
-    <PublicPage
+    <PublicCmsFallbackPage
       active="/directories"
-      hero={
-        <PublicHero
-          eyebrow="Units"
-          title="Operational units for student and university services."
-          description="A public directory for units such as admissions, scholarship, international student support, facilities, procurement, and examination records."
-          image="/images/aiu/campus-3zeros.jpg"
-          actions={[
-            {
-              label: "Departments",
-              href: "/departments",
-            },
-          ]}
-        />
-      }
-    >
-      <PageBand>
-        <SectionHeading
-          eyebrow="Unit List"
-          title="Service units connected to applications, scholarships, facilities, international students, and records."
-          description="Units are now managed records with their parent school or centre and assigned executive staff."
-          align="center"
-        />
-        <div className="mt-10">
-          <FeatureGrid
-            columns={4}
-            items={units.map((unit) => ({
-              title: unit.name,
-              summary:
-                unit.assigned_executives.length > 0
-                  ? `${unit.assigned_executives.length} assigned staff. ${unit.description}`
-                  : unit.description ||
-                    [unit.school_name, unit.center_name, unit.department_name].filter(Boolean).join(" / ") ||
-                    "Operational unit supporting AIU service delivery.",
-              icon: Network,
-            }))}
-          />
-        </div>
-      </PageBand>
-    </PublicPage>
+      eyebrow="Units"
+      title="Units"
+      description="Unit records are loaded from the portal database."
+      items={units.map((unit) => ({
+        title: unit.name,
+        summary:
+          unit.description ||
+          [unit.school_name, unit.center_name, unit.department_name]
+            .filter(Boolean)
+            .join(" / ") ||
+          "Published unit record.",
+        meta: unit.code,
+      }))}
+    />
   )
 }

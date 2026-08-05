@@ -26,6 +26,15 @@ def normalized_subscription_roles(value):
     return [role for role in valid_roles if role in incoming]
 
 
+def configured_finance_currency_code():
+    try:
+        from admin_app.settings_registry import default_currency_code
+
+        return default_currency_code()
+    except Exception:
+        return "USD"
+
+
 class Accountant(models.Model):
     profile = models.OneToOneField(
         "auth_app.Profile",
@@ -56,12 +65,24 @@ class Accountant(models.Model):
 
 
 class FinanceGatewayConfig(models.Model):
+    PROVIDER_MANUAL = "manual"
     PROVIDER_TOYYIBPAY = "toyyibpay"
     PROVIDER_CUSTOM = "custom"
+    PROVIDER_STRIPE = "stripe"
+    PROVIDER_OTHER = "other"
     PROVIDER_CHOICES = [
-        (PROVIDER_TOYYIBPAY, "ToyyibPay / DuitNow-compatible bill API"),
-        (PROVIDER_CUSTOM, "Custom DuitNow merchant endpoint"),
+        (PROVIDER_MANUAL, "Manual / offline payments"),
+        (PROVIDER_TOYYIBPAY, "External bill API"),
+        (PROVIDER_CUSTOM, "Custom hosted checkout endpoint"),
+        (PROVIDER_STRIPE, "Stripe-compatible hosted checkout"),
+        (PROVIDER_OTHER, "Other hosted checkout provider"),
     ]
+    EXTERNAL_CHECKOUT_PROVIDERS = {
+        PROVIDER_TOYYIBPAY,
+        PROVIDER_CUSTOM,
+        PROVIDER_STRIPE,
+        PROVIDER_OTHER,
+    }
 
     MODE_SANDBOX = "sandbox"
     MODE_PRODUCTION = "production"
@@ -70,7 +91,7 @@ class FinanceGatewayConfig(models.Model):
         (MODE_PRODUCTION, "Production"),
     ]
 
-    provider = models.CharField(max_length=30, choices=PROVIDER_CHOICES, default=PROVIDER_TOYYIBPAY)
+    provider = models.CharField(max_length=30, choices=PROVIDER_CHOICES, default=PROVIDER_MANUAL)
     mode = models.CharField(max_length=20, choices=MODE_CHOICES, default=MODE_SANDBOX)
     merchant_name = models.CharField(max_length=255, blank=True)
     api_base_url = models.URLField(max_length=500, blank=True)
@@ -89,7 +110,7 @@ class FinanceGatewayConfig(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def clean(self):
-        if self.is_active:
+        if self.is_active and self.provider in self.EXTERNAL_CHECKOUT_PROVIDERS:
             required = {
                 "api_base_url": self.api_base_url,
                 "checkout_base_url": self.checkout_base_url,
@@ -116,6 +137,14 @@ class FinanceGatewayConfig(models.Model):
         if not self.callback_token:
             return ""
         return f"••••{self.callback_token[-4:]}"
+
+    @property
+    def provider_label(self):
+        return dict(self.PROVIDER_CHOICES).get(self.provider, self.provider)
+
+    @property
+    def uses_external_checkout(self):
+        return self.provider in self.EXTERNAL_CHECKOUT_PROVIDERS
 
 
 class SubscriptionPlan(models.Model):
@@ -187,7 +216,7 @@ class Subscription(models.Model):
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name="subscriptions")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default="MYR")
+    currency = models.CharField(max_length=3, default=configured_finance_currency_code)
     starts_at = models.DateTimeField(null=True, blank=True)
     ends_at = models.DateTimeField(null=True, blank=True)
     external_reference = models.CharField(max_length=80, blank=True, null=True, unique=True)
@@ -244,7 +273,7 @@ class PaymentAttempt(models.Model):
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default="MYR")
+    currency = models.CharField(max_length=3, default=configured_finance_currency_code)
     external_reference = models.CharField(max_length=80, unique=True)
     gateway_reference = models.CharField(max_length=120, blank=True, db_index=True)
     checkout_url = models.URLField(max_length=700, blank=True)
@@ -295,7 +324,7 @@ class Fine(models.Model):
     reason = models.CharField(max_length=500)
     description = models.TextField(blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default="MYR")
+    currency = models.CharField(max_length=3, default=configured_finance_currency_code)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     due_date = models.DateTimeField(null=True, blank=True, help_text="Deadline for student to pay online. Leave blank for no deadline.")
     checkout_url = models.URLField(max_length=700, blank=True)
@@ -395,7 +424,7 @@ class StudentCharge(models.Model):
     source_id = models.PositiveIntegerField(null=True, blank=True)
     description = models.CharField(max_length=500)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
-    currency = models.CharField(max_length=3, default="MYR")
+    currency = models.CharField(max_length=3, default=configured_finance_currency_code)
     due_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_POSTED)
     issued_by = models.ForeignKey(
@@ -459,7 +488,7 @@ class StudentLedgerEntry(models.Model):
     charge = models.ForeignKey(StudentCharge, on_delete=models.SET_NULL, null=True, blank=True, related_name="ledger_entries")
     entry_type = models.CharField(max_length=20, choices=ENTRY_CHOICES)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
-    currency = models.CharField(max_length=3, default="MYR")
+    currency = models.CharField(max_length=3, default=configured_finance_currency_code)
     description = models.CharField(max_length=500)
     balance_after = models.DecimalField(max_digits=12, decimal_places=2)
     posted_by = models.ForeignKey(
@@ -494,7 +523,7 @@ class StudentBalanceSnapshot(models.Model):
         related_name="student_finance_balance",
     )
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
-    currency = models.CharField(max_length=3, default="MYR")
+    currency = models.CharField(max_length=3, default=configured_finance_currency_code)
     as_of = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -567,7 +596,7 @@ class PaymentPlan(models.Model):
     )
     description = models.CharField(max_length=500, blank=True)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
-    currency = models.CharField(max_length=3, default="MYR")
+    currency = models.CharField(max_length=3, default=configured_finance_currency_code)
     installment_count = models.PositiveSmallIntegerField(default=2)
     frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default=FREQUENCY_MONTHLY)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)

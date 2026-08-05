@@ -13,9 +13,11 @@ from admin_app.models import (
     Profile,
     School,
     Semester,
+    SystemSetting,
     Venue,
     VenueBookingRequest,
 )
+from admin_app.settings_registry import invalidate_settings_cache, setting_key
 
 
 User = get_user_model()
@@ -85,6 +87,16 @@ class VenueBookingWorkflowTests(TestCase):
             end_time="13:00",
             status=ClassMeeting.STATUS_SCHEDULED,
         )
+
+    def _update_policy(self, **values):
+        SystemSetting.objects.update_or_create(
+            key=setting_key("venue_booking_policy"),
+            defaults={"value": values},
+        )
+        invalidate_settings_cache()
+
+    def tearDown(self):
+        invalidate_settings_cache()
 
     def test_student_and_teacher_can_submit_and_technician_is_notified(self):
         self.client.force_authenticate(self.student.user)
@@ -283,3 +295,122 @@ class VenueBookingWorkflowTests(TestCase):
         self.assertEqual(student_decision.status_code, 403)
         self.assertEqual(technician_get.status_code, 200, technician_get.json())
         self.assertEqual(technician_get.json()["role"], "technician")
+
+    def test_custom_venue_categories_are_exposed_and_validated(self):
+        self._update_policy(
+            venue_category_options="seminar|Seminar room\nevent_hall|Event hall",
+        )
+        self.client.force_authenticate(self.admin.user)
+
+        response = self.client.post(
+            "/admin/venues/venues",
+            {
+                "building": self.building.id,
+                "code": "EVENT-HALL",
+                "name": "Event Hall",
+                "category": "event_hall",
+            },
+            format="json",
+        )
+        invalid = self.client.post(
+            "/admin/venues/venues",
+            {
+                "building": self.building.id,
+                "code": "UNKNOWN-HALL",
+                "name": "Unknown Hall",
+                "category": "auditorium",
+            },
+            format="json",
+        )
+        listing = self.client.get("/admin/venues")
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(response.data["venue"]["category"], "event_hall")
+        self.assertEqual(response.data["venue"]["category_label"], "Event hall")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn("category", invalid.data["errors"])
+        self.assertIn(
+            {"value": "seminar", "label": "Seminar room"},
+            listing.data["policy"]["venue_categories"],
+        )
+
+    def test_policy_restricts_requester_role_blackouts_duration_and_required_fields(self):
+        self._update_policy(
+            requester_roles="teacher",
+            blackout_dates=self.booking_date.isoformat(),
+            min_duration_minutes=60,
+            max_duration_hours=2,
+            required_fields_personal="purpose",
+        )
+
+        self.client.force_authenticate(self.student.user)
+        student_response = self.client.post("/student/venue-bookings", self._payload(), format="json")
+
+        self.client.force_authenticate(self.teacher.user)
+        blackout_response = self.client.post("/teacher/venue-bookings", self._payload(), format="json")
+        too_long_response = self.client.post(
+            "/teacher/venue-bookings",
+            self._payload(
+                booking_date=(self.booking_date + timedelta(days=1)).isoformat(),
+                start_time="09:00",
+                end_time="12:30",
+            ),
+            format="json",
+        )
+        personal_response = self.client.post(
+            "/teacher/venue-bookings",
+            self._payload(
+                booking_type=VenueBookingRequest.TYPE_PERSONAL,
+                explanation="",
+                booking_date=(self.booking_date + timedelta(days=1)).isoformat(),
+                start_time="13:00",
+                end_time="14:00",
+            ),
+            format="json",
+        )
+
+        self.assertEqual(student_response.status_code, 400)
+        self.assertIn("not allowed", student_response.data["detail"])
+        self.assertEqual(blackout_response.status_code, 400)
+        self.assertIn("blackout", blackout_response.data["detail"])
+        self.assertEqual(too_long_response.status_code, 400)
+        self.assertIn("cannot exceed 2 hour", too_long_response.data["detail"])
+        self.assertEqual(personal_response.status_code, 201, personal_response.json())
+
+    def test_auto_approval_policy_approves_conflict_free_request_without_reviewer_notification(self):
+        self._update_policy(approval_mode="auto_approve")
+        self.client.force_authenticate(self.student.user)
+
+        response = self.client.post("/student/venue-bookings", self._payload(), format="json")
+
+        self.assertEqual(response.status_code, 201, response.json())
+        booking = VenueBookingRequest.objects.get(pk=response.data["request"]["id"])
+        self.assertEqual(booking.status, VenueBookingRequest.STATUS_APPROVED)
+        self.assertIsNotNone(booking.reviewed_at)
+        self.assertEqual(
+            self.technician.notifications.filter(data__venue_booking_request_id=booking.id).count(),
+            0,
+        )
+
+    def test_admin_reviewer_policy_moves_approval_endpoint(self):
+        self._update_policy(reviewer_role=Profile.ROLE_ADMIN)
+        booking = self._create_request()
+
+        self.client.force_authenticate(self.technician.user)
+        technician_get = self.client.get("/ict-helpdesk/technician/venue-bookings")
+
+        self.client.force_authenticate(self.admin.user)
+        admin_get = self.client.get("/admin/venue-bookings")
+        admin_decision = self.client.post(
+            f"/admin/venue-bookings/{booking.id}/decision",
+            {"decision": VenueBookingRequest.STATUS_APPROVED},
+            format="json",
+        )
+
+        self.assertEqual(technician_get.status_code, 404)
+        self.assertEqual(admin_get.status_code, 200, admin_get.json())
+        self.assertEqual(admin_get.json()["role"], "admin")
+        self.assertEqual(admin_decision.status_code, 200, admin_decision.json())
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, VenueBookingRequest.STATUS_APPROVED)
+        self.assertEqual(booking.reviewed_by, self.admin)

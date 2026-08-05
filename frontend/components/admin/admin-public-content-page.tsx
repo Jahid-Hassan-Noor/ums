@@ -81,6 +81,9 @@ type FormState = {
   summary: string
   body: string
   metadata: string
+  nav_show: boolean
+  nav_label: string
+  nav_parent: string
   status: string
   published_at: string
   description: string
@@ -147,6 +150,9 @@ function emptyForm(kind: PublicContentKind): FormState {
     summary: "",
     body: "",
     metadata: "{}",
+    nav_show: true,
+    nav_label: "",
+    nav_parent: "",
     status: "draft",
     published_at: "",
     description: "",
@@ -170,10 +176,24 @@ function toDateTimeLocal(value?: string | null) {
   return date.toISOString().slice(0, 16)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function textValue(value: unknown) {
+  return typeof value === "string" ? value : ""
+}
+
+function booleanValue(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null
+}
+
 function formFromRecord(
   kind: PublicContentKind,
   record: PublicContentRecord
 ): FormState {
+  const metadata = isRecord(record.metadata) ? record.metadata : {}
+  const navigation = isRecord(metadata.navigation) ? metadata.navigation : {}
   return {
     title: record.title ?? "",
     slug: record.slug ?? "",
@@ -182,6 +202,17 @@ function formFromRecord(
     summary: record.summary ?? "",
     body: record.body ?? "",
     metadata: JSON.stringify(record.metadata ?? {}, null, 2),
+    nav_show:
+      booleanValue(navigation.show) ??
+      booleanValue(navigation.show_in_navigation) ??
+      booleanValue(metadata.show_in_navigation) ??
+      (record.route_path !== "/"),
+    nav_label:
+      textValue(navigation.label) || textValue(metadata.navigation_label),
+    nav_parent:
+      textValue(navigation.parent) ||
+      textValue(navigation.parent_path) ||
+      textValue(metadata.parent_path),
     status: record.status ?? "draft",
     published_at: toDateTimeLocal(record.published_at),
     description: record.description ?? "",
@@ -316,6 +347,22 @@ export function AdminPublicContentPage({ kind }: { kind: PublicContentKind }) {
         setError("Metadata must be valid JSON.")
         return null
       }
+      const normalizedMetadata = isRecord(metadata) ? { ...metadata } : {}
+      const navigation = isRecord(normalizedMetadata.navigation)
+        ? { ...normalizedMetadata.navigation }
+        : {}
+      navigation.show = form.nav_show
+      if (form.nav_label.trim()) {
+        navigation.label = form.nav_label.trim()
+      } else {
+        delete navigation.label
+      }
+      if (form.nav_parent.trim()) {
+        navigation.parent = form.nav_parent.trim()
+      } else {
+        delete navigation.parent
+      }
+      normalizedMetadata.navigation = navigation
       return {
         title: form.title.trim(),
         slug: form.slug.trim(),
@@ -323,7 +370,7 @@ export function AdminPublicContentPage({ kind }: { kind: PublicContentKind }) {
         section: form.section,
         summary: form.summary,
         body: form.body,
-        metadata,
+        metadata: normalizedMetadata,
         status: form.status,
         published_at: maybeNull(form.published_at),
         sort_order: numberValue(form.sort_order),
@@ -621,6 +668,47 @@ export function AdminPublicContentPage({ kind }: { kind: PublicContentKind }) {
                           </option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <label className="flex items-start gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={form.nav_show}
+                        onChange={(event) =>
+                          updateField("nav_show", event.target.checked)
+                        }
+                        className="mt-1"
+                      />
+                      <span>
+                        Show this published page in public navigation.
+                      </span>
+                    </label>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="public-nav-label">
+                          Navigation Label
+                        </Label>
+                        <Input
+                          id="public-nav-label"
+                          value={form.nav_label}
+                          onChange={(event) =>
+                            updateField("nav_label", event.target.value)
+                          }
+                          placeholder="Defaults to page title"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="public-nav-parent">Parent Path</Label>
+                        <Input
+                          id="public-nav-parent"
+                          value={form.nav_parent}
+                          onChange={(event) =>
+                            updateField("nav_parent", event.target.value)
+                          }
+                          placeholder="/about"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-2">

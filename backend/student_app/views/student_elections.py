@@ -19,6 +19,7 @@ class StudentElections(APIView):
         student = request.user.profile
         elections = (
             models.Election.objects.select_related("school")
+            .prefetch_related("school_seats__school")
             .annotate(candidate_count=Count("candidates", distinct=True), vote_count=Count("votes", distinct=True))
             .filter(is_active=True)
             .order_by("-starts_at", "-created_at")

@@ -30,11 +30,11 @@ import { NavUser } from "@/components/sidebar/nav-user"
 import { type AuthUser, type UserRole } from "@/lib/auth"
 import {
   DEFAULT_UMS_PUBLIC_SETTINGS,
-  filterUmsNavItemsByFeatures,
+  filterUmsNavItemsBySettings,
   loadPublicUmsSettings,
+  zoneForUmsRole,
 } from "@/lib/ums-settings"
 import {
-  ROLE_ZONES,
   type UmsIconKey,
   type UmsNavItem,
 } from "@/lib/ums-roles"
@@ -104,19 +104,17 @@ export function AppSidebar({
   role: UserRole
   user: AuthUser
 }) {
-  const zone = ROLE_ZONES[role]
   const { setOpen } = useSidebar()
   const [publicSettings, setPublicSettings] = React.useState(
     DEFAULT_UMS_PUBLIC_SETTINGS
   )
-  const settingsRef = React.useRef(publicSettings)
+  const zone = zoneForUmsRole(role, publicSettings)
 
   React.useEffect(() => {
     let ignore = false
     void loadPublicUmsSettings().then((settings) => {
       if (!ignore) {
         setPublicSettings(settings)
-        settingsRef.current = settings
       }
     })
     return () => {
@@ -132,10 +130,10 @@ export function AppSidebar({
 
   const navMain = React.useMemo(
     () => {
-      const featureItems = filterUmsNavItemsByFeatures(
+      const featureItems = filterUmsNavItemsBySettings(
         zone.navMain,
-        publicSettings.features,
-        publicSettings.library_services
+        publicSettings,
+        role
       )
       return withIcons(
         role === "executive"
@@ -143,14 +141,14 @@ export function AppSidebar({
           : featureItems
       )
     },
-    [publicSettings.features, publicSettings.library_services, role, user, zone.navMain]
+    [publicSettings, role, user, zone.navMain]
   )
   const navSecondary = React.useMemo(
     () =>
       withIcons(
-        filterUmsNavItemsByFeatures(zone.navSecondary, publicSettings.features, publicSettings.library_services)
+        filterUmsNavItemsBySettings(zone.navSecondary, publicSettings, role)
       ),
-    [publicSettings.features, publicSettings.library_services, zone.navSecondary]
+    [publicSettings, role, zone.navSecondary]
   )
   const displayName =
     [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || user.username || "User"

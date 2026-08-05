@@ -27,6 +27,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { apiFetch } from "@/lib/auth"
+import {
+  DEFAULT_LIBRARY_POLICY,
+  libraryDurationLabel,
+  libraryServiceEnabled,
+  normalizeLibraryPolicy,
+  type LibraryPolicy,
+  type LibraryServices,
+} from "@/lib/library-policy"
 
 type Book = {
   id: number
@@ -103,7 +111,8 @@ type LibraryData = {
   pending_book_requests: number
   pending_laptop_requests: number
   pending_room_requests: number
-  library_services: { books_enabled: boolean; laptops_enabled: boolean; rooms_enabled: boolean }
+  library_services: LibraryServices
+  library_policy: LibraryPolicy
 }
 
 const emptyData: LibraryData = {
@@ -120,7 +129,8 @@ const emptyData: LibraryData = {
   pending_book_requests: 0,
   pending_laptop_requests: 0,
   pending_room_requests: 0,
-  library_services: { books_enabled: true, laptops_enabled: true, rooms_enabled: true },
+  library_services: DEFAULT_LIBRARY_POLICY,
+  library_policy: DEFAULT_LIBRARY_POLICY,
 }
 
 export function StudentLibraryPage({
@@ -152,7 +162,12 @@ export function StudentLibraryPage({
       const response = await apiFetch<LibraryData>(
         `/student/library?${params.toString()}`
       )
-      setData(response)
+      const policy = normalizeLibraryPolicy(response.library_policy ?? response.library_services)
+      setData({
+        ...response,
+        library_services: policy,
+        library_policy: policy,
+      })
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Unable to load library."
@@ -324,27 +339,33 @@ export function StudentLibraryPage({
           className="grid gap-3 sm:grid-cols-3"
           aria-label="Library sections"
         >
-          <Button
-            render={<Link href="/student/library/books" />}
-            variant={mode === "books" ? "default" : "outline"}
-            className="justify-start"
-          >
-            <BookOpen className="size-4" /> Books
-          </Button>
-          <Button
-            render={<Link href="/student/library/laptops" />}
-            variant={mode === "laptops" ? "default" : "outline"}
-            className="justify-start"
-          >
-            <Laptop className="size-4" /> Laptops
-          </Button>
-          <Button
-            render={<Link href="/student/library/rooms" />}
-            variant={mode === "rooms" ? "default" : "outline"}
-            className="justify-start"
-          >
-            <DoorOpen className="size-4" /> Discussion Rooms
-          </Button>
+          {libraryServiceEnabled(data.library_policy, "book") ? (
+            <Button
+              render={<Link href="/student/library/books" />}
+              variant={mode === "books" ? "default" : "outline"}
+              className="justify-start"
+            >
+              <BookOpen className="size-4" /> Books
+            </Button>
+          ) : null}
+          {libraryServiceEnabled(data.library_policy, "laptop") ? (
+            <Button
+              render={<Link href="/student/library/laptops" />}
+              variant={mode === "laptops" ? "default" : "outline"}
+              className="justify-start"
+            >
+              <Laptop className="size-4" /> Laptops
+            </Button>
+          ) : null}
+          {libraryServiceEnabled(data.library_policy, "room") ? (
+            <Button
+              render={<Link href="/student/library/rooms" />}
+              variant={mode === "rooms" ? "default" : "outline"}
+              className="justify-start"
+            >
+              <DoorOpen className="size-4" /> Discussion Rooms
+            </Button>
+          ) : null}
         </nav>
 
         {error ? (
@@ -372,9 +393,11 @@ export function StudentLibraryPage({
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm">
               <p className="font-semibold text-blue-800">Your Borrowing Status</p>
               <p className="mt-1 text-blue-700">
-                Books held: <span className="font-medium">{data.active_book_loans + data.pending_book_requests}</span> / {data.borrowing_limit.max_keep_at_a_time}
+                Books held: <span className="font-medium">{data.active_book_loans + data.pending_book_requests}</span> / {data.library_policy.limits.book.max_keep_at_a_time}
                 {" · "}
-                Can borrow: <span className="font-medium">{Math.max(0, data.borrowing_limit.max_borrow_at_a_time - data.active_book_loans - data.pending_book_requests)}</span> more at a time
+                Can borrow: <span className="font-medium">{Math.max(0, data.library_policy.limits.book.max_borrow_at_a_time - data.active_book_loans - data.pending_book_requests)}</span> more at a time
+                {" - "}
+                Loan period: <span className="font-medium">{libraryDurationLabel(data.library_policy.loan_periods.book)}</span>
               </p>
             </div>
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
@@ -429,6 +452,7 @@ export function StudentLibraryPage({
                             disabled={
                               !book.available_copies ||
                               !data.library_services.books_enabled ||
+                              !data.library_policy.reservation_rules.book.enabled ||
                               saving === `book-${book.id}`
                             }
                             onClick={() => void requestAsset("book", book.id)}
@@ -437,9 +461,9 @@ export function StudentLibraryPage({
                               <Loader2 className="size-4 animate-spin" />
                             ) : null}
                             {book.available_copies
-                              ? data.library_services.books_enabled
+                              ? data.library_services.books_enabled && data.library_policy.reservation_rules.book.enabled
                                 ? "Request to Borrow"
-                                : "Borrowing Paused"
+                                : "Requests Paused"
                               : "Unavailable"}
                           </Button>
                         </div>
@@ -519,7 +543,7 @@ export function StudentLibraryPage({
                         }
                       />
                     </div>
-                    <Button type="submit" disabled={saving === "acquisition"}>
+                    <Button type="submit" disabled={saving === "acquisition" || !data.library_policy.reservation_rules.book.enabled}>
                       {saving === "acquisition" ? (
                         <Loader2 className="size-4 animate-spin" />
                       ) : (
@@ -577,7 +601,9 @@ export function StudentLibraryPage({
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm">
               <p className="font-semibold text-blue-800">Your Laptop Status</p>
               <p className="mt-1 text-blue-700">
-                Laptops on loan: <span className="font-medium">{data.active_laptop_loans}</span> / 1
+                Laptops on loan: <span className="font-medium">{data.active_laptop_loans + data.pending_laptop_requests}</span> / {data.library_policy.limits.laptop.max_keep_at_a_time}
+                {" - "}
+                Loan period: <span className="font-medium">{libraryDurationLabel(data.library_policy.loan_periods.laptop)}</span>
                 {data.active_laptop_loans >= 1 ? " · Return your current laptop before borrowing another." : ""}
               </p>
             </div>
@@ -609,13 +635,13 @@ export function StudentLibraryPage({
                   </div>
                   <Button
                     size="sm"
-                    disabled={saving === `laptop-${laptop.id}` || !data.library_services.laptops_enabled}
+                    disabled={saving === `laptop-${laptop.id}` || !data.library_services.laptops_enabled || !data.library_policy.reservation_rules.laptop.enabled}
                     onClick={() => void requestAsset("laptop", laptop.id)}
                   >
                     {saving === `laptop-${laptop.id}` ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : null}
-                    {data.library_services.laptops_enabled ? "Request to Borrow" : "Borrowing Disabled"}
+                    {data.library_services.laptops_enabled && data.library_policy.reservation_rules.laptop.enabled ? "Request to Borrow" : "Requests Disabled"}
                   </Button>
                 </div>
               ))}
@@ -640,7 +666,9 @@ export function StudentLibraryPage({
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm">
               <p className="font-semibold text-blue-800">Your Room Status</p>
               <p className="mt-1 text-blue-700">
-                Rooms allocated: <span className="font-medium">{data.active_room_loans}</span> / 1
+                Rooms allocated: <span className="font-medium">{data.active_room_loans + data.pending_room_requests}</span> / {data.library_policy.limits.room.max_keep_at_a_time}
+                {" - "}
+                Allocation period: <span className="font-medium">{libraryDurationLabel(data.library_policy.loan_periods.room)}</span>
                 {data.active_room_loans >= 1 ? " · Return your current room before reserving another." : ""}
               </p>
             </div>
@@ -677,13 +705,13 @@ export function StudentLibraryPage({
                   </div>
                   <Button
                     size="sm"
-                    disabled={saving === `room-${room.id}` || !data.library_services.rooms_enabled}
+                    disabled={saving === `room-${room.id}` || !data.library_services.rooms_enabled || !data.library_policy.reservation_rules.room.enabled}
                     onClick={() => void requestAsset("room", room.id)}
                   >
                     {saving === `room-${room.id}` ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : null}
-                    {data.library_services.rooms_enabled ? "Request Reservation" : "Booking Disabled"}
+                    {data.library_services.rooms_enabled && data.library_policy.reservation_rules.room.enabled ? "Request Reservation" : "Reservations Disabled"}
                   </Button>
                 </div>
               ))}

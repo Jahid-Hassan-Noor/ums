@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from auth_app.permissions import IsTeacherRole
 from technician_app.venue_booking_service import (
     BookingConflictError,
+    booking_policy_payload,
     bookings_queryset,
     cancel_booking,
     serialize_booking,
@@ -23,6 +24,7 @@ class TeacherVenueBookings(APIView):
         return Response(
             {
                 "role": "teacher",
+                "policy": booking_policy_payload(),
                 "venues": venues_payload(),
                 "requests": [
                     serialize_booking(booking)
@@ -33,7 +35,7 @@ class TeacherVenueBookings(APIView):
 
     def post(self, request):
         teacher = get_teacher_profile(request.user)
-        payload, error = validate_booking_payload(request.data)
+        payload, error = validate_booking_payload(request.data, requester_role=teacher.role)
         if error:
             return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
         try:

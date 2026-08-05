@@ -25,24 +25,26 @@ import {
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import {
-  ROLE_ZONES,
   type UmsIconKey,
   type UmsNavItem,
   type UserRole,
 } from "@/lib/ums-roles"
 import {
   DEFAULT_UMS_PUBLIC_SETTINGS,
-  filterUmsNavItemsByFeatures,
+  filterUmsNavItemsBySettings,
   loadPublicUmsSettings,
   type UmsPublicSettings,
+  zoneForUmsRole,
 } from "@/lib/ums-settings"
 
 type DashboardRole = Exclude<UserRole, "applicant">
@@ -135,10 +137,10 @@ function NavigationDashboard({
   role,
   executiveHasAcademicWorkflows = true,
 }: NavigationDashboardProps) {
-  const zone = ROLE_ZONES[role]
   const [publicSettings, setPublicSettings] = useState(
     DEFAULT_UMS_PUBLIC_SETTINGS
   )
+  const zone = zoneForUmsRole(role, publicSettings)
   useEffect(() => {
     let ignore = false
     void loadPublicUmsSettings().then((settings) => {
@@ -161,6 +163,12 @@ function NavigationDashboard({
   const links = navItems.map(toDashboardLink)
   const compactCards = publicSettings.uiCustomization.card_density === "compact"
   const showDescriptions = publicSettings.uiCustomization.show_link_descriptions
+  const portalName =
+    publicSettings.general.portal_name ||
+    publicSettings.uiCustomization.brand_name ||
+    "the portal"
+  const setupIncomplete =
+    publicSettings.setup.total > 0 && !publicSettings.setup.complete
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -175,10 +183,14 @@ function NavigationDashboard({
             {zone.headline}
           </h1>
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            Choose a destination to continue your work in the UMS.
+            Choose a destination to continue your work in {portalName}.
           </p>
         </div>
       </section>
+
+      {setupIncomplete ? (
+        <SetupNotice settings={publicSettings} role={role} />
+      ) : null}
 
       <section className="space-y-4" aria-labelledby={`${role}-quick-links`}>
         <div>
@@ -193,18 +205,93 @@ function NavigationDashboard({
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {links.map((item) => (
-            <NavigationCard
-              key={`${item.title}-${item.href}`}
-              item={item}
-              compact={compactCards}
-              showDescription={showDescriptions}
-            />
-          ))}
-        </div>
+        {links.length ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {links.map((item) => (
+              <NavigationCard
+                key={`${item.title}-${item.href}`}
+                item={item}
+                compact={compactCards}
+                showDescription={showDescriptions}
+              />
+            ))}
+          </div>
+        ) : (
+          <DashboardEmptyState roleLabel={zone.label} settings={publicSettings} />
+        )}
       </section>
     </div>
+  )
+}
+
+function SetupNotice({
+  settings,
+  role,
+}: {
+  settings: UmsPublicSettings
+  role: DashboardRole
+}) {
+  const remaining = Math.max(settings.setup.total - settings.setup.completed, 0)
+  const isAdmin = role === "admin"
+
+  return (
+    <Card className="border-border/70 bg-card/95 shadow-sm">
+      <CardHeader className="flex flex-col gap-2 pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">Setup</Badge>
+          <span className="text-xs text-muted-foreground">
+            {settings.setup.completed} of {settings.setup.total} complete
+          </span>
+        </div>
+        <CardTitle className="text-base">Institution setup needs attention</CardTitle>
+        <CardDescription>
+          {isAdmin
+            ? `${remaining} required ${remaining === 1 ? "setting is" : "settings are"} still incomplete. Enabled modules may show limited or empty states until setup is finished.`
+            : "Some enabled modules may show limited data while institution setup is still being completed."}
+        </CardDescription>
+      </CardHeader>
+      {isAdmin ? (
+        <CardFooter>
+          <Button variant="outline" size="sm" render={<Link href="/admin/settings" />}>
+            Finish Setup
+          </Button>
+        </CardFooter>
+      ) : null}
+    </Card>
+  )
+}
+
+function DashboardEmptyState({
+  roleLabel,
+  settings,
+}: {
+  roleLabel: string
+  settings: UmsPublicSettings
+}) {
+  const missingSetupItems = settings.setup.items
+    .filter((item) => !item.complete)
+    .slice(0, 3)
+
+  return (
+    <Card className="border-dashed border-border/80 bg-card/95 shadow-sm">
+      <CardHeader className="flex flex-col gap-2">
+        <CardTitle className="text-base">No enabled dashboard links</CardTitle>
+        <CardDescription>
+          Navigation for {roleLabel} is empty because the enabled modules,
+          role module permissions, or setup checklist do not currently expose
+          any destinations.
+        </CardDescription>
+      </CardHeader>
+      {missingSetupItems.length ? (
+        <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
+          {missingSetupItems.map((item) => (
+            <div key={item.key} className="rounded-lg border border-border bg-background px-3 py-2">
+              {item.label}
+            </div>
+          ))}
+        </CardContent>
+      ) : null}
+    </Card>
   )
 }
 
@@ -281,7 +368,7 @@ function getRoleNavigationItems(
   executiveHasAcademicWorkflows: boolean,
   publicSettings: UmsPublicSettings
 ) {
-  const zone = ROLE_ZONES[role]
+  const zone = zoneForUmsRole(role, publicSettings)
   let mainItems = zone.navMain.filter(
     (item) => item.url !== zone.dashboardPath
   )
@@ -308,8 +395,9 @@ function getRoleNavigationItems(
     mainItems = [catererCheckoutLink, ...mainItems]
   }
 
-  return filterUmsNavItemsByFeatures(
+  return filterUmsNavItemsBySettings(
     [...mainItems, ...zone.navSecondary],
-    publicSettings.features
+    publicSettings,
+    role
   )
 }

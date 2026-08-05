@@ -1,16 +1,16 @@
-name: portal
+name: ums
 
 services:
   postgresql:
-    container_name: portal_postgresql
+    container_name: ums_postgresql
     image: postgres:18.4-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${PORTAL_DB_NAME:-portal_db}
-      POSTGRES_USER: ${PORTAL_DB_USER:-portal_user}
-      POSTGRES_PASSWORD: ${PORTAL_DB_PASSWORD:?Set PORTAL_DB_PASSWORD in .env}
+      POSTGRES_DB: ${UMS_DB_NAME:-ums_db}
+      POSTGRES_USER: ${UMS_DB_USER:-ums_user}
+      POSTGRES_PASSWORD: ${UMS_DB_PASSWORD:?Set UMS_DB_PASSWORD in .env}
     volumes:
-      - portal_postgres_data:/var/lib/postgresql/data
+      - ums_postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -19,12 +19,12 @@ services:
       start_period: 20s
 
   redis:
-    container_name: portal_redis
+    container_name: ums_redis
     image: redis:8.8.0-alpine
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - portal_redis_data:/data
+      - ums_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -33,11 +33,11 @@ services:
       start_period: 10s
 
   backend:
-    container_name: portal_backend
+    container_name: ums_backend
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: ${DOCKERHUB_NAMESPACE:-portal-local}/portal-backend:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_NAMESPACE:-ums-local}/ums-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
@@ -53,21 +53,21 @@ services:
       EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU Portal <no-reply@aiu.edu.my>}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU UMS <no-reply@aiu.edu.my>}
       EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-10}
       PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-60}
-      DB_NAME: ${PORTAL_DB_NAME:-portal_db}
-      DB_USER: ${PORTAL_DB_USER:-portal_user}
-      DB_PASSWORD: ${PORTAL_DB_PASSWORD:?Set PORTAL_DB_PASSWORD in .env}
-      DB_HOST: ${PORTAL_DB_HOST:-postgresql}
-      DB_PORT: ${PORTAL_DB_PORT:-5432}
+      DB_NAME: ${UMS_DB_NAME:-ums_db}
+      DB_USER: ${UMS_DB_USER:-ums_user}
+      DB_PASSWORD: ${UMS_DB_PASSWORD:?Set UMS_DB_PASSWORD in .env}
+      DB_HOST: ${UMS_DB_HOST:-postgresql}
+      DB_PORT: ${UMS_DB_PORT:-5432}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
       MEDIA_ROOT: /app/media
       STATIC_ROOT: /app/staticfiles
     volumes:
-      - portal_media_data:/app/media
-      - portal_static_data:/app/staticfiles
+      - ums_media_data:/app/media
+      - ums_static_data:/app/staticfiles
     depends_on:
       postgresql:
         condition: service_healthy
@@ -81,8 +81,8 @@ services:
       start_period: 30s
 
   celery_worker:
-    container_name: portal_celery_worker
-    image: ${DOCKERHUB_NAMESPACE:-portal-local}/portal-backend:${IMAGE_TAG:-latest}
+    container_name: ums_celery_worker
+    image: ${DOCKERHUB_NAMESPACE:-ums-local}/ums-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     user: "65534:65534"
     entrypoint: []
@@ -97,13 +97,13 @@ services:
       EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU Portal <no-reply@aiu.edu.my>}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU UMS <no-reply@aiu.edu.my>}
       EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-10}
-      DB_NAME: ${PORTAL_DB_NAME:-portal_db}
-      DB_USER: ${PORTAL_DB_USER:-portal_user}
-      DB_PASSWORD: ${PORTAL_DB_PASSWORD:?Set PORTAL_DB_PASSWORD in .env}
-      DB_HOST: ${PORTAL_DB_HOST:-postgresql}
-      DB_PORT: ${PORTAL_DB_PORT:-5432}
+      DB_NAME: ${UMS_DB_NAME:-ums_db}
+      DB_USER: ${UMS_DB_USER:-ums_user}
+      DB_PASSWORD: ${UMS_DB_PASSWORD:?Set UMS_DB_PASSWORD in .env}
+      DB_HOST: ${UMS_DB_HOST:-postgresql}
+      DB_PORT: ${UMS_DB_PORT:-5432}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
     depends_on:
@@ -113,8 +113,8 @@ services:
         condition: service_healthy
 
   celery_beat:
-    container_name: portal_celery_beat
-    image: ${DOCKERHUB_NAMESPACE:-portal-local}/portal-backend:${IMAGE_TAG:-latest}
+    container_name: ums_celery_beat
+    image: ${DOCKERHUB_NAMESPACE:-ums-local}/ums-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     user: "65534:65534"
     entrypoint: []
@@ -129,13 +129,13 @@ services:
       EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU Portal <no-reply@aiu.edu.my>}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-AIU UMS <no-reply@aiu.edu.my>}
       EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-10}
-      DB_NAME: ${PORTAL_DB_NAME:-portal_db}
-      DB_USER: ${PORTAL_DB_USER:-portal_user}
-      DB_PASSWORD: ${PORTAL_DB_PASSWORD:?Set PORTAL_DB_PASSWORD in .env}
-      DB_HOST: ${PORTAL_DB_HOST:-postgresql}
-      DB_PORT: ${PORTAL_DB_PORT:-5432}
+      DB_NAME: ${UMS_DB_NAME:-ums_db}
+      DB_USER: ${UMS_DB_USER:-ums_user}
+      DB_PASSWORD: ${UMS_DB_PASSWORD:?Set UMS_DB_PASSWORD in .env}
+      DB_HOST: ${UMS_DB_HOST:-postgresql}
+      DB_PORT: ${UMS_DB_PORT:-5432}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
     depends_on:
@@ -145,13 +145,13 @@ services:
         condition: service_healthy
 
   frontend:
-    container_name: portal_frontend
+    container_name: ums_frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
-    image: ${DOCKERHUB_NAMESPACE:-portal-local}/portal-frontend:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_NAMESPACE:-ums-local}/ums-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       BACKEND_API_URL: ${BACKEND_API_URL:-http://backend:8000}
@@ -166,7 +166,7 @@ services:
       start_period: 30s
 
   nginx:
-    container_name: portal_nginx
+    container_name: ums_nginx
     image: nginx:1.30.3-alpine
     restart: unless-stopped
     ports:
@@ -178,9 +178,9 @@ services:
       frontend:
         condition: service_healthy
     volumes:
-      - ./deploy/nginx/portal.local.conf:/etc/nginx/conf.d/default.conf:ro
-      - portal_static_data:/var/www/static:ro
-      - portal_media_data:/var/www/media:ro
+      - ./deploy/nginx/ums.local.conf:/etc/nginx/conf.d/default.conf:ro
+      - ums_static_data:/var/www/static:ro
+      - ums_media_data:/var/www/media:ro
     healthcheck:
       test: ["CMD-SHELL", "nginx -t"]
       interval: 30s
@@ -188,11 +188,11 @@ services:
       retries: 3
 
 volumes:
-  portal_postgres_data:
-    name: portal_postgres_data
-  portal_redis_data:
-    name: portal_redis_data
-  portal_media_data:
-    name: portal_media_data
-  portal_static_data:
-    name: portal_static_data
+  ums_postgres_data:
+    name: ums_postgres_data
+  ums_redis_data:
+    name: ums_redis_data
+  ums_media_data:
+    name: ums_media_data
+  ums_static_data:
+    name: ums_static_data

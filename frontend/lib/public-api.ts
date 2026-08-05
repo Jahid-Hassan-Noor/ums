@@ -1,17 +1,9 @@
 import "server-only"
 
+import type { Metadata } from "next"
 import { headers } from "next/headers"
 
 import { API_BASE } from "@/lib/api-base"
-import {
-  centres as fallbackCentres,
-  departments as fallbackDepartmentNames,
-  latestNews as fallbackNews,
-  monthlyHighlights as fallbackHighlights,
-  officialLinks as fallbackOfficialLinks,
-  schools as fallbackSchools,
-  units as fallbackUnitNames,
-} from "@/lib/ums-public-data"
 import {
   DEFAULT_UMS_PUBLIC_SETTINGS,
   normalizeUmsPublicSettings,
@@ -42,7 +34,11 @@ export type PublicCentre = {
   offerings: string[]
   image_url: string
   is_active: boolean
+  center_type?: string
+  academic_calendar_mode?: string
+  academic_center?: boolean
   academic_workflows?: boolean
+  semester_workflows?: boolean
 }
 
 export type PublicDepartment = {
@@ -155,6 +151,15 @@ export type PublicOfficialLinkItem = {
   summary: string
 }
 
+export type PublicNavGroup = {
+  label: string
+  href: string
+  children?: Array<{
+    label: string
+    href: string
+  }>
+}
+
 type PublicSchoolsResponse = {
   schools: PublicSchool[]
 }
@@ -184,6 +189,10 @@ type PublicPageResponse = {
   page: PublicManagedPage | null
 }
 
+type PublicPagesResponse = {
+  pages: PublicManagedPage[]
+}
+
 type PublicNewsResponse = PublicPageResponse & {
   news: PublicNewsItem[]
   announcements?: PublicAnnouncementItem[]
@@ -211,71 +220,6 @@ type PublicOfficialLinksResponse = PublicPageResponse & {
 
 const SERVER_API_BASE =
   process.env.BACKEND_API_URL ?? process.env.DJANGO_PROXY_TARGET ?? API_BASE
-
-function slugFromHref(href: string): string | null {
-  return href.replace(/\/+$/, "").split("/").filter(Boolean).at(-1) ?? null
-}
-
-const fallbackPublicSchools: PublicSchool[] = fallbackSchools.map(
-  (school, index) => ({
-    id: index + 1,
-    code: school.code,
-    slug: slugFromHref(school.href),
-    name: school.title,
-    description: school.summary,
-    about: school.about,
-    vision: school.vision,
-    mission: school.mission,
-    programmes: school.programmes,
-    image_url: school.image,
-    is_active: true,
-  })
-)
-
-const fallbackPublicCentres: PublicCentre[] = fallbackCentres.map(
-  (centre, index) => ({
-    id: index + 1,
-    code: centre.code,
-    slug: slugFromHref(centre.href),
-    name: centre.title,
-    description: centre.summary,
-    about: centre.about,
-    offerings: centre.offerings,
-    image_url: centre.image,
-    is_active: true,
-  })
-)
-
-const fallbackPublicDepartments: PublicDepartment[] =
-  fallbackDepartmentNames.map((department, index) => ({
-    id: index + 1,
-    code: `D${String(index + 1).padStart(2, "0")}`,
-    name: department,
-    description: "Department record for AIU public directory.",
-    is_active: true,
-    school: null,
-    center: null,
-    school_name: "",
-    center_name: "",
-  }))
-
-const fallbackPublicUnits: PublicUnit[] = fallbackUnitNames.map(
-  (unit, index) => ({
-    id: index + 1,
-    code: `U${String(index + 1).padStart(2, "0")}`,
-    name: unit,
-    unit_type: "service",
-    description: "Operational unit supporting AIU service delivery.",
-    is_active: true,
-    school: null,
-    center: null,
-    department: null,
-    school_name: "",
-    center_name: "",
-    department_name: "",
-    assigned_executives: [],
-  })
-)
 
 function formatPublicDate(value: string | null | undefined) {
   if (!value) return ""
@@ -314,61 +258,6 @@ function normalizeOfficialLink(
     href: item.url,
     summary: item.description,
   }
-}
-
-function fallbackPublicNews(): PublicNewsItem[] {
-  return fallbackNews.map((item, index) => ({
-    id: index + 1,
-    title: item.title,
-    slug: slugFromHref(item.href) ?? `news-${index + 1}`,
-    summary: item.summary,
-    body: item.summary,
-    image: null,
-    image_url: "",
-    status: "published",
-    author: null,
-    published_at: null,
-    created_at: item.date,
-    updated_at: item.date,
-    href: item.href,
-    date: item.date,
-    category: item.category,
-  }))
-}
-
-function fallbackPublicEvents(): PublicEventItem[] {
-  return fallbackHighlights.map((item, index) => ({
-    id: index + 1,
-    title: item.title,
-    slug: slugFromHref(item.href) ?? `event-${index + 1}`,
-    description: item.summary,
-    starts_at: "",
-    ends_at: null,
-    location: "AIU",
-    status: "published",
-    published_by: null,
-    created_at: "",
-    updated_at: "",
-    href: item.href,
-    date: "Monthly Highlights",
-    summary: item.summary,
-  }))
-}
-
-function fallbackLinks(): PublicOfficialLinkItem[] {
-  return fallbackOfficialLinks.map((item, index) => ({
-    id: index + 1,
-    title: item.title,
-    url: item.href ?? "/",
-    category: "Public",
-    audience: "public",
-    description: item.summary,
-    sort_order: index,
-    is_active: true,
-    updated_at: "",
-    href: item.href ?? "/",
-    summary: item.summary,
-  }))
 }
 
 function normalizePath(path: string) {
@@ -445,7 +334,7 @@ export async function getPublicSchools(): Promise<PublicSchool[]> {
     const data = await fetchJson<PublicSchoolsResponse>("/schools")
     return data.schools ?? []
   } catch {
-    return fallbackPublicSchools
+    return []
   }
 }
 
@@ -456,7 +345,7 @@ export async function getPublicSchool(
     const data = await fetchJsonOrNull<PublicSchoolResponse>(`/schools/${slug}`)
     return data?.school ?? null
   } catch {
-    return fallbackPublicSchools.find((school) => school.slug === slug) ?? null
+    return null
   }
 }
 
@@ -465,7 +354,7 @@ export async function getPublicCentres(): Promise<PublicCentre[]> {
     const data = await fetchJson<PublicCentresResponse>("/centres")
     return data.centres ?? []
   } catch {
-    return fallbackPublicCentres
+    return []
   }
 }
 
@@ -476,7 +365,7 @@ export async function getPublicCentre(
     const data = await fetchJsonOrNull<PublicCentreResponse>(`/centres/${slug}`)
     return data?.centre ?? null
   } catch {
-    return fallbackPublicCentres.find((centre) => centre.slug === slug) ?? null
+    return null
   }
 }
 
@@ -489,8 +378,8 @@ export async function getPublicDepartments(): Promise<PublicDepartmentsResponse>
     }
   } catch {
     return {
-      departments: fallbackPublicDepartments,
-      centres: fallbackPublicCentres,
+      departments: [],
+      centres: [],
     }
   }
 }
@@ -500,7 +389,7 @@ export async function getPublicUnits(): Promise<PublicUnit[]> {
     const data = await fetchJson<PublicUnitsResponse>("/units")
     return data.units ?? []
   } catch {
-    return fallbackPublicUnits
+    return []
   }
 }
 
@@ -537,13 +426,170 @@ export async function getPublicUmsSettings(): Promise<UmsPublicSettings> {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function textValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function booleanValue(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+function routeTitle(settings: UmsPublicSettings, title: string) {
+  const brand =
+    settings.university.name ||
+    settings.uiCustomization.brand_name ||
+    DEFAULT_UMS_PUBLIC_SETTINGS.university.name
+  return `${title} | ${brand}`
+}
+
+function pageMetadata(page: PublicManagedPage | null) {
+  const metadata = page?.metadata
+  return isRecord(metadata) ? metadata : {}
+}
+
+function navigationMetadata(page: PublicManagedPage) {
+  const metadata = pageMetadata(page)
+  return isRecord(metadata.navigation) ? metadata.navigation : {}
+}
+
+function pageNavigationShow(page: PublicManagedPage) {
+  const metadata = pageMetadata(page)
+  const navigation = navigationMetadata(page)
+  const configured =
+    booleanValue(navigation.show) ??
+    booleanValue(navigation.show_in_navigation) ??
+    booleanValue(metadata.show_in_navigation) ??
+    booleanValue(metadata.showInNavigation)
+  return configured ?? page.route_path !== "/"
+}
+
+function pageNavigationOrder(page: PublicManagedPage) {
+  const navigation = navigationMetadata(page)
+  return numberValue(navigation.order) ?? page.sort_order ?? 0
+}
+
+function pageNavigationLabel(page: PublicManagedPage) {
+  const metadata = pageMetadata(page)
+  const navigation = navigationMetadata(page)
+  return (
+    textValue(navigation.label) ||
+    textValue(metadata.navigation_label) ||
+    page.title
+  )
+}
+
+function pageNavigationParent(page: PublicManagedPage) {
+  const metadata = pageMetadata(page)
+  const navigation = navigationMetadata(page)
+  const parent =
+    textValue(navigation.parent) ||
+    textValue(navigation.parent_path) ||
+    textValue(metadata.parent_path)
+  if (!parent) return ""
+  return parent.startsWith("/") ? parent : `/${parent}`
+}
+
+function pageNavigationParentLabel(page: PublicManagedPage) {
+  const navigation = navigationMetadata(page)
+  return textValue(navigation.parent_label) || textValue(navigation.parentLabel)
+}
+
+export async function getPublicPages(): Promise<PublicManagedPage[]> {
+  try {
+    const data = await fetchJson<PublicPagesResponse>("/pages/navigation")
+    return data.pages ?? []
+  } catch {
+    return []
+  }
+}
+
+export async function getPublicNavigation(): Promise<PublicNavGroup[]> {
+  const pages = await getPublicPages()
+  const visiblePages = pages
+    .filter((page) => page.route_path && pageNavigationShow(page))
+    .sort((a, b) => {
+      const order = pageNavigationOrder(a) - pageNavigationOrder(b)
+      if (order !== 0) return order
+      return pageNavigationLabel(a).localeCompare(pageNavigationLabel(b))
+    })
+
+  const pageByPath = new Map(visiblePages.map((page) => [page.route_path, page]))
+  const groups = new Map<string, PublicNavGroup>()
+
+  for (const page of visiblePages) {
+    const href = page.route_path
+    const label = pageNavigationLabel(page)
+    const parent = pageNavigationParent(page)
+
+    if (parent && parent !== href) {
+      const parentPage = pageByPath.get(parent)
+      const parentLabel =
+        pageNavigationParentLabel(page) ||
+        (parentPage ? pageNavigationLabel(parentPage) : "")
+
+      if (!groups.has(parent)) {
+        groups.set(parent, {
+          label: parentLabel || label,
+          href: parent,
+          children: [],
+        })
+      }
+      groups.get(parent)?.children?.push({ label, href })
+      continue
+    }
+
+    const existing = groups.get(href)
+    groups.set(href, {
+      label,
+      href,
+      children: existing?.children,
+    })
+  }
+
+  return Array.from(groups.values())
+}
+
+export async function generatePublicPageMetadata(
+  routePath: string,
+  fallbackTitle: string,
+  fallbackDescription = "Public information managed by the university portal."
+): Promise<Metadata> {
+  const [page, settings] = await Promise.all([
+    getPublicPageByPath(routePath),
+    getPublicUmsSettings(),
+  ])
+  const metadata = pageMetadata(page)
+  const title =
+    textValue(metadata.seo_title) ||
+    textValue(metadata.title) ||
+    page?.title ||
+    fallbackTitle
+  const description =
+    textValue(metadata.seo_description) ||
+    textValue(metadata.description) ||
+    page?.summary ||
+    fallbackDescription
+
+  return {
+    title: routeTitle(settings, title),
+    description,
+  }
+}
+
 export async function getPublicNews(): Promise<PublicNewsItem[]> {
   try {
     const data = await fetchJson<PublicNewsResponse>("/news")
-    const news = (data.news ?? []).map(normalizeNewsItem)
-    return news.length ? news : fallbackPublicNews()
+    return (data.news ?? []).map(normalizeNewsItem)
   } catch {
-    return fallbackPublicNews()
+    return []
   }
 }
 
@@ -556,17 +602,16 @@ export async function getPublicNewsItem(
     )
     return data?.news ? normalizeNewsItem(data.news) : null
   } catch {
-    return fallbackPublicNews().find((item) => item.slug === slug) ?? null
+    return null
   }
 }
 
 export async function getPublicEvents(): Promise<PublicEventItem[]> {
   try {
     const data = await fetchJson<PublicEventsResponse>("/events")
-    const events = (data.events ?? []).map(normalizeEventItem)
-    return events.length ? events : fallbackPublicEvents()
+    return (data.events ?? []).map(normalizeEventItem)
   } catch {
-    return fallbackPublicEvents()
+    return []
   }
 }
 
@@ -579,7 +624,7 @@ export async function getPublicEvent(
     )
     return data?.event ? normalizeEventItem(data.event) : null
   } catch {
-    return fallbackPublicEvents().find((item) => item.slug === slug) ?? null
+    return null
   }
 }
 
@@ -602,9 +647,8 @@ export async function getPublicOfficialLinks(): Promise<
 > {
   try {
     const data = await fetchJson<PublicOfficialLinksResponse>("/official-links")
-    const links = (data.official_links ?? []).map(normalizeOfficialLink)
-    return links.length ? links : fallbackLinks()
+    return (data.official_links ?? []).map(normalizeOfficialLink)
   } catch {
-    return fallbackLinks()
+    return []
   }
 }

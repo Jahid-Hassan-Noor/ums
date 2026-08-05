@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
+import { formatUmsMoney } from "@/lib/ums-settings"
 
 type StudentRef = {
   id: number
@@ -20,6 +22,7 @@ type StudentRef = {
 type StudentRow = {
   student: StudentRef
   balance: string
+  currency?: string
   active_holds: number
 }
 
@@ -36,6 +39,7 @@ type Charge = {
   category: Category
   description: string
   amount: string
+  currency?: string
   due_date: string | null
   status: string
   created_at: string
@@ -45,6 +49,7 @@ type LedgerEntry = {
   id: number
   entry_type: string
   amount: string
+  currency?: string
   description: string
   balance_after: string
   posted_at: string
@@ -94,10 +99,6 @@ const emptyHold = {
   notes: "",
 }
 
-function money(value: string) {
-  return `RM ${Number(value || 0).toFixed(2)}`
-}
-
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleDateString() : "Not set"
 }
@@ -107,6 +108,7 @@ function label(value: string) {
 }
 
 export function AccountantLedgerPage() {
+  const settings = usePublicUmsSettings()
   const [students, setStudents] = useState<StudentRow[]>([])
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -278,7 +280,7 @@ export function AccountantLedgerPage() {
                 {students.slice(0, 12).map((row) => (
                   <button key={row.student.id} type="button" onClick={() => void selectStudent(String(row.student.id))} className="w-full rounded-md border border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60">
                     <span className="font-medium">{row.student.name}</span>
-                    <span className="mt-1 block text-muted-foreground">{row.student.identifier} - {money(row.balance)} - {row.active_holds} holds</span>
+                    <span className="mt-1 block text-muted-foreground">{row.student.identifier} - {formatUmsMoney(row.balance, settings, row.currency)} - {row.active_holds} holds</span>
                   </button>
                 ))}
               </CardContent>
@@ -319,7 +321,7 @@ export function AccountantLedgerPage() {
                 {summary ? (
                   <div className="grid gap-3 sm:grid-cols-3">
                     <p className="text-sm"><span className="text-muted-foreground">Identifier</span><br />{summary.student.identifier}</p>
-                    <p className="text-sm"><span className="text-muted-foreground">Balance</span><br />{money(summary.balance)}</p>
+                    <p className="text-sm"><span className="text-muted-foreground">Balance</span><br />{formatUmsMoney(summary.balance, settings, summary.currency)}</p>
                     <p className="text-sm"><span className="text-muted-foreground">Active Holds</span><br />{summary.active_holds.length}</p>
                   </div>
                 ) : (
@@ -336,7 +338,7 @@ export function AccountantLedgerPage() {
                     {summary.charges.slice(0, 8).map((charge) => (
                       <div key={charge.id} className="rounded-md border border-border p-3 text-sm">
                         <p className="font-medium">{charge.description}</p>
-                        <p className="mt-1 text-muted-foreground">{charge.category.code} - {money(charge.amount)} - {formatDate(charge.due_date)} - {label(charge.status)}</p>
+                        <p className="mt-1 text-muted-foreground">{charge.category.code} - {formatUmsMoney(charge.amount, settings, charge.currency ?? summary.currency)} - {formatDate(charge.due_date)} - {label(charge.status)}</p>
                       </div>
                     ))}
                   </CardContent>
@@ -346,8 +348,8 @@ export function AccountantLedgerPage() {
                   <CardContent className="space-y-2">
                     {summary.ledger_entries.slice(-10).reverse().map((entry) => (
                       <div key={entry.id} className="rounded-md border border-border p-3 text-sm">
-                        <p className="font-medium">{label(entry.entry_type)} - {money(entry.amount)}</p>
-                        <p className="mt-1 text-muted-foreground">{entry.description} - Balance {money(entry.balance_after)}</p>
+                        <p className="font-medium">{label(entry.entry_type)} - {formatUmsMoney(entry.amount, settings, entry.currency ?? summary.currency)}</p>
+                        <p className="mt-1 text-muted-foreground">{entry.description} - Balance {formatUmsMoney(entry.balance_after, settings, entry.currency ?? summary.currency)}</p>
                       </div>
                     ))}
                   </CardContent>

@@ -58,7 +58,7 @@ function ResultGroup({ group }: { group: ElectionResultGroup }) {
           <h3 className="font-semibold">{group.label}</h3>
           <p className="text-sm text-muted-foreground">{group.total_votes} total votes</p>
         </div>
-        <Badge variant="outline">{titleCase(group.category)}</Badge>
+        <Badge variant="outline">{group.category_label ?? titleCase(group.category)}</Badge>
       </div>
       <div className="mt-4 space-y-3">
         {group.candidates.length ? (
@@ -302,7 +302,7 @@ export function StudentElectionsPage() {
           <div className="max-w-3xl space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Elections</h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              {school.name ? `${school.name} ballot access and live vote counts.` : "Student ballot access and live vote counts."}
+              {school.name ? `${school.name} ballot access and voting updates.` : "Student ballot access and voting updates."}
             </p>
           </div>
           <Button variant="outline" onClick={() => void loadData()} disabled={isLoading}>
@@ -399,8 +399,10 @@ export function StudentElectionsPage() {
                       <p className="mt-1">{formatDateTime(selectedElection.ends_at)}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium uppercase text-muted-foreground">Scope</p>
-                      <p className="mt-1">{selectedElection.school_detail?.name ?? "All schools"}</p>
+                      <p className="text-xs font-medium uppercase text-muted-foreground">Constituency</p>
+                      <p className="mt-1">
+                        {selectedElection.constituency_label || selectedElection.constituency_detail?.label || "University-wide"}
+                      </p>
                     </div>
                   </CardContent>
                 </Card>

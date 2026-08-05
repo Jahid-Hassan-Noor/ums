@@ -7,7 +7,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accountant_app.models import FinanceGatewayConfig, Fine as FinanceFine
-from admin_app.models import Center, Profile, Unit
+from admin_app.models import Center, Profile, SystemSetting, Unit
+from admin_app.settings_registry import invalidate_settings_cache, setting_key
 from auth_app.serializers import RegisterSerializer
 from librarian_app.models import (
     Book,
@@ -28,12 +29,22 @@ User = get_user_model()
 class LibrarianWorkflowTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.center = Center.objects.create(code="COR", name="Centre of Reference (Library)")
+        self.center = Center.objects.create(code="LIB", name="Library Services")
         self.unit = Unit.objects.create(
-            code="COR-ADMIN",
-            name="Library Administrative Unit",
+            code="LIB-OPS",
+            name="Library Operations",
             center=self.center,
         )
+        SystemSetting.objects.update_or_create(
+            key="ums.roles",
+            defaults={
+                "value": {
+                    "librarian_default_center_code": self.center.code,
+                    "librarian_default_unit_code": self.unit.code,
+                }
+            },
+        )
+        invalidate_settings_cache()
         self.librarian_user = User.objects.create_user(username="librarian", password="pass")
         self.librarian = self.librarian_user.profile
         self.librarian.role = Profile.ROLE_LIBRARIAN
@@ -44,7 +55,14 @@ class LibrarianWorkflowTests(TestCase):
         self.student = self.student_user.profile
         self.admin_user = User.objects.create_superuser(username="admin", email="admin@example.com", password="pass")
 
-    def test_librarian_account_is_created_under_cor(self):
+    def _set_library_policy(self, **values):
+        SystemSetting.objects.update_or_create(
+            key=setting_key("librarian_library"),
+            defaults={"value": values},
+        )
+        invalidate_settings_cache()
+
+    def test_librarian_account_is_created_under_configured_owner(self):
         serializer = RegisterSerializer(
             data={
                 "username": "new_librarian",
@@ -54,6 +72,8 @@ class LibrarianWorkflowTests(TestCase):
                 "password": "StrongPass123!",
                 "role": Profile.ROLE_LIBRARIAN,
                 "ums_id": "LIB-100",
+                "center_id": self.center.id,
+                "unit_id": self.unit.id,
             }
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
@@ -73,6 +93,8 @@ class LibrarianWorkflowTests(TestCase):
                 "last_name": "Librarian",
                 "password": "StrongPass123!",
                 "ums_id": "LIB-200",
+                "center_id": self.center.id,
+                "unit_id": self.unit.id,
             },
             format="json",
         )
@@ -272,6 +294,81 @@ class LibrarianWorkflowTests(TestCase):
         )
         self.assertEqual(response.status_code, 201, response.json())
 
+    def test_library_policy_can_disable_laptop_service(self):
+        laptop = Laptop.objects.create(asset_tag="LT-DISABLED", brand="Dell", model="Latitude")
+        self._set_library_policy(laptops_enabled=False)
+
+        self.client.force_authenticate(user=self.student_user)
+        list_response = self.client.get("/student/library", {"section": "laptops"})
+        self.assertEqual(list_response.status_code, 200, list_response.json())
+        self.assertEqual(list_response.json()["laptops"], [])
+        self.assertFalse(list_response.json()["library_policy"]["laptops_enabled"])
+
+        request_response = self.client.post(
+            "/student/library",
+            {"asset_type": "laptop", "laptop_id": laptop.id},
+            format="json",
+        )
+        self.assertEqual(request_response.status_code, 400, request_response.json())
+
+        self.client.force_authenticate(user=self.librarian_user)
+        librarian_list = self.client.get("/librarian/laptops")
+        self.assertEqual(librarian_list.status_code, 404, librarian_list.json())
+        create_response = self.client.post(
+            "/librarian/laptops",
+            {"asset_tag": "LT-BLOCKED", "brand": "HP", "model": "EliteBook"},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 404, create_response.json())
+
+    def test_library_policy_controls_laptop_limits_and_loan_period(self):
+        self._set_library_policy(
+            laptop_max_borrow_at_a_time=2,
+            laptop_max_keep_at_a_time=2,
+            laptop_loan_period_days=3,
+        )
+        first = Laptop.objects.create(asset_tag="LT-LIMIT-1", brand="Dell", model="Latitude")
+        second = Laptop.objects.create(asset_tag="LT-LIMIT-2", brand="Lenovo", model="ThinkPad")
+
+        self.client.force_authenticate(user=self.student_user)
+        first_request = self.client.post(
+            "/student/library",
+            {"asset_type": "laptop", "laptop_id": first.id},
+            format="json",
+        )
+        self.assertEqual(first_request.status_code, 201, first_request.json())
+        second_request = self.client.post(
+            "/student/library",
+            {"asset_type": "laptop", "laptop_id": second.id},
+            format="json",
+        )
+        self.assertEqual(second_request.status_code, 201, second_request.json())
+
+        self.client.force_authenticate(user=self.librarian_user)
+        too_long = self.client.post(
+            "/librarian/loans",
+            {
+                "student_id": self.student.id,
+                "laptop_id": first.id,
+                "request_id": first_request.json()["request"]["id"],
+                "due_at": (timezone.now() + timezone.timedelta(days=4)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(too_long.status_code, 400, too_long.json())
+
+        allowed = self.client.post(
+            "/librarian/loans",
+            {
+                "student_id": self.student.id,
+                "laptop_id": first.id,
+                "request_id": first_request.json()["request"]["id"],
+                "due_at": (timezone.now() + timezone.timedelta(days=3)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(allowed.status_code, 201, allowed.json())
+
     def test_room_reservation_key_allocation_and_return_workflow(self):
         self.client.force_authenticate(user=self.librarian_user)
         room_response = self.client.post(
@@ -450,6 +547,59 @@ class LibrarianWorkflowTests(TestCase):
         response = self.client.get("/student/library", {"section": "laptops"})
         self.assertEqual(response.status_code, 200, response.json())
         self.assertEqual([laptop["id"] for laptop in response.json()["laptops"]], [visible.id])
+
+    def test_library_policy_controls_book_renewals_and_default_fines(self):
+        self._set_library_policy(
+            book_max_renewals=1,
+            book_renewal_period_days=5,
+            book_daily_fine_amount="3.00",
+        )
+        shelf = Shelf.objects.create(code="P-01", name="Policy Shelf", location="Level 1")
+        book = Book.objects.create(title="Policy Systems", author="AIU")
+        renewal_copy = BookCopy.objects.create(book=book, accession_number="BK-POL-001", shelf=shelf)
+        due_at = timezone.now() + timezone.timedelta(days=1)
+        renewal_loan = Loan.objects.create(
+            student=self.student,
+            book_copy=renewal_copy,
+            assigned_by=self.librarian,
+            due_at=due_at,
+            max_renewals=2,
+        )
+
+        self.client.force_authenticate(user=self.librarian_user)
+        renew_response = self.client.post(
+            f"/librarian/loans/{renewal_loan.id}/renew",
+            {},
+            format="json",
+        )
+        self.assertEqual(renew_response.status_code, 200, renew_response.json())
+        renewal_loan.refresh_from_db()
+        self.assertEqual(renewal_loan.due_at, due_at + timezone.timedelta(days=5))
+        self.assertEqual(renewal_loan.max_renewals, 1)
+
+        second_renew = self.client.post(
+            f"/librarian/loans/{renewal_loan.id}/renew",
+            {},
+            format="json",
+        )
+        self.assertEqual(second_renew.status_code, 400, second_renew.json())
+
+        overdue_copy = BookCopy.objects.create(book=book, accession_number="BK-POL-002", shelf=shelf)
+        overdue_loan = Loan.objects.create(
+            student=self.student,
+            book_copy=overdue_copy,
+            assigned_by=self.librarian,
+            borrowed_at=timezone.now() - timezone.timedelta(days=5),
+            due_at=timezone.now() - timezone.timedelta(days=3, hours=1),
+        )
+        fine_response = self.client.post(
+            f"/librarian/loans/{overdue_loan.id}/apply-fine",
+            {},
+            format="json",
+        )
+        self.assertEqual(fine_response.status_code, 200, fine_response.json())
+        overdue_loan.refresh_from_db()
+        self.assertEqual(overdue_loan.fine_amount, Decimal("9.00"))
 
     def test_librarian_can_resolve_student_book_acquisition_requests(self):
         self.client.force_authenticate(user=self.student_user)

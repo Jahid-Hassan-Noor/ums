@@ -9,8 +9,13 @@ import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { defaultRouteForRole, ensureValidSession } from "@/lib/auth"
 import type { AuthSession } from "@/lib/auth"
+import type { PublicNavGroup } from "@/lib/public-api"
 
-export function PublicHeaderActions() {
+export function PublicHeaderActions({
+  navGroups,
+}: {
+  navGroups: PublicNavGroup[]
+}) {
   const [session, setSession] = useState<AuthSession | null>(null)
 
   useEffect(() => {
@@ -54,7 +59,7 @@ export function PublicHeaderActions() {
         </>
       )}
       <div className="lg:hidden">
-        <MobileSidebar />
+        <MobileSidebar navGroups={navGroups} />
       </div>
     </div>
   )

@@ -1049,7 +1049,7 @@ export function TeacherCourseAttendancePage({
                   <thead>
                     <tr className="border-b text-left text-muted-foreground">
                       <th className="px-3 py-3 font-medium">Student</th>
-                      <th className="px-3 py-3 font-medium">AIU ID</th>
+                      <th className="px-3 py-3 font-medium">Student ID</th>
                       <th className="px-3 py-3 font-medium">Classes</th>
                       <th className="px-3 py-3 font-medium">Percentage</th>
                     </tr>

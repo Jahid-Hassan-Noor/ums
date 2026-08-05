@@ -56,17 +56,17 @@ class PeriodicTaskScheduleTests(SimpleTestCase):
         self.assertEqual(schedule.minute, {0})
         self.assertEqual(schedule.hour, set(range(24)))
 
-    def test_allowances_run_first_day_at_8am_kuala_lumpur(self):
+    def test_allowances_run_first_day_at_8am_configured_timezone(self):
         schedule = settings.CELERY_BEAT_SCHEDULE[
             "initialize-canteen-allowances-monthly"
         ]["schedule"]
 
-        self.assertEqual(settings.CELERY_TIMEZONE, "Asia/Kuala_Lumpur")
+        self.assertEqual(settings.CELERY_TIMEZONE, settings.TIME_ZONE)
         self.assertEqual(schedule.minute, {0})
         self.assertEqual(schedule.hour, {8})
         self.assertEqual(schedule.day_of_month, {1})
 
-    def test_database_backup_email_runs_first_day_at_8am_kuala_lumpur(self):
+    def test_database_backup_email_runs_first_day_at_8am_configured_timezone(self):
         entry = settings.CELERY_BEAT_SCHEDULE[
             "send-monthly-database-backup-email"
         ]
@@ -77,7 +77,7 @@ class PeriodicTaskScheduleTests(SimpleTestCase):
             entry["args"],
             ("admin_app.tasks.send_monthly_database_backup_email_task",),
         )
-        self.assertEqual(settings.CELERY_TIMEZONE, "Asia/Kuala_Lumpur")
+        self.assertEqual(settings.CELERY_TIMEZONE, settings.TIME_ZONE)
         self.assertEqual(schedule.minute, {0})
         self.assertEqual(schedule.hour, {8})
         self.assertEqual(schedule.day_of_month, {1})

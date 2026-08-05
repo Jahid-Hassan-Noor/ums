@@ -38,6 +38,11 @@ export type ApplyOption = {
   label: string
 }
 
+export type ApplyDocumentType = ApplyOption & {
+  kind?: "file" | "image"
+  required?: boolean
+}
+
 export type ApplyQuestion = {
   id: string
   label: string
@@ -46,10 +51,16 @@ export type ApplyQuestion = {
 }
 
 export type ApplyAdmissionsSetup = {
+  application_number_prefix: string
+  application_number_format: string
+  document_types: ApplyDocumentType[]
   required_documents: string[]
   required_detail_fields: string[]
   custom_questions: ApplyQuestion[]
   scholarship_enabled: boolean
+  scholarship_label: string
+  workflow_steps: (ApplyOption & { enabled: boolean })[]
+  status_options: (ApplyOption & { enabled: boolean })[]
 }
 
 export type ApplyIntake = {
@@ -73,9 +84,10 @@ export type ApplyOptions = {
   intakes: ApplyIntake[]
   programmes: ApplyProgramme[]
   application_types: ApplyOption[]
-  document_types: ApplyOption[]
+  document_types: ApplyDocumentType[]
   countries: ApplyOption[]
   steps: ApplyOption[]
+  status_options: (ApplyOption & { enabled: boolean })[]
   admissions_setup: ApplyAdmissionsSetup
 }
 

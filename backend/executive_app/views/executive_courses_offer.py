@@ -7,7 +7,13 @@ from rest_framework.views import APIView
 
 from admin_app import models
 from auth_app.permissions import IsExecutiveRole
-from admin_app.serializers import CourseSerializer, SchoolSerializer, SemesterSerializer, VenueSerializer
+from admin_app.serializers import (
+    CenterSerializer,
+    CourseSerializer,
+    SchoolSerializer,
+    SemesterSerializer,
+    VenueSerializer,
+)
 from executive_app.course_schedule import (
     class_type_payload,
     create_groups_for_offering,
@@ -42,12 +48,9 @@ def calendar_group_for_scope(scope):
     unit = scope.get("unit")
     if scope.get("kind") != "center" or not unit:
         return None
-    code = unit.code.upper()
-    if code in {"CFGS", "CGS"}:
-        return models.Semester.CALENDAR_FOUNDATION
-    if code == "LC":
+    if not unit.uses_semester_calendar():
         return None
-    return models.Semester.CALENDAR_UNDERGRADUATE
+    return unit.effective_semester_calendar_group()
 
 
 def semesters_accepting_course_offers(now=None, calendar_group=None):
@@ -62,6 +65,17 @@ def semesters_accepting_course_offers(now=None, calendar_group=None):
     if calendar_group:
         semesters = semesters.filter(calendar_group=calendar_group)
     return semesters.distinct()
+
+
+def _parse_id_set(values, label):
+    if values in (None, ""):
+        values = []
+    if not isinstance(values, list):
+        raise ValueError(f"{label} must be provided as a list.")
+    try:
+        return {int(value) for value in values}
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} contain an invalid selection.") from exc
 
 
 class ExecutiveCoursesOffer(APIView):
@@ -84,6 +98,7 @@ class ExecutiveCoursesOffer(APIView):
                     "scope_error": non_academic_scope_response(scope)["detail"],
                     "courses": [],
                     "schools": [],
+                    "centers": [],
                     "semesters": [],
                     "teachers": [],
                     "venues": [],
@@ -97,6 +112,13 @@ class ExecutiveCoursesOffer(APIView):
         schools = models.School.objects.filter(is_active=True)
         if scope.get("kind") == "school":
             schools = schools.exclude(pk=scope["unit"].pk)
+        centers = models.Center.objects.filter(
+            center_type=models.Center.CENTER_ACADEMIC,
+            academic_calendar_mode=models.Center.CALENDAR_SEMESTER,
+            is_active=True,
+        )
+        if scope.get("kind") == "center":
+            centers = centers.exclude(pk=scope["unit"].pk)
         calendar_group = calendar_group_for_scope(scope)
         semesters = (
             semesters_accepting_course_offers(calendar_group=calendar_group).order_by("-start_date")
@@ -113,6 +135,7 @@ class ExecutiveCoursesOffer(APIView):
                 "scope_error": scope_error,
                 "courses": CourseSerializer(courses, many=True).data,
                 "schools": SchoolSerializer(schools.order_by("name"), many=True).data,
+                "centers": CenterSerializer(centers.order_by("name"), many=True).data,
                 "semesters": SemesterSerializer(semesters, many=True).data,
                 "teachers": teachers_payload(scope),
                 "venues": VenueSerializer(venues, many=True).data,
@@ -146,6 +169,7 @@ class ExecutiveCoursesOffer(APIView):
         section = str(data.get("section", "")).strip()
         capacity = parse_positive_int(data.get("capacity"), default=40)
         eligible_school_ids = data.get("eligible_school_ids", [])
+        eligible_center_ids = data.get("eligible_center_ids", [])
         meetings = data.get("meetings", [])
         tutorial_groups = data.get("tutorial_groups", [])
 
@@ -159,16 +183,12 @@ class ExecutiveCoursesOffer(APIView):
                 {"detail": "Capacity must be at least 1."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not isinstance(eligible_school_ids, list):
-            return Response(
-                {"detail": "Eligible schools must be provided as a list."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         try:
-            eligible_school_ids = {int(value) for value in eligible_school_ids}
-        except (TypeError, ValueError):
+            eligible_school_ids = _parse_id_set(eligible_school_ids, "Eligible schools")
+            eligible_center_ids = _parse_id_set(eligible_center_ids, "Eligible centres")
+        except ValueError as exc:
             return Response(
-                {"detail": "Eligible schools contain an invalid selection."},
+                {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         eligible_schools = models.School.objects.filter(
@@ -182,6 +202,19 @@ class ExecutiveCoursesOffer(APIView):
             )
         if scope.get("kind") == "school":
             eligible_schools = eligible_schools.exclude(pk=scope["unit"].pk)
+        eligible_centers = models.Center.objects.filter(
+            pk__in=eligible_center_ids,
+            center_type=models.Center.CENTER_ACADEMIC,
+            academic_calendar_mode=models.Center.CALENDAR_SEMESTER,
+            is_active=True,
+        )
+        if eligible_centers.count() != len(eligible_center_ids):
+            return Response(
+                {"detail": "Eligible centres contain an invalid selection."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if scope.get("kind") == "center":
+            eligible_centers = eligible_centers.exclude(pk=scope["unit"].pk)
         if not isinstance(meetings, list) or not meetings:
             return Response(
                 {"detail": "Add at least one lecture or lab class before offering the course."},
@@ -286,6 +319,7 @@ class ExecutiveCoursesOffer(APIView):
                     is_active=True,
                 )
                 offering.eligible_schools.set(eligible_schools)
+                offering.eligible_centers.set(eligible_centers)
                 created_groups = create_groups_for_offering(offering, tutorial_groups)
                 default_tutorial_group = created_groups[0] if created_groups else None
 

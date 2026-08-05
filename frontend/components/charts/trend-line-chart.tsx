@@ -1,14 +1,16 @@
 "use client"
 
 import { DataChart } from "@/components/charts/data-chart"
+import { formatDateOnly } from "@/components/utils/format"
 
 function defaultDateLabel(isoDate: string) {
   const [year, month, day] = isoDate.split("-").map(Number)
   if (!year || !month || !day) return isoDate
-  return new Date(year, month - 1, day).toLocaleDateString("en-MY", {
-    month: "short",
-    day: "numeric",
-  })
+  const formatted = formatDateOnly(
+    `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`,
+    { formatOptions: { month: "short", day: "numeric" } }
+  )
+  return formatted === "N/A" ? isoDate : formatted
 }
 
 export function TrendLineChart({

@@ -133,7 +133,11 @@ class SubscriptionPurchase(APIView):
             return validation_response(error)
         return Response(
             {
-                "message": "Payment checkout created.",
+                "message": (
+                    "Payment checkout created."
+                    if attempt.checkout_url
+                    else "Manual payment request recorded. Finance will confirm it after offline settlement."
+                ),
                 "subscription": subscription_payload(subscription),
                 "checkout_url": attempt.checkout_url,
             },
@@ -181,7 +185,7 @@ class PaymentWebhook(APIView):
     def post(self, request):
         config = FinanceGatewayConfig.objects.filter(pk=1, is_active=True).first()
         callback_token = config.callback_token if config else ""
-        supplied_token = request.query_params.get("token") or request.headers.get("X-AIU-Gateway-Token", "")
+        supplied_token = request.query_params.get("token") or request.headers.get("X-UMS-Gateway-Token", "")
         if callback_token and not constant_time_compare(str(supplied_token), callback_token):
             return Response({"detail": "Invalid callback token."}, status=status.HTTP_403_FORBIDDEN)
         payload = request.data.dict() if hasattr(request.data, "dict") else dict(request.data)

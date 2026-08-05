@@ -12,13 +12,20 @@ from PIL import Image
 from rest_framework.test import APIClient
 
 from auth_app.auth_tokens import issue_ums_refresh
-from admin_app.models import AuditLog, Building, Profile, SystemSetting, Venue
+from admin_app.models import AuditLog, Building, Center, Profile, SystemSetting, Unit, Venue
+from admin_app.role_config import resolve_role_ownership
 from admin_app.settings_registry import (
+    application_number_prefix,
+    default_currency_code,
     features_enabled_for_path,
+    format_currency_amount,
+    institution_timezone,
     invalidate_settings_cache,
     password_policy_errors,
     public_settings_payload,
+    role_module_enabled,
     setting_value,
+    setup_completeness_payload,
 )
 from technician_app.venue_booking_service import validate_booking_payload
 
@@ -78,18 +85,26 @@ class AdminSettingsTests(TestCase):
             [
                 "general",
                 "university",
+                "localization",
+                "terminology",
                 "academic",
                 "workflow",
                 "notifications",
                 "dashboard",
+                "helpdesk",
+                "venue_booking_policy",
+                "hostel_policy",
+                "roles",
                 "security",
+                "canteen_policy",
                 "librarian_library",
             ],
         )
         self.assertEqual(
-            response.data["sections"][0]["values"]["timezone"],
-            "Asia/Kuala_Lumpur",
+            response.data["sections"][2]["values"]["timezone"],
+            "UTC",
         )
+        self.assertFalse(response.data["setup_checklist"]["complete"])
         notification_section = next(
             section
             for section in response.data["sections"]
@@ -272,6 +287,7 @@ class AdminSettingsTests(TestCase):
 
         self.assertEqual(updated.status_code, 200)
         self.assertFalse(features_enabled_for_path("/student/venue-bookings"))
+        self.assertFalse(features_enabled_for_path("/admin/venue-bookings"))
         self.assertFalse(features_enabled_for_path("/student/elections"))
         self.assertFalse(features_enabled_for_path("/technician/elections"))
         self.assertFalse(features_enabled_for_path("/ict-helpdesk/technician/elections"))
@@ -280,8 +296,303 @@ class AdminSettingsTests(TestCase):
         payload = public_settings_payload()
         self.assertFalse(payload["features"]["venue_booking"])
         self.assertFalse(payload["features"]["elections"])
+        self.assertTrue(payload["features"]["admissions"])
+        self.assertTrue(payload["features"]["finance"])
         self.assertNotIn("gym_subscription", payload["features"])
         self.assertNotIn("kitchen_subscription", payload["features"])
+
+    def test_role_settings_publish_labels_and_module_permissions(self):
+        response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "roles",
+                "values": {
+                    "student_label": "Learner",
+                    "module_ict_helpdesk_label": "Service Desk",
+                    "student_enabled_modules": "library,notifications",
+                },
+                "reason": "Configure role labels and student module ownership.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        payload = public_settings_payload()
+        self.assertEqual(payload["roles"]["student"]["label"], "Learner")
+        self.assertEqual(payload["module_labels"]["ict_helpdesk"], "Service Desk")
+        self.assertEqual(
+            payload["module_permissions"]["student"],
+            ["library", "notifications"],
+        )
+        self.assertTrue(features_enabled_for_path("/student/elections"))
+        self.assertFalse(features_enabled_for_path("/student/elections", role="student"))
+        self.assertTrue(role_module_enabled("student", "library"))
+        self.assertFalse(role_module_enabled("student", "elections"))
+
+    def test_role_owner_settings_resolve_special_role_defaults(self):
+        center = Center.objects.create(code="LIB", name="Library Services")
+        unit = Unit.objects.create(code="LIB-OPS", name="Library Operations", center=center)
+        response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "roles",
+                "values": {
+                    "librarian_default_center_code": center.code,
+                    "librarian_default_unit_code": unit.code,
+                },
+                "reason": "Move library ownership to configured organization records.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        ownership = resolve_role_ownership(Profile.ROLE_LIBRARIAN)
+
+        self.assertEqual(ownership["center"], center)
+        self.assertEqual(ownership["unit"], unit)
+        self.assertIsNone(ownership["school"])
+        self.assertIsNone(ownership["department"])
+
+    def test_public_settings_expose_universal_institution_contract(self):
+        response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "localization",
+                "values": {
+                    "timezone": "America/New_York",
+                    "locale": "en-US",
+                    "currency_code": "USD",
+                    "currency_symbol": "$",
+                },
+                "reason": "Configure a non-demo institution locale.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = public_settings_payload()
+        self.assertEqual(payload["localization"]["timezone"], "America/New_York")
+        self.assertEqual(payload["localization"]["currency_code"], "USD")
+        self.assertEqual(payload["terminology"]["center_label"], "Center")
+        self.assertEqual(payload["terminology"]["centre_label"], "Center")
+        self.assertEqual(payload["terminology"]["programme_label"], "Program")
+        self.assertEqual(payload["policies"]["default_application_number_prefix"], "APP")
+        self.assertEqual(payload["policies"]["default_payment_gateway_provider"], "manual")
+        self.assertTrue(payload["policies"]["dining"]["enabled"])
+        self.assertTrue(payload["policies"]["venue_booking"]["enabled"])
+        self.assertEqual(payload["policies"]["venue_booking"]["reviewer_role"], "technician")
+        self.assertEqual(
+            payload["policies"]["venue_booking"]["venue_categories"][0],
+            {"value": "classroom", "label": "Classroom"},
+        )
+        self.assertEqual(payload["policies"]["dining"]["label"], "Dining")
+        self.assertEqual(payload["policies"]["dining"]["monthly_allowance_amount"], "50.00")
+        self.assertEqual(payload["policies"]["dining"]["allowance_reset_hour"], 8)
+        self.assertFalse(payload["setup"]["complete"])
+        self.assertEqual(str(institution_timezone()), "America/New_York")
+        self.assertEqual(default_currency_code(), "USD")
+        self.assertEqual(format_currency_amount("12.5"), "$12.50")
+
+    def test_setup_checklist_completes_after_required_identity_updates(self):
+        identity_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "university",
+                "values": {
+                    "university_name": "Example State University",
+                    "short_name": "ESU",
+                    "legal_name": "Example State University LLC",
+                    "tagline": "Learning for every community",
+                    "address": "100 College Avenue",
+                    "phone": "+1 555 0100",
+                    "email": "hello@esu.example",
+                    "admissions_email": "apply@esu.example",
+                },
+                "reason": "Complete required institution identity.",
+            },
+            format="json",
+        )
+        workflow_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "workflow",
+                "values": {"default_application_number_prefix": "ESU"},
+                "reason": "Use the institution application prefix.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(identity_response.status_code, 200)
+        self.assertEqual(workflow_response.status_code, 200)
+        checklist = setup_completeness_payload()
+        self.assertTrue(checklist["complete"])
+        self.assertTrue(workflow_response.data["setup_checklist"]["complete"])
+        self.assertEqual(application_number_prefix(), "ESU")
+
+    def test_admin_setup_wizard_reports_programmatic_steps(self):
+        response = self.client.get("/admin/setup-wizard")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["title"], "Universal Setup Wizard")
+        step_keys = [step["key"] for step in response.data["steps"]]
+        self.assertEqual(
+            step_keys,
+            [
+                "institution_profile",
+                "branding",
+                "localization",
+                "terminology",
+                "academic_structure",
+                "academic_calendars",
+                "enabled_modules",
+                "role_ownership",
+                "admissions",
+                "public_website",
+            ],
+        )
+        self.assertFalse(response.data["summary"]["complete"])
+        self.assertGreater(response.data["summary"]["missing_required_items"], 0)
+        self.assertTrue(
+            any(
+                message["step"] == "institution_profile"
+                for message in response.data["messages"]
+            )
+        )
+        academic_step = next(
+            step
+            for step in response.data["steps"]
+            if step["key"] == "academic_structure"
+        )
+        self.assertTrue(
+            any(
+                item["key"] == "academic_structure.school_or_center"
+                for item in academic_step["items"]
+            )
+        )
+
+    def test_disabled_modules_do_not_block_setup_wizard_messages(self):
+        SystemSetting.objects.update_or_create(
+            key="ums.dashboard",
+            defaults={
+                "value": {
+                    "enable_admissions": False,
+                    "enable_public_website": False,
+                    "enable_canteen": False,
+                    "enable_library": False,
+                    "enable_ict_helpdesk": False,
+                    "enable_finance": False,
+                },
+                "updated_by": self.admin_profile,
+            },
+        )
+        invalidate_settings_cache()
+
+        response = self.client.get("/admin/setup-wizard")
+
+        self.assertEqual(response.status_code, 200)
+        message_steps = {message["step"] for message in response.data["messages"]}
+        self.assertNotIn("admissions", message_steps)
+        self.assertNotIn("public_website", message_steps)
+        role_step = next(
+            step
+            for step in response.data["steps"]
+            if step["key"] == "role_ownership"
+        )
+        owner_items = {item["key"]: item for item in role_step["items"]}
+        self.assertTrue(owner_items["role_ownership.library"]["complete"])
+        self.assertFalse(owner_items["role_ownership.library"]["required"])
+        self.assertTrue(owner_items["role_ownership.canteen"]["complete"])
+        self.assertTrue(owner_items["role_ownership.ict_helpdesk"]["complete"])
+        self.assertTrue(owner_items["role_ownership.finance"]["complete"])
+
+    def test_localization_validation_rejects_invalid_values(self):
+        timezone_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "localization",
+                "values": {"timezone": "Mars/Olympus"},
+                "reason": "Testing validation.",
+            },
+            format="json",
+        )
+        currency_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "localization",
+                "values": {"currency_code": "US"},
+                "reason": "Testing validation.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(timezone_response.status_code, 400)
+        self.assertIn("timezone", timezone_response.data)
+        self.assertEqual(currency_response.status_code, 400)
+        self.assertIn("currency_code", currency_response.data)
+
+    def test_canteen_policy_validation_rejects_invalid_values(self):
+        amount_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "canteen_policy",
+                "values": {"monthly_allowance_amount": "-1"},
+                "reason": "Testing validation.",
+            },
+            format="json",
+        )
+        timezone_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "canteen_policy",
+                "values": {"allowance_reset_timezone": "Mars/Olympus"},
+                "reason": "Testing validation.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(amount_response.status_code, 400)
+        self.assertIn("monthly_allowance_amount", amount_response.data)
+        self.assertEqual(timezone_response.status_code, 400)
+        self.assertIn("allowance_reset_timezone", timezone_response.data)
+
+    def test_venue_booking_policy_validation_rejects_invalid_values(self):
+        roles_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "venue_booking_policy",
+                "values": {"requester_roles": "student,alumni"},
+                "reason": "Testing validation.",
+            },
+            format="json",
+        )
+        blackout_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "venue_booking_policy",
+                "values": {"blackout_dates": "2026-13-01"},
+                "reason": "Testing validation.",
+            },
+            format="json",
+        )
+        duration_response = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "venue_booking_policy",
+                "values": {
+                    "min_duration_minutes": 180,
+                    "max_duration_hours": 2,
+                },
+                "reason": "Testing validation.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(roles_response.status_code, 400)
+        self.assertIn("requester_roles", roles_response.data)
+        self.assertEqual(blackout_response.status_code, 400)
+        self.assertIn("blackout_dates", blackout_response.data)
+        self.assertEqual(duration_response.status_code, 400)
+        self.assertIn("max_duration_hours", duration_response.data)
 
     def test_section_validation_rejects_invalid_credit_range(self):
         response = self.client.patch(

@@ -31,7 +31,12 @@ from librarian_app.serializers import (
     profile_payload,
 )
 from librarian_app.service import (
+    enabled_library_asset_types,
     issue_loan,
+    library_asset_enabled,
+    library_policy_payload,
+    library_policy_settings,
+    normalize_library_policy_updates,
     notify_student_book_acquisition_decision,
     notify_student_request_decision,
     return_loan,
@@ -59,27 +64,42 @@ class LibrarianDashboard(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request):
-        pending_borrow_requests = BorrowRequest.objects.filter(status=BorrowRequest.STATUS_PENDING).count()
-        pending_acquisition_requests = BookAcquisitionRequest.objects.filter(
-            status=BookAcquisitionRequest.STATUS_PENDING
+        policy = library_policy_settings()
+        enabled_assets = enabled_library_asset_types(policy)
+        pending_borrow_requests = BorrowRequest.objects.filter(
+            status=BorrowRequest.STATUS_PENDING,
+            asset_type__in=enabled_assets,
         ).count()
+        pending_acquisition_requests = (
+            BookAcquisitionRequest.objects.filter(status=BookAcquisitionRequest.STATUS_PENDING).count()
+            if library_asset_enabled(BorrowRequest.ASSET_BOOK, policy)
+            else 0
+        )
+        books_enabled = library_asset_enabled(BorrowRequest.ASSET_BOOK, policy)
+        laptops_enabled = library_asset_enabled(BorrowRequest.ASSET_LAPTOP, policy)
+        rooms_enabled = library_asset_enabled(BorrowRequest.ASSET_ROOM, policy)
         return Response(
             {
                 "title": "Dashboard",
                 "section": "librarian",
                 "summary": {
-                    "book_titles": Book.objects.filter(is_active=True).count(),
-                    "available_books": BookCopy.objects.filter(status=BookCopy.STATUS_AVAILABLE).count(),
-                    "available_laptops": Laptop.objects.filter(status=Laptop.STATUS_AVAILABLE).count(),
-                    "available_rooms": LibraryRoom.objects.filter(status=LibraryRoom.STATUS_AVAILABLE)
-                    .exclude(reservation_requests__status=BorrowRequest.STATUS_PENDING)
-                    .count(),
+                    "book_titles": Book.objects.filter(is_active=True).count() if books_enabled else 0,
+                    "available_books": BookCopy.objects.filter(status=BookCopy.STATUS_AVAILABLE).count() if books_enabled else 0,
+                    "available_laptops": Laptop.objects.filter(status=Laptop.STATUS_AVAILABLE).count() if laptops_enabled else 0,
+                    "available_rooms": (
+                        LibraryRoom.objects.filter(status=LibraryRoom.STATUS_AVAILABLE)
+                        .exclude(reservation_requests__status=BorrowRequest.STATUS_PENDING)
+                        .count()
+                        if rooms_enabled
+                        else 0
+                    ),
                     "pending_requests": pending_borrow_requests + pending_acquisition_requests,
                     "pending_borrow_requests": pending_borrow_requests,
                     "pending_book_requests": pending_acquisition_requests,
                     "active_loans": Loan.objects.filter(status=Loan.STATUS_ACTIVE).count(),
                     "overdue_loans": sum(1 for loan in Loan.objects.filter(status=Loan.STATUS_ACTIVE) if loan.is_overdue),
                 },
+                "library_policy": library_policy_payload(policy=policy),
             }
         )
 
@@ -88,6 +108,9 @@ class LibrarianBooks(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request):
+        policy = library_policy_settings()
+        if not library_asset_enabled(BorrowRequest.ASSET_BOOK, policy):
+            return Response({"books": [], "library_policy": library_policy_payload(policy=policy)})
         books = Book.objects.prefetch_related("copies")
         query = request.query_params.get("q", "").strip()
         if query:
@@ -95,6 +118,11 @@ class LibrarianBooks(APIView):
         return Response({"books": BookSerializer(books, many=True).data})
 
     def post(self, request):
+        if not library_asset_enabled(BorrowRequest.ASSET_BOOK):
+            return Response(
+                {"detail": "Book borrowing is temporarily unavailable."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = BookSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         book = serializer.save(created_by=request.user.profile)
@@ -126,6 +154,8 @@ class LibrarianBookAcquisitionRequests(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request):
+        if not library_asset_enabled(BorrowRequest.ASSET_BOOK):
+            return Response({"requests": []})
         acquisition_requests = BookAcquisitionRequest.objects.select_related(
             "student__user",
             "added_book",
@@ -148,6 +178,11 @@ class LibrarianBookAcquisitionRequestDetail(APIView):
     permission_classes = [IsLibrarianRole]
 
     def patch(self, request, pk):
+        if not library_asset_enabled(BorrowRequest.ASSET_BOOK):
+            return Response(
+                {"detail": "Book borrowing is temporarily unavailable."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         acquisition_request = BookAcquisitionRequest.objects.filter(
             pk=pk,
             status=BookAcquisitionRequest.STATUS_PENDING,
@@ -200,10 +235,17 @@ class LibrarianBookCopies(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request, book_id):
+        if not library_asset_enabled(BorrowRequest.ASSET_BOOK):
+            return Response({"copies": []})
         copies = BookCopy.objects.select_related("book", "shelf").filter(book_id=book_id)
         return Response({"copies": BookCopySerializer(copies, many=True).data})
 
     def post(self, request, book_id):
+        if not library_asset_enabled(BorrowRequest.ASSET_BOOK):
+            return Response(
+                {"detail": "Book borrowing is temporarily unavailable."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if not Book.objects.filter(pk=book_id).exists():
             return Response({"detail": "Book not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = BookCopySerializer(data={**request.data, "book": book_id})
@@ -235,6 +277,8 @@ class LibrarianCopies(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request):
+        if not library_asset_enabled(BorrowRequest.ASSET_BOOK):
+            return Response({"copies": []})
         copies = BookCopy.objects.select_related("book", "shelf")
         copy_status = request.query_params.get("status")
         if copy_status:
@@ -272,9 +316,17 @@ class LibrarianLaptops(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request):
+        policy = library_policy_settings()
+        if not library_asset_enabled(BorrowRequest.ASSET_LAPTOP, policy):
+            return Response({"laptops": [], "library_policy": library_policy_payload(policy=policy)})
         return Response({"laptops": LaptopSerializer(Laptop.objects.all(), many=True).data})
 
     def post(self, request):
+        if not library_asset_enabled(BorrowRequest.ASSET_LAPTOP):
+            return Response(
+                {"detail": "Laptop borrowing is currently disabled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = LaptopSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -304,10 +356,18 @@ class LibrarianRooms(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request):
+        policy = library_policy_settings()
+        if not library_asset_enabled(BorrowRequest.ASSET_ROOM, policy):
+            return Response({"rooms": [], "library_policy": library_policy_payload(policy=policy)})
         rooms = LibraryRoom.objects.prefetch_related("reservation_requests")
         return Response({"rooms": LibraryRoomSerializer(rooms, many=True).data})
 
     def post(self, request):
+        if not library_asset_enabled(BorrowRequest.ASSET_ROOM):
+            return Response(
+                {"detail": "Discussion room booking is currently disabled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = LibraryRoomSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         room = serializer.save()
@@ -376,11 +436,16 @@ class LibrarianRequests(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request):
+        policy = library_policy_settings()
         requests = BorrowRequest.objects.select_related("student__user", "book", "laptop", "room")
+        requests = requests.filter(asset_type__in=enabled_library_asset_types(policy))
         request_status = request.query_params.get("status")
         if request_status:
             requests = requests.filter(status=request_status)
-        return Response({"requests": BorrowRequestSerializer(requests, many=True).data})
+        return Response({
+            "requests": BorrowRequestSerializer(requests, many=True).data,
+            "library_policy": library_policy_payload(policy=policy),
+        })
 
 
 class LibrarianRequestDetail(APIView):
@@ -471,7 +536,7 @@ class LibrarianLoanApplyFine(APIView):
 
     def post(self, request, pk):
         try:
-            loan = apply_overdue_fine(pk, daily_rate=float(request.data.get("daily_rate", 1.0)))
+            loan = apply_overdue_fine(pk, daily_rate=request.data.get("daily_rate"))
         except ValidationError as error:
             return _validation_response(error)
         return Response({"loan": LoanSerializer(loan).data})
@@ -578,22 +643,16 @@ class LibrarianLibrarySettings(APIView):
     permission_classes = [IsLibrarianRole]
 
     def get(self, request):
-        from admin_app.settings_registry import all_settings
-        values = all_settings().get("librarian_library", {})
-        return Response({
-            "books_enabled": bool(values.get("books_enabled", True)),
-            "laptops_enabled": bool(values.get("laptops_enabled", True)),
-            "rooms_enabled": bool(values.get("rooms_enabled", True)),
-        })
+        return Response(library_policy_payload())
 
     def patch(self, request):
         from admin_app.models import SystemSetting
         from admin_app.settings_registry import all_settings, setting_key, invalidate_settings_cache
         current = all_settings().get("librarian_library", {})
-        updates = {}
-        for key in ("books_enabled", "laptops_enabled", "rooms_enabled"):
-            if key in request.data:
-                updates[key] = bool(request.data[key])
+        try:
+            updates = normalize_library_policy_updates(request.data)
+        except ValidationError as error:
+            return _validation_response(error)
         if not updates:
             return Response({"detail": "No settings provided."}, status=status.HTTP_400_BAD_REQUEST)
         merged = {**current, **updates}
@@ -601,12 +660,8 @@ class LibrarianLibrarySettings(APIView):
             key=setting_key("librarian_library"),
             defaults={
                 "value": merged,
-                "description": "Library service toggles managed by librarian.",
+                "description": "Library service policy managed by librarian.",
             },
         )
         invalidate_settings_cache()
-        return Response({
-            "books_enabled": bool(merged.get("books_enabled", True)),
-            "laptops_enabled": bool(merged.get("laptops_enabled", True)),
-            "rooms_enabled": bool(merged.get("rooms_enabled", True)),
-        })
+        return Response(library_policy_payload(policy=library_policy_settings(merged)))

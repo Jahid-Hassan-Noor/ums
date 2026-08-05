@@ -357,7 +357,7 @@ export default function AdminStatisticsPage() {
           <Card className="border-border/70 bg-card/95 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold">Academic Units</CardTitle>
-              <CardDescription>Schools and Center counts across AIU</CardDescription>
+              <CardDescription>School and center counts across the institution</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">

@@ -30,16 +30,23 @@ import {
   titleCase,
   toDateTimeLocal,
   type ElectionChoice,
+  type ElectionConstituencyType,
   type ElectionRecord,
   type ElectionSchool,
+  type ElectionSeatRule,
   type ElectionType,
 } from "@/lib/elections"
+
+type ConstituencyOptions = Record<string, ElectionSchool[]>
 
 type ElectionsResponse = {
   elections: ElectionRecord[]
   schools: ElectionSchool[]
   type_options: ElectionChoice[]
   status_options: ElectionChoice[]
+  constituency_type_options: ElectionChoice[]
+  constituency_options: ConstituencyOptions
+  seat_scope_options: ElectionChoice[]
   summary: {
     total: number
     active: number
@@ -48,44 +55,87 @@ type ElectionsResponse = {
   }
 }
 
+type SeatRuleForm = {
+  key: string
+  label: string
+  selection_count: string
+  scope_type: string
+  scope_id: string
+}
+
 type ElectionForm = {
   title: string
   description: string
   election_type: ElectionType
-  school: string
+  election_type_label: string
+  constituency_type: ElectionConstituencyType | string
+  constituency_id: string
+  constituency_label: string
   starts_at: string
   ends_at: string
-  general_selection_count: string
-  school_selection_count: string
-  school_seats: Record<string, string>
+  seat_rules: SeatRuleForm[]
   status: string
   is_active: boolean
+  require_student_profile: boolean
+  candidate_must_match_constituency: boolean
+  publish_after_close: boolean
+  show_live_results: boolean
+}
+
+const defaultSeatRule: SeatRuleForm = {
+  key: "representatives",
+  label: "Representatives",
+  selection_count: "1",
+  scope_type: "constituency",
+  scope_id: "",
 }
 
 const emptyForm: ElectionForm = {
   title: "",
   description: "",
-  election_type: "src",
-  school: "",
+  election_type: "student_council",
+  election_type_label: "Student council election",
+  constituency_type: "university",
+  constituency_id: "",
+  constituency_label: "",
   starts_at: "",
   ends_at: "",
-  general_selection_count: "10",
-  school_selection_count: "3",
-  school_seats: {},
+  seat_rules: [{ ...defaultSeatRule }],
   status: "upcoming",
   is_active: true,
+  require_student_profile: false,
+  candidate_must_match_constituency: true,
+  publish_after_close: false,
+  show_live_results: true,
 }
 
 const ELECTIONS_API = "/ict-helpdesk/technician/elections"
 
-function schoolSeatsFromRecord(election: ElectionRecord): Record<string, string> {
-  const seats: Record<string, string> = {}
-  if (election.school_seats) {
-    for (const s of election.school_seats) {
-      seats[String(s.school_id)] = String(s.seat_count)
-    }
-  }
-  return seats
+function slugKey(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "custom"
+  )
+}
+
+function policyBool(policy: Record<string, unknown> | undefined, key: string, fallback: boolean) {
+  const value = policy?.[key]
+  return typeof value === "boolean" ? value : fallback
+}
+
+function seatRulesFromRecord(election: ElectionRecord): SeatRuleForm[] {
+  const rules = election.seat_rules?.length ? election.seat_rules : []
+  if (!rules.length) return [{ ...defaultSeatRule }]
+  return rules.map((rule: ElectionSeatRule) => ({
+    key: rule.key,
+    label: rule.label,
+    selection_count: String(rule.selection_count ?? 0),
+    scope_type: rule.scope_type || "constituency",
+    scope_id: rule.scope_id ? String(rule.scope_id) : "",
+  }))
 }
 
 function formFromElection(election: ElectionRecord): ElectionForm {
@@ -93,14 +143,23 @@ function formFromElection(election: ElectionRecord): ElectionForm {
     title: election.title,
     description: election.description,
     election_type: election.election_type,
-    school: election.school ? String(election.school) : "",
+    election_type_label: election.election_type_label,
+    constituency_type: election.constituency_type || "university",
+    constituency_id: election.constituency_id ? String(election.constituency_id) : "",
+    constituency_label: election.constituency_label || "",
     starts_at: toDateTimeLocal(election.starts_at),
     ends_at: toDateTimeLocal(election.ends_at),
-    general_selection_count: String(election.general_selection_count ?? 0),
-    school_selection_count: String(election.school_selection_count ?? 0),
-    school_seats: schoolSeatsFromRecord(election),
+    seat_rules: seatRulesFromRecord(election),
     status: election.status,
     is_active: election.is_active,
+    require_student_profile: policyBool(election.nomination_rules, "require_student_profile", false),
+    candidate_must_match_constituency: policyBool(
+      election.nomination_rules,
+      "candidate_must_match_constituency",
+      true
+    ),
+    publish_after_close: policyBool(election.result_publication_rules, "publish_after_close", false),
+    show_live_results: policyBool(election.result_publication_rules, "show_live_results", true),
   }
 }
 
@@ -110,19 +169,19 @@ function countdownText(election: ElectionRecord) {
   return `${election.countdown.label} ${formatDuration(seconds)}`
 }
 
-function initSchoolSeatsSeats(schools: ElectionSchool[], existing?: Record<string, string>): Record<string, string> {
-  const seats: Record<string, string> = {}
-  for (const school of schools) {
-    seats[String(school.id)] = existing?.[String(school.id)] ?? "0"
-  }
-  return seats
+function electionSeatSummary(election: ElectionRecord) {
+  const rules = election.seat_rules ?? []
+  if (!rules.length) return "No ballot categories"
+  return rules.map((rule) => `${rule.selection_count} ${rule.label.toLowerCase()}`).join(" / ")
 }
 
 export function TechnicianElectionsPage() {
   const [elections, setElections] = useState<ElectionRecord[]>([])
-  const [schools, setSchools] = useState<ElectionSchool[]>([])
   const [typeOptions, setTypeOptions] = useState<ElectionChoice[]>([])
   const [statusOptions, setStatusOptions] = useState<ElectionChoice[]>([])
+  const [constituencyTypeOptions, setConstituencyTypeOptions] = useState<ElectionChoice[]>([])
+  const [constituencyOptions, setConstituencyOptions] = useState<ConstituencyOptions>({})
+  const [seatScopeOptions, setSeatScopeOptions] = useState<ElectionChoice[]>([])
   const [summary, setSummary] = useState<ElectionsResponse["summary"]>({
     total: 0,
     active: 0,
@@ -140,9 +199,11 @@ export function TechnicianElectionsPage() {
     setError("")
     const data = await apiFetch<ElectionsResponse>(ELECTIONS_API)
     setElections(data.elections ?? [])
-    setSchools(data.schools ?? [])
     setTypeOptions(data.type_options ?? [])
     setStatusOptions(data.status_options ?? [])
+    setConstituencyTypeOptions(data.constituency_type_options ?? [])
+    setConstituencyOptions(data.constituency_options ?? {})
+    setSeatScopeOptions(data.seat_scope_options ?? [])
     setSummary(
       data.summary ?? {
         total: data.elections?.length ?? 0,
@@ -151,10 +212,6 @@ export function TechnicianElectionsPage() {
         closed: 0,
       }
     )
-    setForm((current) => ({
-      ...current,
-      school_seats: initSchoolSeatsSeats(data.schools ?? [], current.school_seats),
-    }))
   }, [])
 
   useEffect(() => {
@@ -177,9 +234,17 @@ export function TechnicianElectionsPage() {
     [elections]
   )
 
+  const visibleTypeOptions = useMemo(() => {
+    if (typeOptions.some((option) => option.value === form.election_type)) return typeOptions
+    return [...typeOptions, { value: form.election_type, label: form.election_type_label || titleCase(form.election_type) }]
+  }, [form.election_type, form.election_type_label, typeOptions])
+
+  const selectedConstituencyOptions = constituencyOptions[form.constituency_type] ?? []
+  const needsConstituencySelection = form.constituency_type !== "university"
+
   function resetForm() {
     setEditingElection(null)
-    setForm({ ...emptyForm, school_seats: initSchoolSeatsSeats(schools) })
+    setForm(emptyForm)
     setError("")
     setSuccess("")
   }
@@ -187,44 +252,92 @@ export function TechnicianElectionsPage() {
   function updateForm(field: keyof ElectionForm, value: string | boolean) {
     setForm((current) => {
       const next = { ...current, [field]: value }
-      if (field === "election_type" && value === "school_committee") {
-        next.general_selection_count = "0"
+      if (field === "election_type") {
+        const option = typeOptions.find((item) => item.value === value)
+        next.election_type_label = option?.label ?? next.election_type_label
       }
-      if (field === "election_type" && value === "src") {
-        next.school = ""
-        if (next.general_selection_count === "0") next.general_selection_count = "10"
-        if (Object.keys(next.school_seats).length === 0) {
-          next.school_seats = initSchoolSeatsSeats(schools)
-        }
+      if (field === "election_type_label" && typeof value === "string") {
+        next.election_type = slugKey(value)
+      }
+      if (field === "constituency_type") {
+        next.constituency_id = ""
+        next.constituency_label = ""
       }
       return next
     })
   }
 
-  function updateSchoolSeat(schoolId: string, seatCount: string) {
+  function updateSeatRule(index: number, field: keyof SeatRuleForm, value: string) {
+    setForm((current) => {
+      const seatRules = current.seat_rules.map((rule, ruleIndex) => {
+        if (ruleIndex !== index) return rule
+        const next = { ...rule, [field]: value }
+        if (field === "label") next.key = slugKey(value)
+        if (field === "scope_type") next.scope_id = ""
+        return next
+      })
+      return { ...current, seat_rules: seatRules }
+    })
+  }
+
+  function addSeatRule() {
     setForm((current) => ({
       ...current,
-      school_seats: { ...current.school_seats, [schoolId]: seatCount },
+      seat_rules: [
+        ...current.seat_rules,
+        {
+          ...defaultSeatRule,
+          key: `representatives_${current.seat_rules.length + 1}`,
+          label: `Representatives ${current.seat_rules.length + 1}`,
+        },
+      ],
     }))
   }
 
+  function removeSeatRule(index: number) {
+    setForm((current) => ({
+      ...current,
+      seat_rules: current.seat_rules.filter((_rule, ruleIndex) => ruleIndex !== index),
+    }))
+  }
+
+  function constituencyLabel() {
+    if (form.constituency_type === "university") return "University-wide"
+    const selected = selectedConstituencyOptions.find((option) => String(option.id) === form.constituency_id)
+    return selected?.name || selected?.label || form.constituency_label
+  }
+
   function buildPayload() {
-    const isCommittee = form.election_type === "school_committee"
+    const constituencyId = form.constituency_id ? Number(form.constituency_id) : null
     return {
       title: form.title.trim(),
       description: form.description,
-      election_type: form.election_type,
-      school: isCommittee && form.school ? Number(form.school) : null,
+      election_type: form.election_type.trim() || slugKey(form.election_type_label),
+      election_type_label: form.election_type_label.trim(),
+      constituency_type: form.constituency_type,
+      constituency_id: constituencyId,
+      constituency_label: constituencyLabel(),
+      school: form.constituency_type === "school" ? constituencyId : null,
       starts_at: form.starts_at || null,
       ends_at: form.ends_at || null,
-      general_selection_count: isCommittee ? 0 : Number(form.general_selection_count || 0),
-      school_selection_count: isCommittee ? Number(form.school_selection_count || 0) : 0,
-      school_seats: isCommittee
-        ? undefined
-        : Object.entries(form.school_seats).map(([schoolId, seatCount]) => ({
-            school_id: Number(schoolId),
-            seat_count: Number(seatCount || 0),
-          })),
+      general_selection_count: 0,
+      school_selection_count: 0,
+      seat_rules: form.seat_rules.map((rule) => ({
+        key: slugKey(rule.key || rule.label),
+        label: rule.label.trim(),
+        selection_count: Number(rule.selection_count || 0),
+        scope_type: rule.scope_type,
+        scope_id: rule.scope_id ? Number(rule.scope_id) : null,
+      })),
+      nomination_rules: {
+        require_student_profile: form.require_student_profile,
+        candidate_must_match_constituency: form.candidate_must_match_constituency,
+      },
+      voter_eligibility: {},
+      result_publication_rules: {
+        publish_after_close: form.publish_after_close,
+        show_live_results: form.show_live_results,
+      },
       status: form.status,
       is_active: form.is_active,
     }
@@ -280,7 +393,7 @@ export function TechnicianElectionsPage() {
           <div className="max-w-3xl space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Election Setup</h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Schedule SRC and school committee ballots, set school scope, and define required candidate selections.
+              Configure voting windows, constituencies, ballot categories, nomination checks, and publication rules.
             </p>
           </div>
           <Button variant="outline" onClick={() => void loadData()} disabled={isLoading}>
@@ -320,7 +433,7 @@ export function TechnicianElectionsPage() {
           ))}
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[25rem_minmax(0,1fr)]">
+        <section className="grid gap-4 xl:grid-cols-[28rem_minmax(0,1fr)]">
           <Card className="h-fit border-border/70 bg-card/95 shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
@@ -365,14 +478,40 @@ export function TechnicianElectionsPage() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="election-type">Type</Label>
+                    <Label htmlFor="election-type">Type Template</Label>
                     <select
                       id="election-type"
                       className={selectClass}
                       value={form.election_type}
-                      onChange={(event) => updateForm("election_type", event.target.value as ElectionType)}
+                      onChange={(event) => updateForm("election_type", event.target.value)}
                     >
-                      {typeOptions.map((option) => (
+                      {visibleTypeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="election-type-label">Type Label</Label>
+                    <Input
+                      id="election-type-label"
+                      value={form.election_type_label}
+                      onChange={(event) => updateForm("election_type_label", event.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="election-constituency-type">Constituency</Label>
+                    <select
+                      id="election-constituency-type"
+                      className={selectClass}
+                      value={form.constituency_type}
+                      onChange={(event) => updateForm("constituency_type", event.target.value)}
+                    >
+                      {constituencyTypeOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -395,24 +534,48 @@ export function TechnicianElectionsPage() {
                     </select>
                   </div>
                 </div>
-                {form.election_type === "school_committee" ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="election-school">School</Label>
-                    <select
-                      id="election-school"
-                      className={selectClass}
-                      value={form.school}
-                      onChange={(event) => updateForm("school", event.target.value)}
-                      required
-                    >
-                      <option value="">Select school</option>
-                      {schools.map((school) => (
-                        <option key={school.id} value={school.id}>
-                          {school.code} - {school.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                {needsConstituencySelection ? (
+                  selectedConstituencyOptions.length ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="election-constituency-id">Constituency Unit</Label>
+                      <select
+                        id="election-constituency-id"
+                        className={selectClass}
+                        value={form.constituency_id}
+                        onChange={(event) => updateForm("constituency_id", event.target.value)}
+                        required
+                      >
+                        <option value="">Select constituency</option>
+                        {selectedConstituencyOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label ?? `${option.code} - ${option.name}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="election-constituency-id">Constituency Value</Label>
+                        <Input
+                          id="election-constituency-id"
+                          type="number"
+                          min={1}
+                          value={form.constituency_id}
+                          onChange={(event) => updateForm("constituency_id", event.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="election-constituency-label">Constituency Label</Label>
+                        <Input
+                          id="election-constituency-label"
+                          value={form.constituency_label}
+                          onChange={(event) => updateForm("constituency_label", event.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )
                 ) : null}
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -436,63 +599,118 @@ export function TechnicianElectionsPage() {
                     />
                   </div>
                 </div>
-                {form.election_type === "src" ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="election-general-count">SRC General Picks</Label>
-                    <Input
-                      id="election-general-count"
-                      type="number"
-                      min={0}
-                      value={form.general_selection_count}
-                      onChange={(event) => updateForm("general_selection_count", event.target.value)}
-                    />
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Ballot Categories</Label>
+                    <Button type="button" size="sm" variant="outline" onClick={addSeatRule}>
+                      <Plus className="size-4" />
+                      Add
+                    </Button>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="election-school-count">Committee Picks</Label>
-                    <Input
-                      id="election-school-count"
-                      type="number"
-                      min={1}
-                      value={form.school_selection_count}
-                      onChange={(event) => updateForm("school_selection_count", event.target.value)}
-                      required
-                    />
-                  </div>
-                )}
-                {form.election_type === "src" && schools.length > 0 ? (
-                  <div className="space-y-2">
-                    <Label>School Seats</Label>
-                    <div className="rounded-lg border border-border bg-background">
-                      {schools.map((school) => (
-                        <div
-                          key={school.id}
-                          className="flex items-center gap-3 border-b border-border px-3 py-2 last:border-b-0"
-                        >
-                          <span className="min-w-0 flex-1 text-sm font-medium truncate">
-                            {school.code}
-                          </span>
-                          <Input
-                            type="number"
-                            min={0}
-                            className="h-8 w-20"
-                            value={form.school_seats[String(school.id)] ?? "0"}
-                            onChange={(event) => updateSchoolSeat(String(school.id), event.target.value)}
-                          />
+                  <div className="space-y-3">
+                    {form.seat_rules.map((rule, index) => (
+                      <div key={`${rule.key}-${index}`} className="rounded-lg border border-border bg-background p-3">
+                        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_6rem]">
+                          <div className="space-y-2">
+                            <Label htmlFor={`seat-label-${index}`}>Label</Label>
+                            <Input
+                              id={`seat-label-${index}`}
+                              value={rule.label}
+                              onChange={(event) => updateSeatRule(index, "label", event.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`seat-count-${index}`}>Picks</Label>
+                            <Input
+                              id={`seat-count-${index}`}
+                              type="number"
+                              min={1}
+                              value={rule.selection_count}
+                              onChange={(event) => updateSeatRule(index, "selection_count", event.target.value)}
+                              required
+                            />
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_2.5rem]">
+                          <div className="space-y-2">
+                            <Label htmlFor={`seat-scope-${index}`}>Scope</Label>
+                            <select
+                              id={`seat-scope-${index}`}
+                              className={selectClass}
+                              value={rule.scope_type}
+                              onChange={(event) => updateSeatRule(index, "scope_type", event.target.value)}
+                            >
+                              {seatScopeOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="self-end"
+                            onClick={() => removeSeatRule(index)}
+                            disabled={form.seat_rules.length === 1}
+                            aria-label={`Remove ${rule.label}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ) : null}
-                <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4"
-                    checked={form.is_active}
-                    onChange={(event) => updateForm("is_active", event.target.checked)}
-                  />
-                  Visible in student election pages
-                </label>
+                </div>
+                <div className="grid gap-2">
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      checked={form.is_active}
+                      onChange={(event) => updateForm("is_active", event.target.checked)}
+                    />
+                    Visible to eligible voters
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      checked={form.require_student_profile}
+                      onChange={(event) => updateForm("require_student_profile", event.target.checked)}
+                    />
+                    Require linked student candidates
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      checked={form.candidate_must_match_constituency}
+                      onChange={(event) => updateForm("candidate_must_match_constituency", event.target.checked)}
+                    />
+                    Candidates must match constituency
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      checked={form.publish_after_close}
+                      onChange={(event) => updateForm("publish_after_close", event.target.checked)}
+                    />
+                    Publish only after voting closes
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      checked={form.show_live_results}
+                      onChange={(event) => updateForm("show_live_results", event.target.checked)}
+                    />
+                    Show live results to voters
+                  </label>
+                </div>
                 <Button type="submit" className="w-full" disabled={isSaving}>
                   {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                   {editingElection ? "Save Election" : "Create Election"}
@@ -514,10 +732,7 @@ export function TechnicianElectionsPage() {
               ) : sortedElections.length ? (
                 <div className="space-y-3">
                   {sortedElections.map((election) => (
-                    <div
-                      key={election.id}
-                      className="rounded-lg border border-border bg-background p-4"
-                    >
+                    <div key={election.id} className="rounded-lg border border-border bg-background p-4">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
@@ -528,7 +743,7 @@ export function TechnicianElectionsPage() {
                             <Badge variant="outline">{election.election_type_label}</Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            {election.school_detail?.name ?? "All schools"}
+                            {election.constituency_label || election.constituency_detail?.label || "University-wide"}
                           </p>
                           {election.description ? (
                             <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
@@ -573,11 +788,7 @@ export function TechnicianElectionsPage() {
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase text-muted-foreground">Selections</p>
-                          <p className="mt-1">
-                            {election.election_type === "src"
-                              ? `${election.general_selection_count} general / ${election.school_seats?.length ?? 0} schools`
-                              : `${election.school_selection_count} committee`}
-                          </p>
+                          <p className="mt-1">{electionSeatSummary(election)}</p>
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase text-muted-foreground">Countdown</p>

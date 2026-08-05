@@ -112,11 +112,15 @@ export function TechnicianElectionCandidatesPage() {
     setStatusOptions(data.status_options ?? [])
     setForm((current) => {
       if (current.election || !data.elections?.[0]) return current
+      const firstElection = data.elections[0]
+      const firstCategory = firstElection.category_options?.[0]?.value || current.category
       return {
         ...current,
-        election: String(data.elections[0].id),
-        category: data.elections[0].election_type === "school_committee" ? "school" : current.category,
-        school: data.elections[0].school ? String(data.elections[0].school) : current.school,
+        election: String(firstElection.id),
+        category: firstCategory as ElectionCategory,
+        school: firstElection.constituency_type === "school" && firstElection.constituency_id
+          ? String(firstElection.constituency_id)
+          : current.school,
       }
     })
   }
@@ -160,14 +164,14 @@ export function TechnicianElectionCandidatesPage() {
   function applyElectionDefaults(next: CandidateForm, electionId: string) {
     const election = elections.find((item) => String(item.id) === electionId)
     if (!election) return next
-    if (election.election_type === "school_committee") {
-      return {
-        ...next,
-        category: "school" as ElectionCategory,
-        school: election.school ? String(election.school) : next.school,
-      }
+    const firstCategory = election.category_options?.[0]?.value
+    return {
+      ...next,
+      category: (firstCategory || next.category) as ElectionCategory,
+      school: election.constituency_type === "school" && election.constituency_id
+        ? String(election.constituency_id)
+        : next.school,
     }
-    return next
   }
 
   function resetForm() {
@@ -206,7 +210,7 @@ export function TechnicianElectionCandidatesPage() {
       display_name: form.display_name.trim(),
       student_identifier: form.student_identifier.trim(),
       school: form.school ? Number(form.school) : null,
-      category: selectedElection?.election_type === "school_committee" ? "school" : form.category,
+      category: form.category,
       details: form.details,
       manifesto: form.manifesto,
       status: form.status,
@@ -253,6 +257,12 @@ export function TechnicianElectionCandidatesPage() {
     }
   }
 
+  const selectedCategoryOptions = selectedElection?.category_options?.length
+    ? selectedElection.category_options
+    : categoryOptions
+  const selectedCategory = selectedCategoryOptions.find((option) => option.value === form.category)
+  const categoryRequiresSchool = selectedCategory?.scope_type === "school"
+
   return (
     <div className="flex min-h-svh flex-col bg-muted/25">
       <Header
@@ -267,7 +277,7 @@ export function TechnicianElectionCandidatesPage() {
           <div className="max-w-3xl space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Election Candidates</h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Maintain manually entered candidates, student IDs, school category placement, and candidate details.
+              Maintain manually entered candidates, linked student records, ballot category placement, and candidate details.
             </p>
           </div>
           <Button variant="outline" onClick={() => void loadData()} disabled={isLoading}>
@@ -372,11 +382,10 @@ export function TechnicianElectionCandidatesPage() {
                     <select
                       id="candidate-category"
                       className={selectClass}
-                      value={selectedElection?.election_type === "school_committee" ? "school" : form.category}
+                      value={form.category}
                       onChange={(event) => updateForm("category", event.target.value as ElectionCategory)}
-                      disabled={selectedElection?.election_type === "school_committee"}
                     >
-                      {categoryOptions.map((option) => (
+                      {selectedCategoryOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -390,7 +399,7 @@ export function TechnicianElectionCandidatesPage() {
                       className={selectClass}
                       value={form.school}
                       onChange={(event) => updateForm("school", event.target.value)}
-                      required={form.category === "school" || selectedElection?.election_type === "school_committee"}
+                      required={categoryRequiresSchool}
                     >
                       <option value="">No school</option>
                       {schools.map((school) => (

@@ -6,11 +6,13 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from admin_app.models import School
+from admin_app.models import Center, Department, Program, School
 from auth_app.models import Profile
 from auth_app.permissions import IsTechnicianRole
 from core.common.errors import first_error
+from core.common.request_utils import parse_json
 from core.upload_security import image_upload_error
+from student_app.models import Student as StudentDetail
 from technician_app import models
 from technician_app.election_notifications import notify_candidate, notify_election_students
 from technician_app.election_service import (
@@ -55,13 +57,75 @@ def _choice_options(choices):
     return [{"value": value, "label": label} for value, label in choices]
 
 
+def _organization_options(model):
+    return [
+        {
+            "id": item.id,
+            "code": item.code,
+            "name": item.name,
+            "label": f"{item.code} - {item.name}",
+        }
+        for item in model.objects.filter(is_active=True).order_by("name")
+    ]
+
+
+def _cohort_options():
+    years = (
+        StudentDetail.objects.filter(current_year__isnull=False)
+        .order_by("current_year")
+        .values_list("current_year", flat=True)
+        .distinct()
+    )
+    return [{"id": year, "code": str(year), "name": f"Year {year}", "label": f"Year {year}"} for year in years]
+
+
+def _constituency_options():
+    return {
+        models.Election.CONSTITUENCY_SCHOOL: _organization_options(School),
+        models.Election.CONSTITUENCY_CENTER: _organization_options(Center),
+        models.Election.CONSTITUENCY_DEPARTMENT: _organization_options(Department),
+        models.Election.CONSTITUENCY_PROGRAM: _organization_options(Program),
+        models.Election.CONSTITUENCY_COHORT: _cohort_options(),
+    }
+
+
+def _election_type_options(elections=None):
+    options = {value: label for value, label in models.Election.TYPE_CHOICES}
+    for election in elections or []:
+        options[election.election_type] = election.get_election_type_display()
+    return [{"value": value, "label": label} for value, label in options.items()]
+
+
+def _validate_constituency(payload):
+    constituency_type = payload.get("constituency_type")
+    constituency_id = payload.get("constituency_id")
+    if constituency_type == models.Election.CONSTITUENCY_UNIVERSITY or not constituency_id:
+        return
+    model_by_type = {
+        models.Election.CONSTITUENCY_SCHOOL: School,
+        models.Election.CONSTITUENCY_CENTER: Center,
+        models.Election.CONSTITUENCY_DEPARTMENT: Department,
+        models.Election.CONSTITUENCY_PROGRAM: Program,
+    }
+    model = model_by_type.get(constituency_type)
+    if model and not model.objects.filter(pk=constituency_id, is_active=True).exists():
+        raise ValidationError({"constituency_id": "Select an active election constituency."})
+
+
 def _schools():
     return [school_option(school) for school in School.objects.filter(is_active=True).order_by("name")]
 
 
 def _student_options():
     students = (
-        Profile.objects.select_related("user", "student_detail", "student_detail__school")
+        Profile.objects.select_related(
+            "user",
+            "student_detail",
+            "student_detail__school",
+            "student_detail__center",
+            "student_detail__department",
+            "student_detail__program",
+        )
         .filter(role=Profile.ROLE_STUDENT, is_active=True)
         .order_by("user__first_name", "user__last_name", "user__username")
     )
@@ -80,29 +144,77 @@ def _elections_queryset():
 def _candidate_queryset():
     return (
         models.ElectionCandidate.objects.select_related(
-            "election", "school", "student__user", "student__student_detail__school"
+            "election",
+            "school",
+            "student__user",
+            "student__student_detail__school",
+            "student__student_detail__center",
+            "student__student_detail__department",
+            "student__student_detail__program",
         )
         .annotate(vote_count=Count("votes"))
         .order_by("election__title", "category", "school__name", "sort_order", "display_name")
     )
 
 
+def _json_value(data, key, current, default):
+    if key not in data:
+        return current if current is not None else default
+    value = data.get(key)
+    if isinstance(value, str):
+        parsed = parse_json(value)
+        return parsed if parsed is not None else default
+    return value if value is not None else default
+
+
 def _election_form_payload(data, election=None):
-    election_type = data.get("election_type", getattr(election, "election_type", models.Election.TYPE_SRC))
-    is_committee = election_type == models.Election.TYPE_SCHOOL_COMMITTEE
+    election_type = data.get("election_type", getattr(election, "election_type", models.Election.TYPE_STUDENT_COUNCIL))
+    election_type_label = str(data.get("election_type_label", getattr(election, "election_type_label", "")) or "").strip()
+    constituency_type = data.get(
+        "constituency_type",
+        getattr(election, "constituency_type", models.Election.CONSTITUENCY_UNIVERSITY),
+    )
+    constituency_id = (
+        _maybe_int(data.get("constituency_id"))
+        if "constituency_id" in data
+        else getattr(election, "constituency_id", None)
+    )
+    school_id = (
+        _maybe_int(data.get("school"))
+        if "school" in data
+        else getattr(election, "school_id", None)
+    )
+    if election_type == models.Election.TYPE_SCHOOL_COMMITTEE:
+        constituency_type = models.Election.CONSTITUENCY_SCHOOL
+        constituency_id = school_id or constituency_id
+    if constituency_type == models.Election.CONSTITUENCY_SCHOOL:
+        school_id = constituency_id or school_id
+    else:
+        school_id = None
     return {
         "title": str(data.get("title", getattr(election, "title", "")) or "").strip(),
         "description": str(data.get("description", getattr(election, "description", "")) or ""),
         "election_type": election_type,
-        "school_id": (
-            _maybe_int(data.get("school"))
-            if is_committee and "school" in data
-            else getattr(election, "school_id", None) if is_committee else None
-        ),
+        "election_type_label": election_type_label,
+        "school_id": school_id,
+        "constituency_type": constituency_type,
+        "constituency_id": constituency_id,
+        "constituency_label": str(
+            data.get("constituency_label", getattr(election, "constituency_label", "")) or ""
+        ).strip(),
         "starts_at": _parse_aware_datetime(data.get("starts_at")) if "starts_at" in data else getattr(election, "starts_at", None),
         "ends_at": _parse_aware_datetime(data.get("ends_at")) if "ends_at" in data else getattr(election, "ends_at", None),
         "general_selection_count": int(data.get("general_selection_count", getattr(election, "general_selection_count", 0)) or 0),
         "school_selection_count": int(data.get("school_selection_count", getattr(election, "school_selection_count", 0)) or 0),
+        "seat_rules": _json_value(data, "seat_rules", getattr(election, "seat_rules", None), []),
+        "nomination_rules": _json_value(data, "nomination_rules", getattr(election, "nomination_rules", None), {}),
+        "voter_eligibility": _json_value(data, "voter_eligibility", getattr(election, "voter_eligibility", None), {}),
+        "result_publication_rules": _json_value(
+            data,
+            "result_publication_rules",
+            getattr(election, "result_publication_rules", None),
+            {},
+        ),
         "school_seats": data.get("school_seats"),
         "status": data.get(
             "status",
@@ -115,6 +227,7 @@ def _election_form_payload(data, election=None):
 def _save_election(election, payload, request):
     if not payload["title"]:
         raise ValidationError({"title": "Election title is required."})
+    _validate_constituency(payload)
     for field, value in payload.items():
         if field == "school_seats":
             continue
@@ -147,9 +260,10 @@ def _candidate_form_payload(data, candidate=None):
     if not election_id:
         raise ValidationError({"election": "Election is required."})
     election = models.Election.objects.get(pk=election_id)
-    category = data.get("category", getattr(candidate, "category", models.ElectionCandidate.CATEGORY_GENERAL))
-    if election.election_type == models.Election.TYPE_SCHOOL_COMMITTEE:
-        category = models.ElectionCandidate.CATEGORY_SCHOOL
+    category = data.get("category", getattr(candidate, "category", ""))
+    if not category:
+        rules = election.configured_seat_rules()
+        category = rules[0]["key"] if rules else models.ElectionCandidate.CATEGORY_GENERAL
     payload = {
         "election": election,
         "student_id": _maybe_int(data.get("student")) if "student" in data else getattr(candidate, "student_id", None),
@@ -189,8 +303,11 @@ class TechnicianElections(APIView):
                 "section": "technician",
                 "elections": [election_payload(election) for election in elections],
                 "schools": _schools(),
-                "type_options": _choice_options(models.Election.TYPE_CHOICES),
+                "type_options": _election_type_options(elections),
                 "status_options": _choice_options(models.Election.STATUS_CHOICES),
+                "constituency_type_options": _choice_options(models.Election.CONSTITUENCY_CHOICES),
+                "constituency_options": _constituency_options(),
+                "seat_scope_options": _choice_options(models.Election.SEAT_SCOPE_CHOICES),
                 "summary": {
                     "total": len(elections),
                     "active": sum(1 for election in elections if election.computed_status() == models.Election.STATUS_ACTIVE),
@@ -379,6 +496,15 @@ class TechnicianElectionsResults(APIView):
             return Response({"detail": "Election not found."}, status=status.HTTP_404_NOT_FOUND)
 
         now = timezone.now()
+        publication_rules = election.result_publication_rules if isinstance(election.result_publication_rules, dict) else {}
+        if publication_rules.get("publish_after_close") and election.computed_status(now) not in {
+            models.Election.STATUS_CLOSED,
+            models.Election.STATUS_PUBLISHED,
+        }:
+            return Response(
+                {"detail": "Results can only be published after voting closes."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         profile = _request_profile(request)
         groups = result_groups_for(election)
         snapshot = models.ElectionResultSnapshot.objects.create(

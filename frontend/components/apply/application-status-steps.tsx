@@ -7,6 +7,12 @@ const DEFAULT_STEPS = [
   "Statement of Truth",
 ]
 
+export type ApplicationStatusOption = {
+  value: string
+  label: string
+  enabled?: boolean
+}
+
 export const applicationStatusLabels: Record<string, string> = {
   draft: "Draft",
   submitted: "Submitted",
@@ -21,8 +27,13 @@ export const applicationStatusLabels: Record<string, string> = {
   withdrawn: "Withdrawn",
 }
 
-export function applicationStatusLabel(status: string | null | undefined) {
+export function applicationStatusLabel(
+  status: string | null | undefined,
+  options?: ApplicationStatusOption[]
+) {
   if (!status) return "Not Started"
+  const configured = options?.find((option) => option.value === status)
+  if (configured) return configured.label
   return applicationStatusLabels[status] ?? status
 }
 

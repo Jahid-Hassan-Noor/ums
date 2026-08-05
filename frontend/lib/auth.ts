@@ -59,8 +59,6 @@ const PUBLIC_PATH_PREFIXES = [
   "/ace-sedi",
   "/admissions",
   "/admissions-and-applications",
-  "/aiunique",
-  "/albukhary-social-business-journal",
   "/alumni",
   "/apply-now",
   "/career",

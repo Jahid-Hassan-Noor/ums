@@ -1,5 +1,4 @@
 from datetime import datetime, time, timedelta
-from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -12,169 +11,15 @@ from rest_framework.views import APIView
 from admin_app import models
 from auth_app.permissions import IsAdminRole
 from admin_app.semester_notifications import notify_semester_event
-from admin_app.settings_registry import setting_value
+from admin_app.settings_registry import institution_timezone, setting_value
 from admin_app.serializers import (
-    IELTSSessionSerializer,
+    AcademicSessionSerializer,
+    SemesterConfigurationSerializer,
     SemesterHolidaySerializer,
     SemesterSerializer,
 )
 from student_app.models import RegistrationPeriod
 from student_app.serializers import RegistrationPeriodSerializer
-
-
-UGP_2025_2026_REFERENCE = [
-    {
-        "name": "Semester 1, Session 2025/2026",
-        "academic_session": "2025/2026",
-        "semester_type": models.Semester.TYPE_LONG,
-        "calendar_group": models.Semester.CALENDAR_UNDERGRADUATE,
-        "start_date": "2025-10-27",
-        "end_date": "2026-02-27",
-        "teaching_periods": [
-            {"starts_on": "2025-10-27", "ends_on": "2025-12-19", "weeks": 8},
-            {"starts_on": "2025-12-29", "ends_on": "2026-02-06", "weeks": 6},
-        ],
-        "mid_semester_break_starts_on": "2025-12-20",
-        "mid_semester_break_ends_on": "2025-12-28",
-        "revision_starts_on": "2026-02-07",
-        "revision_ends_on": "2026-02-15",
-        "examination_starts_on": "2026-02-16",
-        "examination_ends_on": "2026-02-27",
-        "inter_semester_break_starts_on": "2026-02-28",
-        "inter_semester_break_ends_on": "2026-03-22",
-        "registration_periods": [
-            {
-                "title": "Course Pre-Registration",
-                "phase": RegistrationPeriod.PHASE_COURSE_REGISTRATION,
-                "opens_at": "2025-10-20T00:00:00",
-                "closes_at": "2025-10-24T23:59:59",
-            },
-            {
-                "title": "Add and Drop Courses",
-                "phase": RegistrationPeriod.PHASE_ADD_DROP,
-                "opens_at": "2025-10-27T00:00:00",
-                "closes_at": "2025-11-09T23:59:59",
-            },
-            {
-                "title": "Drop Courses",
-                "phase": RegistrationPeriod.PHASE_DROP_ONLY,
-                "opens_at": "2025-11-10T00:00:00",
-                "closes_at": "2025-12-07T23:59:59",
-            },
-        ],
-        "holidays": [
-            {"name": "Christmas", "starts_on": "2025-12-25"},
-            {"name": "Israk and Mikraj", "starts_on": "2026-01-16"},
-            {"name": "Thaipusam", "starts_on": "2026-02-01"},
-            {"name": "Chinese New Year", "starts_on": "2026-02-17", "ends_on": "2026-02-18"},
-            {"name": "First Day of Ramadhan", "starts_on": "2026-02-18"},
-            {"name": "Eidul Fitri", "starts_on": "2026-03-20", "ends_on": "2026-03-21"},
-        ],
-        "notes": [
-            "Course registration: 27 October 2025, Day 1 Week 1.",
-            "Add/drop: Week 1 until Week 2.",
-            "Extended drop: Week 3 until Week 6.",
-            "Course pre-registration for Semester 2: Week 12 to Week 15.",
-        ],
-    },
-    {
-        "name": "Semester 2, Session 2025/2026",
-        "academic_session": "2025/2026",
-        "semester_type": models.Semester.TYPE_LONG,
-        "calendar_group": models.Semester.CALENDAR_UNDERGRADUATE,
-        "start_date": "2026-03-23",
-        "end_date": "2026-07-17",
-        "teaching_periods": [
-            {"starts_on": "2026-03-23", "ends_on": "2026-05-08", "weeks": 7},
-            {"starts_on": "2026-05-11", "ends_on": "2026-06-26", "weeks": 7},
-        ],
-        "revision_starts_on": "2026-06-27",
-        "revision_ends_on": "2026-07-05",
-        "examination_starts_on": "2026-07-06",
-        "examination_ends_on": "2026-07-17",
-        "inter_semester_break_starts_on": "2026-07-18",
-        "inter_semester_break_ends_on": "2026-08-02",
-        "registration_periods": [
-            {
-                "title": "Course Pre-Registration",
-                "phase": RegistrationPeriod.PHASE_COURSE_REGISTRATION,
-                "opens_at": "2026-01-12T00:00:00",
-                "closes_at": "2026-02-06T23:59:59",
-            },
-            {
-                "title": "Add and Drop Courses",
-                "phase": RegistrationPeriod.PHASE_ADD_DROP,
-                "opens_at": "2026-03-23T00:00:00",
-                "closes_at": "2026-04-05T23:59:59",
-            },
-            {
-                "title": "Drop Courses",
-                "phase": RegistrationPeriod.PHASE_DROP_ONLY,
-                "opens_at": "2026-04-06T00:00:00",
-                "closes_at": "2026-05-03T23:59:59",
-            },
-        ],
-        "holidays": [
-            {"name": "Labour Day", "starts_on": "2026-05-01"},
-            {"name": "Eidul Adha", "starts_on": "2026-05-27", "ends_on": "2026-05-28"},
-            {"name": "Agong's Birthday", "starts_on": "2026-06-01"},
-            {"name": "Muharam New Year", "starts_on": "2026-06-17"},
-        ],
-        "notes": [
-            "Course registration: 23 March 2026, Day 1 Week 1.",
-            "Add/drop: Week 1 until Week 2.",
-            "Extended drop: Week 3 until Week 6.",
-            "Course pre-registration for Semester 3: Week 12 to Week 15.",
-        ],
-    },
-    {
-        "name": "Semester 3, Session 2025/2026",
-        "academic_session": "2025/2026",
-        "semester_type": models.Semester.TYPE_SHORT,
-        "calendar_group": models.Semester.CALENDAR_UNDERGRADUATE,
-        "start_date": "2026-08-03",
-        "end_date": "2026-10-02",
-        "teaching_periods": [
-            {"starts_on": "2026-08-03", "ends_on": "2026-09-18", "weeks": 7},
-        ],
-        "revision_starts_on": "2026-09-19",
-        "revision_ends_on": "2026-09-27",
-        "examination_starts_on": "2026-09-28",
-        "examination_ends_on": "2026-10-02",
-        "inter_semester_break_starts_on": "2026-10-03",
-        "inter_semester_break_ends_on": "2026-10-25",
-        "registration_periods": [
-            {
-                "title": "Course Pre-Registration",
-                "phase": RegistrationPeriod.PHASE_COURSE_REGISTRATION,
-                "opens_at": "2026-06-08T00:00:00",
-                "closes_at": "2026-07-03T23:59:59",
-            },
-            {
-                "title": "Add and Drop Courses",
-                "phase": RegistrationPeriod.PHASE_ADD_DROP,
-                "opens_at": "2026-08-03T00:00:00",
-                "closes_at": "2026-08-16T23:59:59",
-            },
-            {
-                "title": "Drop Courses",
-                "phase": RegistrationPeriod.PHASE_DROP_ONLY,
-                "opens_at": "2026-08-17T00:00:00",
-                "closes_at": "2026-09-13T23:59:59",
-            },
-        ],
-        "holidays": [
-            {"name": "The Prophet Muhamad's Birthday", "starts_on": "2026-08-26"},
-            {"name": "National Day", "starts_on": "2026-08-31"},
-            {"name": "Malaysia Day", "starts_on": "2026-09-16"},
-        ],
-        "notes": [
-            "Revision period: 19 September 2026 to 27 September 2026.",
-            "Examination period: 28 September 2026 to 02 October 2026.",
-            "Semester 1, Session 2026/2027 commences on 26 October 2026.",
-        ],
-    },
-]
 
 
 SEMESTER_DATE_FIELDS = (
@@ -187,7 +32,6 @@ SEMESTER_DATE_FIELDS = (
     "inter_semester_break_starts_on",
     "inter_semester_break_ends_on",
 )
-UMS_TIME_ZONE = ZoneInfo("Asia/Kuala_Lumpur")
 
 
 def _admin_profile(user):
@@ -202,6 +46,18 @@ def _parse_positive_int(value, default):
     return parsed if parsed > 0 else default
 
 
+def _parse_optional_positive_int(value, field):
+    if value in (None, ""):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise ValidationError({field: "Provide a valid whole number."}) from None
+    if parsed < 1:
+        raise ValidationError({field: "Must be at least 1."})
+    return parsed
+
+
 def _parse_aware_datetime(value):
     if not value:
         return None
@@ -211,13 +67,13 @@ def _parse_aware_datetime(value):
         if parsed_date:
             parsed = datetime.combine(parsed_date, time.min)
     if parsed and timezone.is_naive(parsed):
-        parsed = timezone.make_aware(parsed, UMS_TIME_ZONE)
+        parsed = timezone.make_aware(parsed, institution_timezone())
     return parsed
 
 
 def _day_bounds(day, end=False):
     value = datetime.combine(day, time.max if end else time.min)
-    return timezone.make_aware(value, UMS_TIME_ZONE) if timezone.is_naive(value) else value
+    return timezone.make_aware(value, institution_timezone()) if timezone.is_naive(value) else value
 
 
 def _default_registration_periods(start_date):
@@ -241,6 +97,112 @@ def _default_registration_periods(start_date):
             "closes_at": _day_bounds(start_date + timedelta(days=41), end=True),
         },
     ]
+
+
+def _calendar_group_label(value):
+    base_labels = dict(models.Semester.CALENDAR_CHOICES)
+    if value in base_labels:
+        return base_labels[value]
+    center = models.Center.objects.filter(
+        semester_calendar_group=value,
+        center_type=models.Center.CENTER_ACADEMIC,
+        academic_calendar_mode=models.Center.CALENDAR_SEMESTER,
+    ).first()
+    if center:
+        return f"{center.name} semester calendar"
+    return value.replace("center:", "").replace("-", " ").title()
+
+
+def _calendar_group_choices():
+    groups = {
+        value: label
+        for value, label in models.Semester.CALENDAR_CHOICES
+    }
+    existing_groups = set(
+        models.SemesterConfiguration.objects.values_list("calendar_group", flat=True)
+    ) | set(models.Semester.objects.values_list("calendar_group", flat=True))
+    for value in sorted(existing_groups):
+        if value:
+            groups.setdefault(value, _calendar_group_label(value))
+
+    semester_centers = models.Center.objects.filter(
+        center_type=models.Center.CENTER_ACADEMIC,
+        academic_calendar_mode=models.Center.CALENDAR_SEMESTER,
+        is_active=True,
+    ).order_by("name")
+    for center in semester_centers:
+        groups[center.effective_semester_calendar_group()] = f"{center.name} semester calendar"
+
+    return [{"value": value, "label": label} for value, label in groups.items()]
+
+
+def _valid_calendar_group_values():
+    return {choice["value"] for choice in _calendar_group_choices()}
+
+
+def _semester_configuration(calendar_group):
+    count = 3
+    config, _created = models.SemesterConfiguration.objects.get_or_create(
+        calendar_group=calendar_group,
+        defaults={
+            "semesters_per_year": count,
+            "semester_lengths": models.SemesterConfiguration.default_lengths(count),
+        },
+    )
+    if not config.semester_lengths:
+        config.semester_lengths = models.SemesterConfiguration.default_lengths(config.semesters_per_year)
+        config.full_clean()
+        config.save(update_fields=["semester_lengths", "updated_at"])
+    return config
+
+
+def _semester_configurations():
+    return [
+        _semester_configuration(choice["value"])
+        for choice in _calendar_group_choices()
+    ]
+
+
+def _serialize_semester_configuration(config):
+    return {
+        **SemesterConfigurationSerializer(config).data,
+        "calendar_group_label": _calendar_group_label(config.calendar_group),
+        "semester_lengths": models.SemesterConfiguration.normalize_lengths(
+            config.semester_lengths or models.SemesterConfiguration.default_lengths(config.semesters_per_year),
+            config.semesters_per_year,
+        ),
+    }
+
+
+def _semester_configuration_payload(data):
+    calendar_group = data.get("calendar_group", models.Semester.CALENDAR_UNDERGRADUATE)
+    if calendar_group not in _valid_calendar_group_values():
+        raise ValidationError({"calendar_group": "Select a valid calendar group."})
+    semesters_per_year = _parse_optional_positive_int(
+        data.get("semesters_per_year"),
+        "semesters_per_year",
+    )
+    if semesters_per_year is None:
+        raise ValidationError({"semesters_per_year": "Semester count is required."})
+    raw_lengths = data.get("semester_lengths")
+    if raw_lengths in (None, ""):
+        raw_lengths = data.get("semesters")
+    if raw_lengths in (None, ""):
+        raw_lengths = models.SemesterConfiguration.default_lengths(semesters_per_year)
+    semester_lengths = models.SemesterConfiguration.normalize_lengths(raw_lengths, semesters_per_year)
+    return {
+        "calendar_group": calendar_group,
+        "semesters_per_year": semesters_per_year,
+        "semester_lengths": semester_lengths,
+        "notes": str(data.get("notes", "")).strip(),
+    }
+
+
+def _definition_for_semester(calendar_group, semester_number):
+    if not semester_number:
+        return None
+    config = _semester_configuration(calendar_group)
+    return config.definition_for(semester_number)
 
 
 def _normalize_teaching_periods(value, start_date, end_date):
@@ -331,9 +293,23 @@ def _semester_payload(data):
     if start_date > end_date:
         raise ValidationError({"end_date": "Semester end_date must be after start_date."})
 
+    calendar_group = data.get("calendar_group", models.Semester.CALENDAR_UNDERGRADUATE)
+    if calendar_group not in _valid_calendar_group_values():
+        raise ValidationError({"calendar_group": "Select a valid calendar group."})
+    semester_number = _parse_optional_positive_int(data.get("semester_number"), "semester_number")
+    definition = _definition_for_semester(calendar_group, semester_number)
+    planned_weeks = _parse_optional_positive_int(data.get("planned_weeks"), "planned_weeks")
+    if not planned_weeks and definition:
+        planned_weeks = definition["weeks"]
     semester_type = data.get(
         "semester_type",
-        setting_value("academic", "default_semester_type"),
+        definition["semester_type"] if definition else setting_value("academic", "default_semester_type"),
+    )
+    default_classes_per_week = _parse_positive_int(
+        data.get("default_classes_per_week"),
+        definition["default_classes_per_week"]
+        if definition
+        else 2 if semester_type == models.Semester.TYPE_SHORT else 1,
     )
     payload = {
         "name": str(data.get("name", "")).strip(),
@@ -344,7 +320,9 @@ def _semester_payload(data):
             )
         ).strip(),
         "semester_type": semester_type,
-        "calendar_group": data.get("calendar_group", models.Semester.CALENDAR_UNDERGRADUATE),
+        "calendar_group": calendar_group,
+        "semester_number": semester_number,
+        "planned_weeks": planned_weeks,
         "starting_week": _parse_positive_int(data.get("starting_week"), 1),
         "start_date": start_date,
         "end_date": end_date,
@@ -356,10 +334,7 @@ def _semester_payload(data):
             data.get("max_credit_hours"),
             setting_value("academic", "registration_max_credit_hours"),
         ),
-        "default_classes_per_week": _parse_positive_int(
-            data.get("default_classes_per_week"),
-            2 if semester_type == models.Semester.TYPE_SHORT else 1,
-        ),
+        "default_classes_per_week": default_classes_per_week,
         "notes": str(data.get("notes", "")).strip(),
     }
     for field in SEMESTER_DATE_FIELDS:
@@ -428,13 +403,23 @@ def _semester_status(semester):
     return "planned"
 
 
-def _serialize_semester(semester, active_groups=None):
+def _expected_weeks(semester, configurations=None):
+    if semester.planned_weeks:
+        return semester.planned_weeks
+    config = (configurations or {}).get(semester.calendar_group)
+    definition = config.definition_for(semester.semester_number) if config and semester.semester_number else None
+    if definition:
+        return definition["weeks"]
+    return 9 if semester.semester_type == models.Semester.TYPE_SHORT else 17
+
+
+def _serialize_semester(semester, active_groups=None, configurations=None):
     active_groups = active_groups or set()
     is_historical = bool(semester.end_date and semester.end_date < timezone.localdate())
     return {
         **SemesterSerializer(semester).data,
         "status": _semester_status(semester),
-        "expected_weeks": 9 if semester.semester_type == models.Semester.TYPE_SHORT else 17,
+        "expected_weeks": _expected_weeks(semester, configurations=configurations),
         "can_start": (
             not semester.is_active
             and not is_historical
@@ -453,31 +438,98 @@ def _validation_response(exc):
     return Response(detail, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _calendar_setup_warnings(academic_centers, semesters, academic_sessions):
+    warnings = []
+    semester_groups = {semester.calendar_group for semester in semesters}
+    session_center_ids = {session.center_id for session in academic_sessions if session.center_id}
+    for center in academic_centers:
+        if center.uses_semester_calendar():
+            calendar_group = center.effective_semester_calendar_group()
+            if calendar_group not in semester_groups:
+                warnings.append(
+                    {
+                        "center_id": center.id,
+                        "center_code": center.code,
+                        "center_name": center.name,
+                        "calendar_mode": center.academic_calendar_mode,
+                        "calendar_group": calendar_group,
+                        "message": (
+                            f"{center.name} is semester-based but has no semester plans yet."
+                        ),
+                    }
+                )
+        elif center.academic_calendar_mode == models.Center.CALENDAR_WHOLE_YEAR:
+            if center.id not in session_center_ids:
+                warnings.append(
+                    {
+                        "center_id": center.id,
+                        "center_code": center.code,
+                        "center_name": center.name,
+                        "calendar_mode": center.academic_calendar_mode,
+                        "calendar_group": "",
+                        "message": (
+                            f"{center.name} is whole-year but has no academic sessions yet."
+                        ),
+                    }
+                )
+    return warnings
+
+
 class AdminSemesters(APIView):
     permission_classes = [IsAdminRole]
 
     def get(self, request):
+        calendar_groups = _calendar_group_choices()
+        semester_configurations = {
+            config.calendar_group: config
+            for config in _semester_configurations()
+        }
         semesters = list(
             models.Semester.objects.prefetch_related("holidays")
             .all()
             .order_by("-start_date", "-created_at")
         )
         active_groups = {semester.calendar_group for semester in semesters if semester.is_active}
-        ielts_sessions = models.IELTSSession.objects.select_related("center").all()
-        centers = models.Center.objects.filter(center_type=models.Center.CENTER_ACADEMIC, is_active=True).order_by("code")
+        academic_sessions = models.AcademicSession.objects.select_related("center").all()
+        academic_centers = models.Center.objects.filter(
+            center_type=models.Center.CENTER_ACADEMIC,
+            is_active=True,
+        ).order_by("code")
+        year_round_centers = academic_centers.filter(
+            academic_calendar_mode=models.Center.CALENDAR_WHOLE_YEAR,
+        )
+        group_summary = [
+            {
+                "value": choice["value"],
+                "label": choice["label"],
+                "total": sum(1 for semester in semesters if semester.calendar_group == choice["value"]),
+                "active": sum(
+                    1
+                    for semester in semesters
+                    if semester.calendar_group == choice["value"] and semester.is_active
+                ),
+            }
+            for choice in calendar_groups
+        ]
         return Response(
             {
                 "title": "Academic Calendar",
                 "section": "admin",
-                "calendar_reference": UGP_2025_2026_REFERENCE,
+                "calendar_reference": [],
+                "semester_configurations": [
+                    _serialize_semester_configuration(config)
+                    for config in semester_configurations.values()
+                ],
                 "semester_types": [
                     {"value": value, "label": label}
                     for value, label in models.Semester.TYPE_CHOICES
                 ],
-                "calendar_groups": [
-                    {"value": value, "label": label}
-                    for value, label in models.Semester.CALENDAR_CHOICES
-                ],
+                "calendar_groups": calendar_groups,
+                "calendar_setup_warnings": _calendar_setup_warnings(
+                    academic_centers,
+                    semesters,
+                    academic_sessions,
+                ),
                 "registration_phases": [
                     {"value": value, "label": label}
                     for value, label in RegistrationPeriod.PHASE_CHOICES
@@ -495,15 +547,39 @@ class AdminSemesters(APIView):
                         for semester in semesters
                         if semester.calendar_group == models.Semester.CALENDAR_FOUNDATION
                     ),
+                    "by_calendar_group": group_summary,
                 },
                 "semesters": [
-                    _serialize_semester(semester, active_groups=active_groups)
+                    _serialize_semester(
+                        semester,
+                        active_groups=active_groups,
+                        configurations=semester_configurations,
+                    )
                     for semester in semesters
                 ],
-                "ielts_sessions": IELTSSessionSerializer(ielts_sessions, many=True).data,
+                "academic_sessions": AcademicSessionSerializer(academic_sessions, many=True).data,
+                "ielts_sessions": AcademicSessionSerializer(academic_sessions, many=True).data,
                 "academic_centers": [
-                    {"id": center.id, "code": center.code, "name": center.name}
-                    for center in centers
+                    {
+                        "id": center.id,
+                        "code": center.code,
+                        "name": center.name,
+                        "academic_calendar_mode": center.academic_calendar_mode,
+                        "semester_calendar_group": center.effective_semester_calendar_group()
+                        if center.uses_semester_calendar()
+                        else "",
+                        "annual_session_limit": center.annual_session_limit,
+                    }
+                    for center in academic_centers
+                ],
+                "year_round_centers": [
+                    {
+                        "id": center.id,
+                        "code": center.code,
+                        "name": center.name,
+                        "annual_session_limit": center.annual_session_limit,
+                    }
+                    for center in year_round_centers
                 ],
             },
             status=status.HTTP_200_OK,
@@ -511,8 +587,10 @@ class AdminSemesters(APIView):
 
     def post(self, request):
         action = str(request.data.get("action", "start_semester")).strip()
-        if action == "create_ielts_session":
-            return self._create_ielts_session(request)
+        if action in {"create_academic_session", "create_ielts_session"}:
+            return self._create_academic_session(request)
+        if action == "update_semester_configuration":
+            return self._update_semester_configuration(request)
         if action == "create_semester":
             return self._create_semester(request, activate=False)
         if action == "update_semester":
@@ -525,26 +603,78 @@ class AdminSemesters(APIView):
             return self._create_semester(request, activate=True)
         return Response({"detail": "Unknown semester action."}, status=status.HTTP_400_BAD_REQUEST)
 
-    def _create_ielts_session(self, request):
+    def _update_semester_configuration(self, request):
+        try:
+            payload = _semester_configuration_payload(request.data)
+        except ValidationError as exc:
+            return _validation_response(exc)
+
+        try:
+            with transaction.atomic():
+                config = models.SemesterConfiguration.objects.select_for_update().filter(
+                    calendar_group=payload["calendar_group"],
+                ).first()
+                if not config:
+                    config = models.SemesterConfiguration(calendar_group=payload["calendar_group"])
+                config.semesters_per_year = payload["semesters_per_year"]
+                config.semester_lengths = payload["semester_lengths"]
+                config.notes = payload["notes"]
+                config.full_clean()
+                config.save()
+        except ValidationError as exc:
+            return _validation_response(exc)
+
+        return Response(
+            {
+                "message": "Semester structure updated successfully.",
+                "semester_configuration": _serialize_semester_configuration(config),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _create_academic_session(self, request):
         academic_session = str(request.data.get("academic_session", "")).strip()
-        if models.IELTSSession.objects.filter(academic_session=academic_session).count() >= 2:
+        center = models.Center.objects.filter(pk=request.data.get("center")).first()
+        if not center:
             return Response(
-                {"detail": "LC may have at most two IELTS exam sessions in an academic year."},
+                {"detail": "Select a whole-year academic centre for this session."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = IELTSSessionSerializer(data=request.data)
+        if (
+            not center.is_academic_center()
+            or center.academic_calendar_mode != models.Center.CALENDAR_WHOLE_YEAR
+        ):
+            return Response(
+                {"detail": "Sessions can only be created for whole-year academic centres."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if center.annual_session_limit and models.AcademicSession.objects.filter(
+            academic_session=academic_session,
+            center=center,
+        ).count() >= center.annual_session_limit:
+            return Response(
+                {
+                    "detail": (
+                        f"{center.name} may have at most {center.annual_session_limit} "
+                        "session(s) in an academic year."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = AcademicSessionSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         try:
-            session = models.IELTSSession(**serializer.validated_data)
+            session = models.AcademicSession(**serializer.validated_data)
             session.full_clean()
             session.save()
         except ValidationError as exc:
             return _validation_response(exc)
         return Response(
             {
-                "message": "IELTS session created successfully.",
-                "ielts_session": IELTSSessionSerializer(session).data,
+                "message": "Academic session created successfully.",
+                "academic_session": AcademicSessionSerializer(session).data,
+                "ielts_session": AcademicSessionSerializer(session).data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -593,6 +723,7 @@ class AdminSemesters(APIView):
                 "semester": _serialize_semester(
                     semester,
                     active_groups={semester.calendar_group} if activate else set(),
+                    configurations={semester.calendar_group: _semester_configuration(semester.calendar_group)},
                 ),
             },
             status=status.HTTP_201_CREATED,
@@ -635,7 +766,10 @@ class AdminSemesters(APIView):
         return Response(
             {
                 "message": "Semester plan updated successfully.",
-                "semester": _serialize_semester(semester),
+                "semester": _serialize_semester(
+                    semester,
+                    configurations={semester.calendar_group: _semester_configuration(semester.calendar_group)},
+                ),
             },
             status=status.HTTP_200_OK,
         )
@@ -652,7 +786,11 @@ class AdminSemesters(APIView):
                     return Response(
                         {
                             "message": "Semester is already active.",
-                            "semester": _serialize_semester(semester, {semester.calendar_group}),
+                            "semester": _serialize_semester(
+                                semester,
+                                {semester.calendar_group},
+                                {semester.calendar_group: _semester_configuration(semester.calendar_group)},
+                            ),
                         },
                         status=status.HTTP_200_OK,
                     )
@@ -685,7 +823,11 @@ class AdminSemesters(APIView):
         return Response(
             {
                 "message": "Semester started successfully.",
-                "semester": _serialize_semester(semester, {semester.calendar_group}),
+                "semester": _serialize_semester(
+                    semester,
+                    {semester.calendar_group},
+                    {semester.calendar_group: _semester_configuration(semester.calendar_group)},
+                ),
             },
             status=status.HTTP_200_OK,
         )
@@ -705,7 +847,10 @@ class AdminSemesters(APIView):
         return Response(
             {
                 "message": "Semester closed successfully.",
-                "semester": _serialize_semester(semester),
+                "semester": _serialize_semester(
+                    semester,
+                    configurations={semester.calendar_group: _semester_configuration(semester.calendar_group)},
+                ),
             },
             status=status.HTTP_200_OK,
         )

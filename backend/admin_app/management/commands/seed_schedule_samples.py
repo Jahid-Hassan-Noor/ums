@@ -7,7 +7,7 @@ from django.utils import timezone
 from admin_app.models import AcademicEvent, Profile
 
 
-LOCAL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
+LOCAL_TZ = ZoneInfo("UTC")
 
 
 def week_start(today):

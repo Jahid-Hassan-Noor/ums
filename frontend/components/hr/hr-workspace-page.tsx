@@ -27,6 +27,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import LoadingScreen from "@/components/ui/loading-screen"
 import { Textarea } from "@/components/ui/textarea"
+import { formatCurrency, formatDateOnly } from "@/components/utils/format"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
 
 type View = "dashboard" | "statistics" | "employees" | "positions" | "my-profile"
@@ -225,7 +227,7 @@ const emptyEmployee = {
   position_id: "",
   joining_date: "",
   work_email: "",
-  salary_currency: "MYR",
+  salary_currency: "USD",
   base_salary: "",
   current_bonus: "",
   notes: "",
@@ -251,22 +253,26 @@ function statusLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function formatDate(value: string | null) {
+function formatDate(value: string | null, locale: string) {
   if (!value) return "Not recorded"
-  return new Intl.DateTimeFormat("en-MY", { dateStyle: "medium" }).format(new Date(value))
+  const formatted = formatDateOnly(value, { locale, formatOptions: { dateStyle: "medium" } })
+  return formatted === "N/A" ? "Not recorded" : formatted
 }
 
-function formatMoney(value: string | number | null | undefined, currency = "MYR") {
+function formatMoney(value: string | number | null | undefined, currency: string, locale: string) {
   const amount = Number(value ?? 0)
   if (Number.isNaN(amount)) return `${currency} ${value ?? "0.00"}`
   try {
-    return new Intl.NumberFormat("en-MY", { style: "currency", currency }).format(amount)
+    return formatCurrency(amount, { currency, locale })
   } catch {
     return `${currency} ${amount.toFixed(2)}`
   }
 }
 
 export function HrWorkspacePage({ view }: { view: View }) {
+  const umsSettings = usePublicUmsSettings()
+  const locale = umsSettings.localization.locale
+  const defaultCurrency = umsSettings.localization.currency_code
   const [summary, setSummary] = useState<DashboardResponse["summary"] | null>(null)
   const [statistics, setStatistics] = useState<DashboardResponse["statistics"] | null>(null)
   const [hrStatistics, setHrStatistics] = useState<HrStatisticsResponse | null>(null)
@@ -484,11 +490,11 @@ export function HrWorkspacePage({ view }: { view: View }) {
             {summary ? (
               <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="Employees" value={summary.employees} icon={<Users className="size-4" />} />
-                <StatCard label="Monthly Payroll" value={formatMoney(summary.monthly_payroll)} icon={<CircleDollarSign className="size-4" />} />
-                <StatCard label="Total Bonus" value={formatMoney(summary.total_bonus)} icon={<Gift className="size-4" />} />
+                <StatCard label="Monthly Payroll" value={formatMoney(summary.monthly_payroll, defaultCurrency, locale)} icon={<CircleDollarSign className="size-4" />} />
+                <StatCard label="Total Bonus" value={formatMoney(summary.total_bonus, defaultCurrency, locale)} icon={<Gift className="size-4" />} />
                 <StatCard label="Pending Requests" value={summary.pending_compensation_requests} icon={<History className="size-4" />} />
-                <StatCard label="Average Salary" value={formatMoney(summary.average_salary)} icon={<BarChart3 className="size-4" />} />
-                <StatCard label="Average Bonus" value={formatMoney(summary.average_bonus)} icon={<Gift className="size-4" />} />
+                <StatCard label="Average Salary" value={formatMoney(summary.average_salary, defaultCurrency, locale)} icon={<BarChart3 className="size-4" />} />
+                <StatCard label="Average Bonus" value={formatMoney(summary.average_bonus, defaultCurrency, locale)} icon={<Gift className="size-4" />} />
                 <StatCard label="Active Positions" value={summary.positions} icon={<BriefcaseBusiness className="size-4" />} />
                 <StatCard label="Vacation Days Placeholder" value={summary.vacation_days_available} icon={<FileText className="size-4" />} />
               </section>
@@ -498,15 +504,15 @@ export function HrWorkspacePage({ view }: { view: View }) {
               <section className="grid gap-4 xl:grid-cols-2">
                 <ChartCard title="Employment Status" subtitle="Status distribution" rows={statistics.status_counts} total={summary?.employees ?? 0} />
                 <ChartCard title="Roles and Positions" subtitle="Workforce coverage" rows={[...statistics.role_counts.map((role) => ({ label: statusLabel(role.role), count: role.count })), ...statistics.position_counts.map((position) => ({ label: position.code ? `${position.title} (${position.code})` : position.title, count: position.count }))]} total={summary?.employees ?? 0} />
-                <RecentRequests requests={statistics.recent_compensation_requests} />
-                <RecentSalaryAdjustments adjustments={statistics.recent_salary_adjustments} />
+                <RecentRequests requests={statistics.recent_compensation_requests} defaultCurrency={defaultCurrency} locale={locale} />
+                <RecentSalaryAdjustments adjustments={statistics.recent_salary_adjustments} defaultCurrency={defaultCurrency} locale={locale} />
               </section>
             ) : null}
           </>
         ) : null}
 
         {view === "statistics" ? (
-          <HrStatisticsView data={hrStatistics} />
+          <HrStatisticsView data={hrStatistics} defaultCurrency={defaultCurrency} locale={locale} />
         ) : null}
 
         {view === "positions" ? (
@@ -604,8 +610,8 @@ export function HrWorkspacePage({ view }: { view: View }) {
                       </div>
                       <div className="mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4">
                         <span>{employee.work_email || employee.email}</span>
-                        <span>Salary {formatMoney(employee.current_salary, employee.salary_currency)}</span>
-                        <span>Bonus {formatMoney(employee.current_bonus, employee.salary_currency)}</span>
+                        <span>Salary {formatMoney(employee.current_salary, employee.salary_currency || defaultCurrency, locale)}</span>
+                        <span>Bonus {formatMoney(employee.current_bonus, employee.salary_currency || defaultCurrency, locale)}</span>
                         <span>Vacation {employee.vacation_days_remaining}/{employee.vacation_days_total} days</span>
                       </div>
                     </button>
@@ -621,6 +627,8 @@ export function HrWorkspacePage({ view }: { view: View }) {
                 saving={saving}
                 onCompensationFormChange={setCompensationForm}
                 onCompensationSubmit={submitCompensationRequest}
+                defaultCurrency={defaultCurrency}
+                locale={locale}
               />
             </section>
           </section>
@@ -638,10 +646,10 @@ export function HrWorkspacePage({ view }: { view: View }) {
                   <InfoItem label="Employee No." value={myEmployee.employee_no} />
                   <InfoItem label="Status" value={myEmployee.employment_status_label || statusLabel(myEmployee.employment_status)} />
                   <InfoItem label="Position" value={myEmployee.position?.title ?? "Not assigned"} />
-                  <InfoItem label="Current Salary" value={formatMoney(myEmployee.current_salary, myEmployee.salary_currency)} />
-                  <InfoItem label="Current Bonus" value={formatMoney(myEmployee.current_bonus, myEmployee.salary_currency)} />
+                  <InfoItem label="Current Salary" value={formatMoney(myEmployee.current_salary, myEmployee.salary_currency || defaultCurrency, locale)} />
+                  <InfoItem label="Current Bonus" value={formatMoney(myEmployee.current_bonus, myEmployee.salary_currency || defaultCurrency, locale)} />
                   <InfoItem label="Vacation Placeholder" value={`${myEmployee.vacation_days_remaining}/${myEmployee.vacation_days_total} days`} />
-                  <InfoItem label="Joining Date" value={formatDate(myEmployee.joining_date)} />
+                  <InfoItem label="Joining Date" value={formatDate(myEmployee.joining_date, locale)} />
                   <InfoItem label="Manager" value={myEmployee.reporting_manager?.name ?? "Not assigned"} />
                   <InfoItem label="Work Email" value={myEmployee.work_email || myEmployee.email || "Not recorded"} />
                 </>
@@ -656,7 +664,15 @@ export function HrWorkspacePage({ view }: { view: View }) {
   )
 }
 
-function HrStatisticsView({ data }: { data: HrStatisticsResponse | null }) {
+function HrStatisticsView({
+  data,
+  defaultCurrency,
+  locale,
+}: {
+  data: HrStatisticsResponse | null
+  defaultCurrency: string
+  locale: string
+}) {
   if (!data) {
     return (
       <LoadingScreen
@@ -670,8 +686,8 @@ function HrStatisticsView({ data }: { data: HrStatisticsResponse | null }) {
     <section className="space-y-6">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Employees" value={data.summary.employees} icon={<Users className="size-4" />} />
-        <StatCard label="Payroll" value={formatMoney(data.summary.monthly_payroll)} icon={<CircleDollarSign className="size-4" />} />
-        <StatCard label="Bonus Pool" value={formatMoney(data.summary.total_bonus)} icon={<Gift className="size-4" />} />
+        <StatCard label="Payroll" value={formatMoney(data.summary.monthly_payroll, defaultCurrency, locale)} icon={<CircleDollarSign className="size-4" />} />
+        <StatCard label="Bonus Pool" value={formatMoney(data.summary.total_bonus, defaultCurrency, locale)} icon={<Gift className="size-4" />} />
         <StatCard label="Pending Requests" value={data.summary.pending_compensation_requests} icon={<History className="size-4" />} />
       </section>
       <section className="grid gap-4 xl:grid-cols-2">
@@ -682,7 +698,7 @@ function HrStatisticsView({ data }: { data: HrStatisticsResponse | null }) {
         <ChartCard title="Compensation Requests" subtitle="Approval queue status" rows={data.charts.compensation_request_status} total={Math.max(data.charts.compensation_request_status.reduce((sum, row) => sum + row.count, 0), 1)} />
         <ChartCard title="Vacation And Leave Placeholder" subtitle="Temporary stats until leave workflow is built" rows={data.charts.leave_placeholder} total={Math.max(data.summary.vacation_days_total, 1)} />
       </section>
-      <RecentRequests requests={data.recent_compensation_requests} />
+      <RecentRequests requests={data.recent_compensation_requests} defaultCurrency={defaultCurrency} locale={locale} />
     </section>
   )
 }
@@ -749,7 +765,15 @@ function InfoItem({ label, value }: { label: string; value: string | number }) {
   )
 }
 
-function RecentRequests({ requests }: { requests: CompensationRequest[] }) {
+function RecentRequests({
+  requests,
+  defaultCurrency,
+  locale,
+}: {
+  requests: CompensationRequest[]
+  defaultCurrency: string
+  locale: string
+}) {
   return (
     <Card>
       <CardHeader>
@@ -762,7 +786,7 @@ function RecentRequests({ requests }: { requests: CompensationRequest[] }) {
             key={item.id}
             icon={item.change_type === "decrease" ? <TrendingDown className="size-4" /> : <TrendingUp className="size-4" />}
             title={`${item.employee.name} - ${item.request_type_label} ${item.change_type_label} - ${item.status_label}`}
-            meta={`${formatMoney(item.previous_amount, item.employee.currency)} to ${formatMoney(item.requested_amount, item.employee.currency)} - ${formatDate(item.effective_date)}`}
+            meta={`${formatMoney(item.previous_amount, item.employee.currency || defaultCurrency, locale)} to ${formatMoney(item.requested_amount, item.employee.currency || defaultCurrency, locale)} - ${formatDate(item.effective_date, locale)}`}
           />
         )) : <p className="text-sm text-muted-foreground">No compensation requests yet.</p>}
       </CardContent>
@@ -770,7 +794,15 @@ function RecentRequests({ requests }: { requests: CompensationRequest[] }) {
   )
 }
 
-function RecentSalaryAdjustments({ adjustments }: { adjustments: SalaryAdjustment[] }) {
+function RecentSalaryAdjustments({
+  adjustments,
+  defaultCurrency,
+  locale,
+}: {
+  adjustments: SalaryAdjustment[]
+  defaultCurrency: string
+  locale: string
+}) {
   return (
     <Card>
       <CardHeader>
@@ -783,7 +815,7 @@ function RecentSalaryAdjustments({ adjustments }: { adjustments: SalaryAdjustmen
             key={adjustment.id}
             icon={adjustment.change_type === "increase" ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
             title={`${adjustment.employee_name} - ${adjustment.change_type_label}`}
-            meta={`${formatMoney(adjustment.previous_salary)} to ${formatMoney(adjustment.new_salary)} on ${formatDate(adjustment.effective_date)}`}
+            meta={`${formatMoney(adjustment.previous_salary, defaultCurrency, locale)} to ${formatMoney(adjustment.new_salary, defaultCurrency, locale)} on ${formatDate(adjustment.effective_date, locale)}`}
           />
         )) : <p className="text-sm text-muted-foreground">No approved salary adjustments recorded yet.</p>}
       </CardContent>
@@ -798,6 +830,8 @@ function EmployeeDetailPanel({
   saving,
   onCompensationFormChange,
   onCompensationSubmit,
+  defaultCurrency,
+  locale,
 }: {
   employee: EmployeeDetail | null
   loading: boolean
@@ -805,6 +839,8 @@ function EmployeeDetailPanel({
   saving: boolean
   onCompensationFormChange: React.Dispatch<React.SetStateAction<typeof emptyCompensationRequest>>
   onCompensationSubmit: (event: React.FormEvent<HTMLFormElement>) => void
+  defaultCurrency: string
+  locale: string
 }) {
   if (loading && !employee) {
     return (
@@ -834,11 +870,11 @@ function EmployeeDetailPanel({
         <section className="grid gap-3 sm:grid-cols-2">
           <InfoItem label="Role" value={statusLabel(employee.role)} />
           <InfoItem label="Position" value={employee.position?.title ?? "Not assigned"} />
-          <InfoItem label="Current Salary" value={formatMoney(employee.current_salary, employee.salary_currency)} />
-          <InfoItem label="Current Bonus" value={formatMoney(employee.current_bonus, employee.salary_currency)} />
+          <InfoItem label="Current Salary" value={formatMoney(employee.current_salary, employee.salary_currency || defaultCurrency, locale)} />
+          <InfoItem label="Current Bonus" value={formatMoney(employee.current_bonus, employee.salary_currency || defaultCurrency, locale)} />
           <InfoItem label="Vacation Placeholder" value={`${employee.vacation_days_remaining}/${employee.vacation_days_total} days`} />
           <InfoItem label="Leave Placeholder" value={`${employee.leave_days_remaining}/${employee.leave_days_total} days`} />
-          <InfoItem label="Joining Date" value={formatDate(employee.joining_date)} />
+          <InfoItem label="Joining Date" value={formatDate(employee.joining_date, locale)} />
           <InfoItem label="Manager" value={employee.reporting_manager?.name ?? "Not assigned"} />
           <InfoItem label="Direct Reports" value={employee.direct_reports.length} />
         </section>
@@ -887,7 +923,7 @@ function EmployeeDetailPanel({
               key={item.id}
               icon={item.change_type === "decrease" ? <TrendingDown className="size-4" /> : <TrendingUp className="size-4" />}
               title={`${item.request_type_label} ${item.change_type_label} - ${item.status_label}`}
-              meta={`${formatMoney(item.previous_amount, employee.salary_currency)} to ${formatMoney(item.requested_amount, employee.salary_currency)} on ${formatDate(item.effective_date)}`}
+              meta={`${formatMoney(item.previous_amount, employee.salary_currency || defaultCurrency, locale)} to ${formatMoney(item.requested_amount, employee.salary_currency || defaultCurrency, locale)} on ${formatDate(item.effective_date, locale)}`}
             />
           )) : <p className="text-sm text-muted-foreground">No compensation requests recorded yet.</p>}
         </section>
@@ -898,8 +934,8 @@ function EmployeeDetailPanel({
             <HistoryRow
               key={adjustment.id}
               icon={adjustment.change_type === "increase" ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
-              title={`${adjustment.change_type_label} ${formatMoney(adjustment.amount, employee.salary_currency)}`}
-              meta={`${formatMoney(adjustment.previous_salary, employee.salary_currency)} to ${formatMoney(adjustment.new_salary, employee.salary_currency)} on ${formatDate(adjustment.effective_date)}`}
+              title={`${adjustment.change_type_label} ${formatMoney(adjustment.amount, employee.salary_currency || defaultCurrency, locale)}`}
+              meta={`${formatMoney(adjustment.previous_salary, employee.salary_currency || defaultCurrency, locale)} to ${formatMoney(adjustment.new_salary, employee.salary_currency || defaultCurrency, locale)} on ${formatDate(adjustment.effective_date, locale)}`}
             />
           )) : <p className="text-sm text-muted-foreground">No approved salary adjustments recorded yet.</p>}
         </section>
@@ -911,7 +947,7 @@ function EmployeeDetailPanel({
               key={record.id}
               icon={<History className="size-4" />}
               title={`${record.status_label} - ${record.position?.title ?? "No position"}`}
-              meta={`${record.recorded_by || "HR"} on ${formatDate(record.start_date)}`}
+              meta={`${record.recorded_by || "HR"} on ${formatDate(record.start_date, locale)}`}
             />
           )) : <p className="text-sm text-muted-foreground">No employment history recorded yet.</p>}
         </section>
@@ -923,7 +959,7 @@ function EmployeeDetailPanel({
               key={document.id}
               icon={<FileText className="size-4" />}
               title={`${document.title} - ${document.document_type_label}`}
-              meta={`Expires ${formatDate(document.expires_on)}`}
+              meta={`Expires ${formatDate(document.expires_on, locale)}`}
             />
           )) : <p className="text-sm text-muted-foreground">No documents recorded yet.</p>}
         </section>

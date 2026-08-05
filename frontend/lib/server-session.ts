@@ -46,7 +46,11 @@ export type AuthUser = {
     id: number | null
     code: string
     name: string
+    academic_center?: boolean
     academic_workflows: boolean
+    semester_workflows?: boolean
+    academic_calendar_mode?: string
+    semester_calendar_group?: string
     unit_id?: number | null
     unit_name?: string
   } | null

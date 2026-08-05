@@ -14,13 +14,18 @@ const numberFormatters = new Map<string, Intl.NumberFormat>()
 const currencyFormatters = new Map<string, Intl.NumberFormat>()
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>()
 
-const DEFAULT_LOCALE = "en-MY"
+const DEFAULT_LOCALE = "en-US"
 const DEFAULT_DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
   month: "short",
   day: "numeric",
   year: "numeric",
   hour: "numeric",
   minute: "2-digit",
+}
+const DEFAULT_DATE_ONLY_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
 }
 
 function getNumberFormatter(locale: string) {
@@ -34,7 +39,7 @@ function getNumberFormatter(locale: string) {
 
 function getCurrencyFormatter(config: CurrencyFormatConfig) {
   const locale = config.locale || DEFAULT_LOCALE
-  const currency = config.currency || "MYR"
+  const currency = config.currency || "USD"
   const minDigits = config.minimumFractionDigits ?? 2
   const maxDigits = config.maximumFractionDigits ?? 2
   const key = `${locale}|${currency}|${minDigits}|${maxDigits}`
@@ -106,4 +111,19 @@ export function formatDateTime(value?: string | null, config?: string | DateTime
   return getDateTimeFormatter(normalized).format(parsed)
 }
 
-export { DEFAULT_DATE_TIME_OPTIONS }
+export function formatDateOnly(value?: string | null, config?: string | DateTimeFormatConfig) {
+  if (!value) return "N/A"
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "N/A"
+
+  const normalized: DateTimeFormatConfig =
+    typeof config === "string" ? { locale: config } : (config ?? {})
+  return getDateTimeFormatter({
+    ...normalized,
+    formatOptions: normalized.formatOptions || DEFAULT_DATE_ONLY_OPTIONS,
+  }).format(parsed)
+}
+
+export { DEFAULT_DATE_ONLY_OPTIONS, DEFAULT_DATE_TIME_OPTIONS }

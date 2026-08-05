@@ -165,10 +165,17 @@ class StudentFineInitiatePayment(APIView):
                 fine.checkout_url = checkout_url
 
         if not checkout_url:
-            return Response({"detail": "Payment gateway is not configured. Please contact the Finance Office."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            fine.refresh_from_db()
+            return Response(
+                {
+                    "checkout_url": "",
+                    "fine": fine_payload(fine),
+                    "message": "Manual/offline payment mode is active. Please settle this charge with the Finance Office.",
+                }
+            )
 
         fine.refresh_from_db()
-        return Response({"checkout_url": checkout_url, "fine": fine_payload(fine)})
+        return Response({"checkout_url": checkout_url, "fine": fine_payload(fine), "message": "Payment checkout created."})
 
 
 class AccountantStudentList(APIView):
@@ -199,4 +206,3 @@ class AccountantStudentList(APIView):
                 "identifier": identifier,
             })
         return Response({"students": data})
-

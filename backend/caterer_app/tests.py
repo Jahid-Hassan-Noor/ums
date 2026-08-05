@@ -7,12 +7,14 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from admin_app.models import Center, Profile, Unit
+from admin_app.models import Center, Profile, Program, SystemSetting, Unit
+from admin_app.settings_registry import invalidate_settings_cache
 from auth_app.serializers import RegisterSerializer
 from caterer_app.models import (
     Caterer,
     CanteenBalanceAdjustment,
     CanteenMonthlyBonus,
+    CanteenSetting,
     CanteenTransaction,
     StudentCanteenAccount,
 )
@@ -27,10 +29,27 @@ class CanteenWorkflowTests(TestCase):
     def student_canteen_balance(self, profile):
         return Student.objects.filter(profile_id=profile.id).values_list("canteen_balance", flat=True).get()
 
+    def update_setting(self, section, values):
+        SystemSetting.objects.update_or_create(
+            key=f"ums.{section}",
+            defaults={"value": values},
+        )
+        invalidate_settings_cache()
+
     def setUp(self):
         self.client = APIClient()
-        self.center = Center.objects.create(code="CSAA", name="Centre for Student Affairs and Alumni")
-        self.unit = Unit.objects.create(code="CTN-ADMIN", name="Canteen Admin", center=self.center)
+        self.center = Center.objects.create(code="DIN", name="Dining Services")
+        self.unit = Unit.objects.create(code="DIN-OPS", name="Dining Operations", center=self.center)
+        SystemSetting.objects.update_or_create(
+            key="ums.roles",
+            defaults={
+                "value": {
+                    "caterer_default_center_code": self.center.code,
+                    "caterer_default_unit_code": self.unit.code,
+                }
+            },
+        )
+        invalidate_settings_cache()
 
         self.caterer_user = User.objects.create_user(username="caterer", password="pass")
         self.caterer = self.caterer_user.profile
@@ -49,7 +68,7 @@ class CanteenWorkflowTests(TestCase):
         self.student.student_detail.enrollment_status = "active"
         self.student.student_detail.save()
 
-    def test_caterer_account_is_created_under_csaa(self):
+    def test_caterer_account_is_created_under_configured_owner(self):
         serializer = RegisterSerializer(
             data={
                 "username": "new_caterer",
@@ -59,6 +78,8 @@ class CanteenWorkflowTests(TestCase):
                 "password": "StrongPass123!",
                 "role": Profile.ROLE_CATERER,
                 "ums_id": "CAT-100",
+                "center_id": self.center.id,
+                "unit_id": self.unit.id,
             }
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
@@ -67,14 +88,21 @@ class CanteenWorkflowTests(TestCase):
         self.assertEqual(user.profile.unit, self.unit)
         self.assertTrue(Caterer.objects.filter(profile=user.profile, caterer_id="CAT-100").exists())
 
-    def test_allowance_month_switches_at_first_day_8am(self):
-        zone = ZoneInfo("Asia/Kuala_Lumpur")
+    def test_allowance_month_uses_configured_timezone_and_boundary(self):
+        self.update_setting(
+            "canteen_policy",
+            {
+                "allowance_reset_timezone": "Asia/Singapore",
+                "allowance_reset_day": 1,
+                "allowance_reset_hour": 10,
+            },
+        )
         self.assertEqual(
-            allowance_month(datetime(2026, 7, 1, 7, 59, tzinfo=zone)).isoformat(),
+            allowance_month(datetime(2026, 7, 1, 1, 59, tzinfo=ZoneInfo("UTC"))).isoformat(),
             "2026-06-01",
         )
         self.assertEqual(
-            allowance_month(datetime(2026, 7, 1, 8, 0, tzinfo=zone)).isoformat(),
+            allowance_month(datetime(2026, 7, 1, 2, 0, tzinfo=ZoneInfo("UTC"))).isoformat(),
             "2026-07-01",
         )
 
@@ -92,6 +120,14 @@ class CanteenWorkflowTests(TestCase):
         self.assertEqual(account.balance, Decimal("47.50"))
         self.assertEqual(transaction.amount, Decimal("12.50"))
         self.assertEqual(self.student_canteen_balance(self.student), Decimal("47.50"))
+
+    def test_legacy_canteen_setting_is_allowance_fallback_until_policy_saved(self):
+        CanteenSetting.objects.update_or_create(
+            pk=1,
+            defaults={"monthly_allowance": Decimal("75.00")},
+        )
+
+        self.assertEqual(ensure_account(self.student).allowance_amount, Decimal("75.00"))
 
     def test_monthly_allowance_is_allocated_in_full_to_each_active_student(self):
         second_user = User.objects.create_user(username="student-2", password="pass")
@@ -114,6 +150,61 @@ class CanteenWorkflowTests(TestCase):
         self.assertEqual(self.student_canteen_balance(self.student), Decimal("50.00"))
         self.assertEqual(self.student_canteen_balance(second_student), Decimal("50.00"))
         self.assertEqual(dashboard_summary()["allocated"], "100.00")
+
+    def test_policy_controls_allowance_amount_status_and_profile_sync(self):
+        self.update_setting(
+            "canteen_policy",
+            {
+                "monthly_allowance_amount": "25.50",
+                "eligible_enrollment_statuses": "enrolled",
+                "sync_balance_to_student_profile": False,
+            },
+        )
+
+        with self.assertRaises(ValidationError):
+            ensure_account(self.student)
+
+        self.student.student_detail.enrollment_status = "enrolled"
+        self.student.student_detail.save(update_fields=["enrollment_status", "updated_at"])
+        account = ensure_account(self.student)
+
+        self.assertEqual(account.allowance_amount, Decimal("25.50"))
+        self.assertEqual(self.student_canteen_balance(self.student), Decimal("0.00"))
+
+    def test_policy_can_limit_students_by_program_code(self):
+        program = Program.objects.create(code="BBA", name="Business Administration")
+        self.student.student_detail.program = program
+        self.student.student_detail.save(update_fields=["program", "updated_at"])
+
+        self.update_setting("canteen_policy", {"eligible_program_codes": "ENG"})
+        with self.assertRaises(ValidationError):
+            ensure_account(self.student)
+
+        self.update_setting("canteen_policy", {"eligible_program_codes": "BBA"})
+        self.assertEqual(ensure_account(self.student).allowance_amount, Decimal("50.00"))
+
+    def test_disabled_canteen_module_blocks_operations_without_dashboard_side_effect(self):
+        self.update_setting("dashboard", {"enable_canteen": False})
+        self.client.force_authenticate(user=self.caterer_user)
+
+        with self.assertRaises(ValidationError):
+            ensure_account(self.student)
+        response = self.client.get("/canteen/student", {"student_id": "STD-100"})
+        self.assertEqual(response.status_code, 404)
+
+        accountant_user = User.objects.create_user(username="accountant-disabled", password="pass")
+        accountant = accountant_user.profile
+        accountant.role = Profile.ROLE_ACCOUNTANT
+        accountant.save(update_fields=["role", "updated_at"])
+        self.client.force_authenticate(user=accountant_user)
+        response = self.client.get("/finance/canteen")
+        self.assertEqual(response.status_code, 404)
+
+        self.client.force_authenticate(user=self.student_user)
+        response = self.client.get("/student/dashboard")
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertIsNone(response.json()["canteen_account"])
+        self.assertEqual(StudentCanteenAccount.objects.count(), 0)
 
     def test_inactive_student_statuses_are_ineligible(self):
         for enrollment_status in ("internship", "terminated", "graduated", "dropout"):
@@ -159,7 +250,7 @@ class CanteenWorkflowTests(TestCase):
     def test_caterer_cannot_add_student_balance(self):
         self.client.force_authenticate(user=self.caterer_user)
         response = self.client.post(
-            "/admin/canteen",
+            "/finance/canteen",
             {"student_id": "STD-100", "amount": "20.00", "reason": "Not allowed"},
             format="json",
         )
@@ -185,7 +276,7 @@ class CanteenWorkflowTests(TestCase):
 
         account = ensure_account(self.student)
         response = self.client.patch(
-            "/admin/canteen",
+            "/finance/canteen",
             {"monthly_allowance": "55.00"},
             format="json",
         )

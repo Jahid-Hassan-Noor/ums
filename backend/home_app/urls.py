@@ -27,6 +27,7 @@ urlpatterns = [
     path("news/<slug:slug>", public_view(PublicNewsDetail)),
     path("notifications", PublicNotifications.as_view()),
     path("official-links", public_view(PublicOfficialLinks)),
+    path("pages/navigation", public_view(PublicPageNavigation)),
     path("pages", public_view(PublicPageDetail)),
     path("pages/<path:route_path>", public_view(PublicPageDetail)),
     path("ums-overview", public_view(PublicUmsOverview)),

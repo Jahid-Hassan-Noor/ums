@@ -156,6 +156,10 @@ class RoutePermissionPolicyTests(SimpleTestCase):
             return AllowAny
         if module.startswith("chatbot_app."):
             return AllowAny
+        if module == "core.media_access":
+            return AllowAny
+        if module == "drf_spectacular.views":
+            return IsAdminRole
         if module.startswith("notifications_package.views"):
             return IsActiveUmsUser
         if module.startswith("admin_app.views."):

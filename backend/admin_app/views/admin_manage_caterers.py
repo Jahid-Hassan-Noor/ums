@@ -1,8 +1,10 @@
+from django.core.exceptions import ValidationError
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from admin_app import models
+from admin_app.role_config import resolve_role_ownership_from_payload
 from auth_app.permissions import IsAdminRole
 from caterer_app.models import Caterer
 
@@ -30,8 +32,10 @@ def _caterer_rows():
                 "staff_id": detail.caterer_id if detail else "",
                 "designation": detail.designation if detail else "",
                 "phone": profile.phone,
+                "school_name": profile.school.name if profile.school_id else "",
                 "center_name": detail.center.name if detail and detail.center_id else "",
                 "unit_name": detail.unit.name if detail and detail.unit_id else "",
+                "department_name": detail.department.name if detail and detail.department_id else "",
                 "canteen_location": detail.canteen_location if detail else "",
                 "is_active": bool(profile.is_active and profile.user.is_active),
             }
@@ -64,14 +68,22 @@ class AdminManageCaterers(APIView):
         if not profile:
             return Response({"detail": "Caterer not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        center = models.Center.objects.filter(code="CSAA", is_active=True).first()
-        unit = models.Unit.objects.filter(code="CTN-ADMIN", is_active=True).first()
-        if not center or not unit:
+        try:
+            ownership = resolve_role_ownership_from_payload(
+                models.Profile.ROLE_CATERER,
+                request.data,
+                current_profile=profile,
+            )
+        except ValidationError as error:
             return Response(
-                {"detail": "The CSAA centre and CTN-ADMIN unit must exist."},
+                getattr(error, "message_dict", {"detail": str(error)}),
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        profile.school = ownership["school"]
+        profile.center = ownership["center"]
+        profile.unit = ownership["unit"]
+        profile.department = ownership["department"]
         if "phone" in request.data:
             profile.phone = str(request.data.get("phone") or "").strip()
         if "is_active" in request.data:
@@ -81,10 +93,10 @@ class AdminManageCaterers(APIView):
         profile.save()
 
         detail, _created = Caterer.objects.get_or_create(profile=profile)
-        detail.center = center
-        detail.unit = unit
-        detail.school = None
-        detail.department = unit.department
+        detail.school = profile.school
+        detail.center = profile.center
+        detail.unit = profile.unit
+        detail.department = profile.department
         if "staff_id" in request.data:
             detail.caterer_id = str(request.data.get("staff_id") or "").strip()
         if "designation" in request.data:

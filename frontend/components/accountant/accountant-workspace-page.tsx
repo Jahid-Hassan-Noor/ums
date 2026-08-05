@@ -9,12 +9,16 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
+import { formatUmsMoney } from "@/lib/ums-settings"
 
 type View = "dashboard" | "gateway" | "plans" | "subscriptions"
 
 type Gateway = {
   provider: string
+  provider_label: string
+  provider_options: Array<{ value: string; label: string }>
   mode: string
   merchant_name: string
   api_base_url: string
@@ -25,6 +29,8 @@ type Gateway = {
   callback_token_present: boolean
   callback_token_preview: string
   is_active: boolean
+  requires_checkout_configuration: boolean
+  is_manual: boolean
 }
 
 type Plan = {
@@ -33,6 +39,7 @@ type Plan = {
   name: string
   description: string
   price: string
+  currency?: string
   duration_days: number
   is_active: boolean
   available_to_all_roles: boolean
@@ -56,6 +63,7 @@ type Subscription = {
   }
   status: string
   amount: string
+  currency?: string
   starts_at: string | null
   ends_at: string | null
   card_url: string
@@ -87,7 +95,15 @@ type PlanForm = {
 }
 
 const emptyGateway: Gateway = {
-  provider: "toyyibpay",
+  provider: "manual",
+  provider_label: "Manual / offline payments",
+  provider_options: [
+    { value: "manual", label: "Manual / offline payments" },
+    { value: "toyyibpay", label: "External bill API" },
+    { value: "custom", label: "Custom hosted checkout endpoint" },
+    { value: "stripe", label: "Stripe-compatible hosted checkout" },
+    { value: "other", label: "Other hosted checkout provider" },
+  ],
   mode: "sandbox",
   merchant_name: "",
   api_base_url: "",
@@ -98,6 +114,8 @@ const emptyGateway: Gateway = {
   callback_token_present: false,
   callback_token_preview: "",
   is_active: false,
+  requires_checkout_configuration: false,
+  is_manual: true,
 }
 
 const emptyPlanForm: PlanForm = {
@@ -109,10 +127,6 @@ const emptyPlanForm: PlanForm = {
   is_active: true,
   available_to_all_roles: true,
   available_roles: [],
-}
-
-function money(value: string) {
-  return `RM ${Number(value || 0).toFixed(2)}`
 }
 
 function formatDate(value: string | null) {
@@ -135,6 +149,7 @@ function viewTitle(view: View) {
 }
 
 export function AccountantWorkspacePage({ view }: { view: View }) {
+  const settings = usePublicUmsSettings()
   const [summary, setSummary] = useState<DashboardResponse["summary"] | null>(null)
   const [gateway, setGateway] = useState<Gateway>(emptyGateway)
   const [secretKey, setSecretKey] = useState("")
@@ -311,7 +326,7 @@ export function AccountantWorkspacePage({ view }: { view: View }) {
             <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl">
               {view === "gateway" ? <Settings className="size-6" /> : <WalletCards className="size-6" />} {viewTitle(view)}
             </h1>
-            <p className="mt-2 text-sm text-muted-foreground">Manage finance subscriptions, DuitNow settings, and payment records.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Manage finance subscriptions, payment settings, and payment records.</p>
           </div>
           <Button variant="outline" disabled={loading} onClick={refresh}>{loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Refresh</Button>
         </section>
@@ -336,11 +351,11 @@ export function AccountantWorkspacePage({ view }: { view: View }) {
         {view === "gateway" ? (
           <Card>
             <CardHeader>
-              <CardTitle>DuitNow Merchant API</CardTitle>
+              <CardTitle>Payment Gateway</CardTitle>
               <CardDescription>{gateway.secret_key_present ? `Secret saved ${gateway.secret_key_preview}` : "No secret saved"}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2"><Label htmlFor="provider">Provider</Label><select id="provider" value={gateway.provider} onChange={(event) => updateGateway("provider", event.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="toyyibpay">ToyyibPay-compatible</option><option value="custom">Custom DuitNow endpoint</option></select></div>
+              <div className="space-y-2"><Label htmlFor="provider">Provider</Label><select id="provider" value={gateway.provider} onChange={(event) => updateGateway("provider", event.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">{(gateway.provider_options.length ? gateway.provider_options : emptyGateway.provider_options).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
               <div className="space-y-2"><Label htmlFor="mode">Mode</Label><select id="mode" value={gateway.mode} onChange={(event) => updateGateway("mode", event.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="sandbox">Sandbox</option><option value="production">Production</option></select></div>
               <div className="space-y-2"><Label htmlFor="merchant_name">Merchant Name</Label><Input id="merchant_name" value={gateway.merchant_name} onChange={(event) => updateGateway("merchant_name", event.target.value)} /></div>
               <div className="space-y-2"><Label htmlFor="category_code">Category Code</Label><Input id="category_code" value={gateway.category_code} onChange={(event) => updateGateway("category_code", event.target.value)} /></div>
@@ -348,7 +363,7 @@ export function AccountantWorkspacePage({ view }: { view: View }) {
               <div className="space-y-2 md:col-span-2"><Label htmlFor="checkout_base_url">Checkout Base URL</Label><Input id="checkout_base_url" value={gateway.checkout_base_url} onChange={(event) => updateGateway("checkout_base_url", event.target.value)} /></div>
               <div className="space-y-2"><Label htmlFor="secret_key">Secret Key</Label><Input id="secret_key" type="password" placeholder={gateway.secret_key_present ? gateway.secret_key_preview : ""} value={secretKey} onChange={(event) => setSecretKey(event.target.value)} /></div>
               <div className="space-y-2"><Label htmlFor="callback_token">Callback Token</Label><Input id="callback_token" type="password" placeholder={gateway.callback_token_present ? gateway.callback_token_preview : ""} value={callbackToken} onChange={(event) => setCallbackToken(event.target.value)} /></div>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gateway.is_active} onChange={(event) => updateGateway("is_active", event.target.checked)} /> Active gateway</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gateway.is_active} onChange={(event) => updateGateway("is_active", event.target.checked)} /> Enable external checkout</label>
               <Button onClick={() => void saveGateway()} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Save Gateway</Button>
             </CardContent>
           </Card>
@@ -432,7 +447,7 @@ export function AccountantWorkspacePage({ view }: { view: View }) {
                 <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <p className="font-medium">{subscription.subscriber.name} · {subscription.plan.name}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{subscription.subscriber.role} · {subscription.subscriber.identifier} · {subscription.status} · {formatDate(subscription.starts_at)} to {formatDate(subscription.ends_at)} · {money(subscription.amount)}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{subscription.subscriber.role} · {subscription.subscriber.identifier} · {subscription.status} · {formatDate(subscription.starts_at)} to {formatDate(subscription.ends_at)} · {formatUmsMoney(subscription.amount, settings, subscription.currency)}</p>
                   </div>
                   {subscription.status === "active" ? (
                     <Button variant="outline" render={<a href={`/ums-auth/backend${subscription.card_url}`} target="_blank" rel="noreferrer" />}>

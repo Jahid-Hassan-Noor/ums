@@ -8,9 +8,12 @@ import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
+import { formatUmsMoney } from "@/lib/ums-settings"
 
 type DashboardData = {
+  currency?: string
   total_students: number
   students_with_balance: number
   total_outstanding: string
@@ -25,7 +28,7 @@ type DashboardData = {
 }
 
 type StudentRef = { id: number; name: string; email: string; identifier: string }
-type StudentRow = { student: StudentRef; balance: string; active_holds: number; last_activity: string | null }
+type StudentRow = { student: StudentRef; balance: string; currency?: string; active_holds: number; last_activity: string | null }
 
 type StudentsPage = {
   students: StudentRow[]
@@ -35,10 +38,9 @@ type StudentsPage = {
   total_pages: number
 }
 
-function money(value: string) { return `RM ${Number(value || 0).toFixed(2)}` }
 function formatDate(value: string | null) { return value ? new Date(value).toLocaleDateString() : "—" }
 
-function BarChart({ data, maxWidth }: { data: Array<{ label: string; value: number; color: string }>; maxWidth: number }) {
+function BarChart({ data }: { data: Array<{ label: string; value: number; color: string }> }) {
   const maxVal = Math.max(...data.map((d) => d.value), 1)
   return (
     <div className="space-y-2">
@@ -72,6 +74,7 @@ function DonutStat({ label, value, color }: { label: string; value: number | str
 
 export function AccountantLedgerDashboard() {
   const router = useRouter()
+  const settings = usePublicUmsSettings()
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [studentsData, setStudentsData] = useState<StudentsPage | null>(null)
   const [search, setSearch] = useState("")
@@ -99,7 +102,12 @@ export function AccountantLedgerDashboard() {
       .finally(() => setLoading(false))
   }, [loadData])
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refresh()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [refresh])
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -141,10 +149,10 @@ export function AccountantLedgerDashboard() {
           <>
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                { title: "Total Outstanding", value: dashboard.total_outstanding, subtitle: `${dashboard.students_with_balance} students with balance`, color: "text-red-600" },
+                { title: "Total Outstanding", value: formatUmsMoney(dashboard.total_outstanding, settings, dashboard.currency), subtitle: `${dashboard.students_with_balance} students with balance`, color: "text-red-600" },
                 { title: "Active Holds", value: String(dashboard.active_holds), subtitle: "Finance holds in effect", color: "text-amber-600" },
-                { title: "Total Charges", value: dashboard.total_charges_amount, subtitle: `${dashboard.total_charges} charges posted`, color: "text-blue-600" },
-                { title: "Revenue Collected", value: dashboard.total_payments, subtitle: `${dashboard.total_entries} ledger entries`, color: "text-emerald-600" },
+                { title: "Total Charges", value: formatUmsMoney(dashboard.total_charges_amount, settings, dashboard.currency), subtitle: `${dashboard.total_charges} charges posted`, color: "text-blue-600" },
+                { title: "Revenue Collected", value: formatUmsMoney(dashboard.total_payments, settings, dashboard.currency), subtitle: `${dashboard.total_entries} ledger entries`, color: "text-emerald-600" },
               ].map((card) => (
                 <Card key={card.title}>
                   <CardHeader className="pb-2"><CardDescription>{card.title}</CardDescription><CardTitle className={`text-2xl ${card.color}`}>{card.value}</CardTitle></CardHeader>
@@ -158,7 +166,7 @@ export function AccountantLedgerDashboard() {
                 <CardHeader><CardDescription>Revenue Overview</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
                   {statusPieData.map((item) => (
-                    <DonutStat key={item.label} label={item.label} value={`RM ${(item.value).toFixed(2)}`} color={item.color} />
+                    <DonutStat key={item.label} label={item.label} value={formatUmsMoney(item.value, settings)} color={item.color} />
                   ))}
                   <div className="border-t border-border pt-3">
                     <DonutStat label="Overdue Charges" value={String(dashboard.overdue_charges)} color="#f97316" />
@@ -171,7 +179,7 @@ export function AccountantLedgerDashboard() {
                 <Card className="xl:col-span-2">
                   <CardHeader><CardDescription>Charges by Category</CardDescription></CardHeader>
                   <CardContent>
-                    <BarChart data={categoryChartData} maxWidth={400} />
+                    <BarChart data={categoryChartData} />
                   </CardContent>
                 </Card>
               ) : (
@@ -226,7 +234,7 @@ export function AccountantLedgerDashboard() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium">{row.student.name}</span>
-                    <span className="text-muted-foreground">{money(row.balance)}</span>
+                    <span className="text-muted-foreground">{formatUmsMoney(row.balance, settings, row.currency)}</span>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
                     <span>{row.student.identifier}</span>

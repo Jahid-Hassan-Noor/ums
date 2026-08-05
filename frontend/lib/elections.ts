@@ -1,10 +1,13 @@
-export type ElectionType = "src" | "school_committee"
+export type ElectionType = string
 export type ElectionStatus = "draft" | "upcoming" | "active" | "closed" | "published"
-export type ElectionCategory = "general" | "school"
+export type ElectionCategory = string
+export type ElectionConstituencyType = "university" | "school" | "center" | "department" | "program" | "cohort"
 
 export type ElectionChoice = {
   value: string
   label: string
+  scope_type?: string
+  scope_id?: number | null
 }
 
 export type ElectionSchool = {
@@ -22,6 +25,10 @@ export type ElectionStudent = {
   school: number | null
   school_code: string
   school_name: string
+  center: number | null
+  department: number | null
+  program: number | null
+  current_year: number | null
 }
 
 export type ElectionCandidate = {
@@ -47,6 +54,7 @@ export type ElectionCandidate = {
 export type ElectionResultGroup = {
   label: string
   category: ElectionCategory
+  category_label?: string
   total_votes: number
   candidates: ElectionCandidate[]
 }
@@ -67,18 +75,44 @@ export type SchoolSeat = {
   seat_count: number
 }
 
+export type ElectionSeatRule = {
+  key: ElectionCategory
+  label: string
+  selection_count: number
+  scope_type: string
+  scope_id: number | null
+}
+
+export type ElectionConstituencyDetail = {
+  type: ElectionConstituencyType | string
+  id: number | null
+  code: string
+  name: string
+  label: string
+}
+
 export type ElectionRecord = {
   id: number
   title: string
   description: string
   election_type: ElectionType
   election_type_label: string
+  constituency_type: ElectionConstituencyType | string
+  constituency_type_label: string
+  constituency_id: number | null
+  constituency_label: string
+  constituency_detail: ElectionConstituencyDetail | null
   school: number | null
   school_detail: ElectionSchool | null
   starts_at: string | null
   ends_at: string | null
   general_selection_count: number
   school_selection_count: number
+  seat_rules: ElectionSeatRule[]
+  category_options: ElectionChoice[]
+  nomination_rules: Record<string, unknown>
+  voter_eligibility: Record<string, unknown>
+  result_publication_rules: Record<string, unknown>
   school_seats: SchoolSeat[]
   status: ElectionStatus
   computed_status: ElectionStatus

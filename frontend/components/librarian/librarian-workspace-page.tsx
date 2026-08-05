@@ -9,6 +9,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { apiFetch } from "@/lib/auth"
+import {
+  DEFAULT_LIBRARY_POLICY,
+  LIBRARY_ASSET_LABELS,
+  LIBRARY_ASSET_TYPES,
+  libraryDurationLabel,
+  libraryServiceEnabled,
+  normalizeLibraryPolicy,
+  type LibraryAssetType,
+  type LibraryPolicy,
+} from "@/lib/library-policy"
 
 type Shelf = { id: number; code: string; name: string; location: string }
 type Book = { id: number; title: string; author: string; isbn: string; category: string; total_copies: number; available_copies: number; is_active: boolean }
@@ -22,6 +32,64 @@ type Loan = { id: number; student: number; student_detail: Student; book_copy: n
 type BorrowingLimit = { id: number; student: number | null; student_detail: Student | null; max_borrow_at_a_time: number; max_keep_at_a_time: number; is_default: boolean }
 
 const inputClass = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+const circulationAssetTypes = ["book", "laptop", "room"] as const
+
+function policyDraftFromSettings(policy: LibraryPolicy) {
+  return {
+    book_max_borrow_at_a_time: String(policy.limits.book.max_borrow_at_a_time),
+    book_max_keep_at_a_time: String(policy.limits.book.max_keep_at_a_time),
+    laptop_max_borrow_at_a_time: String(policy.limits.laptop.max_borrow_at_a_time),
+    laptop_max_keep_at_a_time: String(policy.limits.laptop.max_keep_at_a_time),
+    room_max_borrow_at_a_time: String(policy.limits.room.max_borrow_at_a_time),
+    room_max_keep_at_a_time: String(policy.limits.room.max_keep_at_a_time),
+    other_asset_max_borrow_at_a_time: String(policy.limits.other_asset.max_borrow_at_a_time),
+    other_asset_max_keep_at_a_time: String(policy.limits.other_asset.max_keep_at_a_time),
+    book_loan_period_days: String(policy.loan_periods.book.value),
+    laptop_loan_period_days: String(policy.loan_periods.laptop.value),
+    room_loan_period_hours: String(policy.loan_periods.room.value),
+    other_asset_loan_period_days: String(policy.loan_periods.other_asset.value),
+    book_max_renewals: String(policy.renewal_rules.book.max_renewals),
+    laptop_max_renewals: String(policy.renewal_rules.laptop.max_renewals),
+    room_max_renewals: String(policy.renewal_rules.room.max_renewals),
+    other_asset_max_renewals: String(policy.renewal_rules.other_asset.max_renewals),
+    book_renewal_period_days: String(policy.renewal_rules.book.period.value),
+    laptop_renewal_period_days: String(policy.renewal_rules.laptop.period.value),
+    room_renewal_period_hours: String(policy.renewal_rules.room.period.value),
+    other_asset_renewal_period_days: String(policy.renewal_rules.other_asset.period.value),
+    book_daily_fine_amount: policy.fine_rules.book.daily_rate,
+    laptop_daily_fine_amount: policy.fine_rules.laptop.daily_rate,
+    room_daily_fine_amount: policy.fine_rules.room.daily_rate,
+    other_asset_daily_fine_amount: policy.fine_rules.other_asset.daily_rate,
+  }
+}
+
+function serviceSettingKey(assetType: LibraryAssetType) {
+  if (assetType === "book") return "books_enabled"
+  if (assetType === "laptop") return "laptops_enabled"
+  if (assetType === "room") return "rooms_enabled"
+  return "other_assets_enabled"
+}
+
+function requestSettingKey(assetType: LibraryAssetType) {
+  if (assetType === "book") return "book_requests_enabled"
+  if (assetType === "laptop") return "laptop_requests_enabled"
+  if (assetType === "room") return "room_reservations_enabled"
+  return "other_asset_requests_enabled"
+}
+
+function policyKeysForAsset(assetType: LibraryAssetType) {
+  const prefix = assetType
+  const periodSuffix = assetType === "room" ? "hours" : "days"
+  return {
+    maxBorrow: `${prefix}_max_borrow_at_a_time`,
+    maxKeep: `${prefix}_max_keep_at_a_time`,
+    loanPeriod: `${prefix}_loan_period_${periodSuffix}`,
+    maxRenewals: `${prefix}_max_renewals`,
+    renewalPeriod: `${prefix}_renewal_period_${periodSuffix}`,
+    dailyFine: `${prefix}_daily_fine_amount`,
+    periodUnit: periodSuffix,
+  }
+}
 
 export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "rooms" | "circulation" | "settings" }) {
   const [books, setBooks] = useState<Book[]>([])
@@ -42,10 +110,11 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
   const [copyForm, setCopyForm] = useState({ book_id: "", accession_number: "", shelf: "", shelf_position: "" })
   const [laptopForm, setLaptopForm] = useState({ asset_tag: "", brand: "", model: "", specifications: "", storage_location: "" })
   const [roomForm, setRoomForm] = useState({ code: "", name: "", location: "", capacity: "4", facilities: "", key_reference: "", default_duration_minutes: "120" })
-  const [loanForm, setLoanForm] = useState({ request_id: "", student_id: "", asset_type: "book", book_copy_id: "", laptop_id: "", room_id: "", due_at: "", notes: "" })
+  const [loanForm, setLoanForm] = useState<{ request_id: string; student_id: string; asset_type: "book" | "laptop" | "room"; book_copy_id: string; laptop_id: string; room_id: string; due_at: string; notes: string }>({ request_id: "", student_id: "", asset_type: "book", book_copy_id: "", laptop_id: "", room_id: "", due_at: "", notes: "" })
   const [borrowingLimits, setBorrowingLimits] = useState<BorrowingLimit[]>([])
   const [limitForm, setLimitForm] = useState({ student_id: "", max_borrow_at_a_time: "3", max_keep_at_a_time: "5", is_default: false })
-  const [librarySettings, setLibrarySettings] = useState({ books_enabled: true, laptops_enabled: true, rooms_enabled: true })
+  const [librarySettings, setLibrarySettings] = useState<LibraryPolicy>(DEFAULT_LIBRARY_POLICY)
+  const [policyDraft, setPolicyDraft] = useState<Record<string, string>>(policyDraftFromSettings(DEFAULT_LIBRARY_POLICY))
   const [bookRequestNotes, setBookRequestNotes] = useState<Record<number, string>>({})
   const [bookRequestCatalogIds, setBookRequestCatalogIds] = useState<Record<number, string>>({})
 
@@ -62,7 +131,7 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
       apiFetch<{ requests: BookAcquisitionRequest[] }>("/librarian/book-requests"),
       apiFetch<{ loans: Loan[] }>("/librarian/loans"),
       apiFetch<{ limits: BorrowingLimit[] }>("/librarian/borrowing-limits"),
-      apiFetch<{ books_enabled: boolean; laptops_enabled: boolean; rooms_enabled: boolean }>("/librarian/library-settings"),
+      apiFetch<LibraryPolicy>("/librarian/library-settings"),
     ])
     setBooks(bookData.books ?? [])
     setCopies(copyData.copies ?? [])
@@ -74,7 +143,9 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
     setBookRequests(bookRequestData.requests ?? [])
     setLoans(loanData.loans ?? [])
     setBorrowingLimits(limitData.limits ?? [])
-    setLibrarySettings(settingsData ?? { books_enabled: true, laptops_enabled: true, rooms_enabled: true })
+    const normalizedSettings = normalizeLibraryPolicy(settingsData)
+    setLibrarySettings(normalizedSettings)
+    setPolicyDraft(policyDraftFromSettings(normalizedSettings))
   }
 
   useEffect(() => {
@@ -86,15 +157,30 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
     return () => window.clearTimeout(timer)
   }, [])
 
-  const availableCopies = copies.filter((copy) => copy.status === "available")
-  const availableLaptops = laptops.filter((laptop) => laptop.status === "available")
-  const availableRooms = rooms.filter((room) => room.availability_status === "available")
+  const availableCopies = libraryServiceEnabled(librarySettings, "book")
+    ? copies.filter((copy) => copy.status === "available")
+    : []
+  const availableLaptops = libraryServiceEnabled(librarySettings, "laptop")
+    ? laptops.filter((laptop) => laptop.status === "available")
+    : []
+  const availableRooms = libraryServiceEnabled(librarySettings, "room")
+    ? rooms.filter((room) => room.availability_status === "available")
+    : []
   const activeLoans = loans.filter((loan) => loan.status === "active")
   const pendingRequests = requests.filter((request) => request.status === "pending")
+  const visiblePendingRequests = pendingRequests.filter((request) =>
+    libraryServiceEnabled(librarySettings, request.asset_type)
+  )
   const pendingBookRequests = bookRequests.filter((request) => request.status === "pending")
   const bookMap = useMemo(() => new Map(books.map((book) => [book.id, book])), [books])
   const defaultLimit = borrowingLimits.find((l) => l.is_default)
   const studentLimits = borrowingLimits.filter((l) => !l.is_default && l.student_detail)
+  const modeAssetType =
+    mode === "books" ? "book" : mode === "laptops" ? "laptop" : mode === "rooms" ? "room" : null
+  const modeServiceDisabled = modeAssetType ? !libraryServiceEnabled(librarySettings, modeAssetType) : false
+  const enabledCirculationAssetTypes = circulationAssetTypes.filter((assetType) =>
+    libraryServiceEnabled(librarySettings, assetType)
+  )
 
   function activeBookLoansForStudent(studentId: number): number {
     return activeLoans.filter((loan) => loan.student === studentId && loan.book_copy !== null).length
@@ -102,7 +188,20 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
 
   function getLimitForStudent(studentId: number) {
     const personal = studentLimits.find((l) => l.student === studentId)
-    return personal ?? defaultLimit ?? { max_borrow_at_a_time: 3, max_keep_at_a_time: 5 }
+    return personal ?? defaultLimit ?? librarySettings.limits.book
+  }
+
+  function disabledServiceNotice(label: string) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+        <p className="font-semibold text-amber-800">{label} Service Disabled</p>
+        <p className="mt-1 text-amber-700">This institution has turned off this library service.</p>
+      </div>
+    )
+  }
+
+  function updatePolicyDraft(key: string, value: string) {
+    setPolicyDraft((current) => ({ ...current, [key]: value }))
   }
 
   async function perform(action: () => Promise<unknown>, message: string) {
@@ -192,8 +291,9 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
         {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
         {success ? <p className="flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700"><CheckCircle2 className="size-4" />{success}</p> : null}
         {loading ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : null}
+        {modeServiceDisabled && !loading && modeAssetType ? disabledServiceNotice(LIBRARY_ASSET_LABELS[modeAssetType]) : null}
 
-        {mode === "books" && !loading ? (
+        {mode === "books" && !loading && !modeServiceDisabled ? (
           <>
             <section className="grid gap-4 xl:grid-cols-3">
               <Card>
@@ -372,7 +472,7 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
           </>
         ) : null}
 
-        {mode === "laptops" && !loading ? (
+        {mode === "laptops" && !loading && !modeServiceDisabled ? (
           <section className="grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
             <Card>
               <CardHeader><CardTitle>Add Laptop</CardTitle><CardDescription>Register a university laptop for borrowing.</CardDescription></CardHeader>
@@ -410,7 +510,7 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
           </section>
         ) : null}
 
-        {mode === "rooms" && !loading ? (
+        {mode === "rooms" && !loading && !modeServiceDisabled ? (
           <section className="grid gap-4 xl:grid-cols-[24rem_minmax(0,1fr)]">
             <Card>
               <CardHeader>
@@ -468,9 +568,9 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
           <>
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
               <Card>
-                <CardHeader><CardTitle>Pending Student Requests</CardTitle><CardDescription>{pendingRequests.length} requests awaiting action.</CardDescription></CardHeader>
+                <CardHeader><CardTitle>Pending Student Requests</CardTitle><CardDescription>{visiblePendingRequests.length} requests awaiting action.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
-                  {pendingRequests.map((request) => (
+                  {visiblePendingRequests.map((request) => (
                     <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
                       <div>
                         <p className="font-semibold">{request.student_detail.name}</p>
@@ -482,7 +582,7 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
                       </div>
                     </div>
                   ))}
-                  {!pendingRequests.length ? <p className="text-sm text-muted-foreground">No pending requests.</p> : null}
+                  {!visiblePendingRequests.length ? <p className="text-sm text-muted-foreground">No pending requests.</p> : null}
                 </CardContent>
               </Card>
               <Card>
@@ -507,13 +607,15 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
                     <select className={inputClass} value={loanForm.student_id} onChange={(e) => setLoanForm({ ...loanForm, student_id: e.target.value })} required>
                       <option value="">Select student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name} ({student.student_id || student.username})</option>)}
                     </select>
-                    <select className={inputClass} value={loanForm.asset_type} onChange={(e) => setLoanForm({ ...loanForm, asset_type: e.target.value, book_copy_id: "", laptop_id: "", room_id: "" })}>
-                      <option value="book">Book</option><option value="laptop">Laptop</option><option value="room">Discussion room</option>
+                    <select className={inputClass} value={loanForm.asset_type} onChange={(e) => setLoanForm({ ...loanForm, asset_type: e.target.value as "book" | "laptop" | "room", book_copy_id: "", laptop_id: "", room_id: "" })}>
+                      {enabledCirculationAssetTypes.map((assetType) => (
+                        <option key={assetType} value={assetType}>{LIBRARY_ASSET_LABELS[assetType]}</option>
+                      ))}
                     </select>
                     {loanForm.asset_type === "book" ? (
                       <select className={inputClass} value={loanForm.book_copy_id} onChange={(e) => setLoanForm({ ...loanForm, book_copy_id: e.target.value })} required>
                         <option value="">Select available copy</option>{availableCopies.filter((copy) => {
-                          const request = pendingRequests.find((row) => String(row.id) === loanForm.request_id)
+                          const request = visiblePendingRequests.find((row) => String(row.id) === loanForm.request_id)
                           return !request?.book || copy.book === request.book
                         }).map((copy) => <option key={copy.id} value={copy.id}>{bookMap.get(copy.book)?.title} / {copy.accession_number}</option>)}
                       </select>
@@ -524,14 +626,14 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
                     ) : (
                       <select className={inputClass} value={loanForm.room_id} onChange={(e) => setLoanForm({ ...loanForm, room_id: e.target.value })} required>
                         <option value="">Select reserved or available room</option>{rooms.filter((room) => {
-                          const request = pendingRequests.find((row) => String(row.id) === loanForm.request_id)
+                          const request = visiblePendingRequests.find((row) => String(row.id) === loanForm.request_id)
                           return room.status === "available" && (room.availability_status === "available" || room.id === request?.room)
                         }).map((room) => <option key={room.id} value={room.id}>{room.code} / {room.name} / Key {room.key_reference || "not labelled"}</option>)}
                       </select>
                     )}
                     <div><Label>Due date and time</Label><Input type="datetime-local" value={loanForm.due_at} onChange={(e) => setLoanForm({ ...loanForm, due_at: e.target.value })} required /></div>
                     <Input placeholder="Loan notes" value={loanForm.notes} onChange={(e) => setLoanForm({ ...loanForm, notes: e.target.value })} />
-                    <Button type="submit" disabled={saving}><RotateCcw className="size-4" /> Assign Loan</Button>
+                    <Button type="submit" disabled={saving || !enabledCirculationAssetTypes.length}><RotateCcw className="size-4" /> Assign Loan</Button>
                   </form>
                 </CardContent>
               </Card>
@@ -551,7 +653,7 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
             </Card>
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
               <Card>
-                <CardHeader><CardTitle>Borrowing Limits</CardTitle><CardDescription>Default and per-student limits for books. Laptops and rooms are always limited to 1.</CardDescription></CardHeader>
+                <CardHeader><CardTitle>Borrowing Limits</CardTitle><CardDescription>Default and per-student limits for books. Laptop and room limits follow library policy.</CardDescription></CardHeader>
                 <CardContent className="space-y-3">
                   {defaultLimit ? (
                     <div className="rounded-lg border p-4">
@@ -623,97 +725,113 @@ export function LibrarianWorkspacePage({ mode }: { mode: "books" | "laptops" | "
         ) : null}
 
         {mode === "settings" && !loading ? (
-          <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Card>
-              <CardHeader>
-                <CardTitle>Book Borrowing</CardTitle>
-                <CardDescription>Control whether students can borrow books. When disabled, the books page stays visible but students cannot submit borrow requests.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-semibold">Book Borrowing Service</p>
-                    <p className="text-sm text-muted-foreground">
-                      Currently <span className={librarySettings.books_enabled ? "text-emerald-600" : "text-red-600"}>{librarySettings.books_enabled ? "enabled" : "disabled"}</span>
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant={librarySettings.books_enabled ? "outline" : "default"}
-                    disabled={saving}
-                    onClick={() => void perform(
-                      () => apiFetch("/librarian/library-settings", {
-                        method: "PATCH",
-                        body: JSON.stringify({ books_enabled: !librarySettings.books_enabled }),
-                      }).then(() => setLibrarySettings(prev => ({ ...prev, books_enabled: !prev.books_enabled }))),
-                      librarySettings.books_enabled ? "Book borrowing disabled." : "Book borrowing enabled."
-                    )}
-                  >
-                    {librarySettings.books_enabled ? "Disable" : "Enable"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Laptop Borrowing</CardTitle>
-                <CardDescription>Control whether students can borrow laptops. When disabled, the laptops option disappears from student and librarian sidebars.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-semibold">Laptop Borrowing Service</p>
-                    <p className="text-sm text-muted-foreground">
-                      Currently <span className={librarySettings.laptops_enabled ? "text-emerald-600" : "text-red-600"}>{librarySettings.laptops_enabled ? "enabled" : "disabled"}</span>
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant={librarySettings.laptops_enabled ? "outline" : "default"}
-                    disabled={saving}
-                    onClick={() => void perform(
-                      () => apiFetch("/librarian/library-settings", {
-                        method: "PATCH",
-                        body: JSON.stringify({ laptops_enabled: !librarySettings.laptops_enabled }),
-                      }).then(() => setLibrarySettings(prev => ({ ...prev, laptops_enabled: !prev.laptops_enabled }))),
-                      librarySettings.laptops_enabled ? "Laptop borrowing disabled." : "Laptop borrowing enabled."
-                    )}
-                  >
-                    {librarySettings.laptops_enabled ? "Disable" : "Enable"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Discussion Room Booking</CardTitle>
-                <CardDescription>Control whether students can reserve discussion rooms. When disabled, the rooms option disappears from student and librarian sidebars.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-semibold">Discussion Room Booking Service</p>
-                    <p className="text-sm text-muted-foreground">
-                      Currently <span className={librarySettings.rooms_enabled ? "text-emerald-600" : "text-red-600"}>{librarySettings.rooms_enabled ? "enabled" : "disabled"}</span>
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant={librarySettings.rooms_enabled ? "outline" : "default"}
-                    disabled={saving}
-                    onClick={() => void perform(
-                      () => apiFetch("/librarian/library-settings", {
-                        method: "PATCH",
-                        body: JSON.stringify({ rooms_enabled: !librarySettings.rooms_enabled }),
-                      }).then(() => setLibrarySettings(prev => ({ ...prev, rooms_enabled: !prev.rooms_enabled }))),
-                      librarySettings.rooms_enabled ? "Room booking disabled." : "Room booking enabled."
-                    )}
-                  >
-                    {librarySettings.rooms_enabled ? "Disable" : "Enable"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          <section className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {LIBRARY_ASSET_TYPES.map((assetType) => {
+                const service = librarySettings.service_types.find((item) => item.key === assetType)
+                const serviceKey = serviceSettingKey(assetType)
+                const requestKey = requestSettingKey(assetType)
+                const enabled = libraryServiceEnabled(librarySettings, assetType)
+                const requestingEnabled = librarySettings.reservation_rules[assetType].enabled
+                return (
+                  <Card key={assetType}>
+                    <CardHeader>
+                      <CardTitle>{LIBRARY_ASSET_LABELS[assetType]}</CardTitle>
+                      <CardDescription>{service?.supported === false ? "Policy slot reserved for future generic assets." : "Control service visibility and student requests."}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="rounded-lg border p-4">
+                        <p className="font-semibold">Service</p>
+                        <p className="text-sm text-muted-foreground">
+                          Currently <span className={enabled ? "text-emerald-600" : "text-red-600"}>{enabled ? "enabled" : "disabled"}</span>
+                        </p>
+                        <Button
+                          className="mt-3"
+                          size="sm"
+                          variant={enabled ? "outline" : "default"}
+                          disabled={saving}
+                          onClick={() => void perform(
+                            () => apiFetch("/librarian/library-settings", {
+                              method: "PATCH",
+                              body: JSON.stringify({ [serviceKey]: !enabled }),
+                            }),
+                            enabled ? `${LIBRARY_ASSET_LABELS[assetType]} disabled.` : `${LIBRARY_ASSET_LABELS[assetType]} enabled.`
+                          )}
+                        >
+                          {enabled ? "Disable" : "Enable"}
+                        </Button>
+                      </div>
+                      <div className="rounded-lg border p-4">
+                        <p className="font-semibold">{assetType === "room" ? "Reservations" : "Requests"}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Currently <span className={requestingEnabled ? "text-emerald-600" : "text-red-600"}>{requestingEnabled ? "enabled" : "disabled"}</span>
+                        </p>
+                        <Button
+                          className="mt-3"
+                          size="sm"
+                          variant={requestingEnabled ? "outline" : "default"}
+                          disabled={saving || !enabled}
+                          onClick={() => void perform(
+                            () => apiFetch("/librarian/library-settings", {
+                              method: "PATCH",
+                              body: JSON.stringify({ [requestKey]: !requestingEnabled }),
+                            }),
+                            requestingEnabled ? "Student requests disabled." : "Student requests enabled."
+                          )}
+                        >
+                          {requestingEnabled ? "Disable" : "Enable"}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              {LIBRARY_ASSET_TYPES.map((assetType) => {
+                const keys = policyKeysForAsset(assetType)
+                return (
+                  <Card key={`policy-${assetType}`}>
+                    <CardHeader>
+                      <CardTitle>{LIBRARY_ASSET_LABELS[assetType]} Policy</CardTitle>
+                      <CardDescription>
+                        Loan period {libraryDurationLabel(librarySettings.loan_periods[assetType])}; fine {librarySettings.fine_rules[assetType].daily_rate} per overdue day.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <form className="space-y-3" onSubmit={(event) => {
+                        event.preventDefault()
+                        void perform(
+                          () => apiFetch("/librarian/library-settings", {
+                            method: "PATCH",
+                            body: JSON.stringify({
+                              [keys.maxBorrow]: Number(policyDraft[keys.maxBorrow]),
+                              [keys.maxKeep]: Number(policyDraft[keys.maxKeep]),
+                              [keys.loanPeriod]: Number(policyDraft[keys.loanPeriod]),
+                              [keys.maxRenewals]: Number(policyDraft[keys.maxRenewals]),
+                              [keys.renewalPeriod]: Number(policyDraft[keys.renewalPeriod]),
+                              [keys.dailyFine]: policyDraft[keys.dailyFine],
+                            }),
+                          }),
+                          `${LIBRARY_ASSET_LABELS[assetType]} policy updated.`
+                        )
+                      }}>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div><Label>Borrow limit</Label><Input type="number" min="1" value={policyDraft[keys.maxBorrow] ?? ""} onChange={(event) => updatePolicyDraft(keys.maxBorrow, event.target.value)} required /></div>
+                          <div><Label>Holding limit</Label><Input type="number" min="1" value={policyDraft[keys.maxKeep] ?? ""} onChange={(event) => updatePolicyDraft(keys.maxKeep, event.target.value)} required /></div>
+                          <div><Label>Loan period ({keys.periodUnit})</Label><Input type="number" min="1" value={policyDraft[keys.loanPeriod] ?? ""} onChange={(event) => updatePolicyDraft(keys.loanPeriod, event.target.value)} required /></div>
+                          <div><Label>Maximum renewals</Label><Input type="number" min="0" value={policyDraft[keys.maxRenewals] ?? ""} onChange={(event) => updatePolicyDraft(keys.maxRenewals, event.target.value)} required /></div>
+                          <div><Label>Renewal period ({keys.periodUnit})</Label><Input type="number" min="1" value={policyDraft[keys.renewalPeriod] ?? ""} onChange={(event) => updatePolicyDraft(keys.renewalPeriod, event.target.value)} required /></div>
+                          <div><Label>Daily fine</Label><Input type="number" min="0" step="0.01" value={policyDraft[keys.dailyFine] ?? ""} onChange={(event) => updatePolicyDraft(keys.dailyFine, event.target.value)} required /></div>
+                        </div>
+                        <Button type="submit" disabled={saving}>Save Policy</Button>
+                      </form>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
           </section>
         ) : null}
       </main>

@@ -92,6 +92,8 @@ class PublicSchoolSerializer(serializers.ModelSerializer):
 class PublicCenterSerializer(serializers.ModelSerializer):
     offerings = serializers.SerializerMethodField()
     academic_workflows = serializers.SerializerMethodField()
+    academic_center = serializers.SerializerMethodField()
+    semester_workflows = serializers.SerializerMethodField()
 
     class Meta:
         model = admin_models.Center
@@ -105,7 +107,11 @@ class PublicCenterSerializer(serializers.ModelSerializer):
             "offerings",
             "image_url",
             "is_active",
+            "center_type",
+            "academic_calendar_mode",
             "academic_workflows",
+            "academic_center",
+            "semester_workflows",
         )
 
     def get_offerings(self, center):
@@ -115,11 +121,13 @@ class PublicCenterSerializer(serializers.ModelSerializer):
         )
 
     def get_academic_workflows(self, center):
-        return admin_models.Program.objects.filter(
-            center=center,
-            program_type=admin_models.Program.PROGRAM_ACADEMIC,
-            is_active=True,
-        ).exists()
+        return center.uses_semester_calendar()
+
+    def get_academic_center(self, center):
+        return center.is_academic_center()
+
+    def get_semester_workflows(self, center):
+        return center.uses_semester_calendar()
 
 
 class PublicDepartmentSerializer(serializers.ModelSerializer):

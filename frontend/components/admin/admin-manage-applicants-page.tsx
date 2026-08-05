@@ -30,21 +30,33 @@ import {
   type AdminApplicant,
   type AdminApplicantSetupPayload,
 } from "@/lib/admin-applicants"
-import type { ApplyAdmissionsSetup, ApplyQuestion } from "@/lib/apply"
+import type { ApplyAdmissionsSetup, ApplyDocumentType, ApplyQuestion } from "@/lib/apply"
 
 const emptySetup: ApplyAdmissionsSetup = {
+  application_number_prefix: "",
+  application_number_format: "{prefix}-{period}-{token}",
+  document_types: [],
   required_documents: [],
   required_detail_fields: [],
   custom_questions: [],
   scholarship_enabled: true,
+  scholarship_label: "Scholarship Application",
+  workflow_steps: [],
+  status_options: [],
 }
 
 function normalizeSetup(setup?: ApplyAdmissionsSetup | null): ApplyAdmissionsSetup {
   return {
+    application_number_prefix: setup?.application_number_prefix ?? "",
+    application_number_format: setup?.application_number_format ?? "{prefix}-{period}-{token}",
+    document_types: setup?.document_types ?? [],
     required_documents: setup?.required_documents ?? [],
     required_detail_fields: setup?.required_detail_fields ?? [],
     custom_questions: setup?.custom_questions ?? [],
     scholarship_enabled: setup?.scholarship_enabled ?? true,
+    scholarship_label: setup?.scholarship_label ?? "Scholarship Application",
+    workflow_steps: setup?.workflow_steps ?? [],
+    status_options: setup?.status_options ?? [],
   }
 }
 
@@ -62,6 +74,16 @@ function toggleValue(values: string[], value: string, checked: boolean) {
     return values.includes(value) ? values : [...values, value]
   }
   return values.filter((item) => item !== value)
+}
+
+function updateDocument(
+  documents: ApplyDocumentType[],
+  index: number,
+  patch: Partial<ApplyDocumentType>
+) {
+  return documents.map((document, documentIndex) =>
+    documentIndex === index ? { ...document, ...patch } : document
+  )
 }
 
 export function AdminManageApplicantsPage() {
@@ -173,6 +195,43 @@ export function AdminManageApplicantsPage() {
     }))
   }
 
+  function removeDocument(index: number) {
+    setSetupForm((current) => {
+      const document_types = current.document_types.filter((_document, documentIndex) => documentIndex !== index)
+      return {
+        ...current,
+        document_types,
+        required_documents: document_types.filter((document) => document.required).map((document) => document.value),
+      }
+    })
+  }
+
+  function updateDocumentAt(index: number, patch: Partial<ApplyDocumentType>) {
+    setSetupForm((current) => {
+      const document_types = updateDocument(current.document_types, index, patch)
+      return {
+        ...current,
+        document_types,
+        required_documents: document_types.filter((document) => document.required).map((document) => document.value),
+      }
+    })
+  }
+
+  function addDocument(document?: ApplyDocumentType) {
+    setSetupForm((current) => ({
+      ...current,
+      document_types: [
+        ...current.document_types,
+        document ?? {
+          value: `document_${Date.now()}`,
+          label: "New document",
+          kind: "file",
+          required: false,
+        },
+      ],
+    }))
+  }
+
   async function handleSaveSetup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsSavingSetup(true)
@@ -181,6 +240,9 @@ export function AdminManageApplicantsPage() {
     try {
       const saved = await updateAdminApplicantsSetup({
         ...setupForm,
+        required_documents: setupForm.document_types
+          .filter((document) => document.required)
+          .map((document) => document.value),
         custom_questions: setupForm.custom_questions.filter((question) => question.label.trim()),
       })
       setSetupPayload(saved)
@@ -371,6 +433,32 @@ export function AdminManageApplicantsPage() {
             </CardHeader>
             <CardContent>
               <form className="space-y-6" onSubmit={handleSaveSetup}>
+                <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <div>
+                    <Label>Application number format</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Tokens: {"{prefix}"}, {"{year}"}, {"{month}"}, {"{period}"}, and {"{token}"}.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input
+                      value={setupForm.application_number_prefix}
+                      onChange={(event) =>
+                        setSetupForm((current) => ({ ...current, application_number_prefix: event.target.value }))
+                      }
+                      placeholder="APP"
+                      aria-label="Application number prefix"
+                    />
+                    <Input
+                      value={setupForm.application_number_format}
+                      onChange={(event) =>
+                        setSetupForm((current) => ({ ...current, application_number_format: event.target.value }))
+                      }
+                      aria-label="Application number format"
+                    />
+                  </div>
+                </div>
+
                 <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3">
                   <input
                     id="scholarship_enabled"
@@ -385,11 +473,22 @@ export function AdminManageApplicantsPage() {
                     }
                   />
                   <div>
-                    <Label htmlFor="scholarship_enabled">Show scholarship application option</Label>
+                    <Label htmlFor="scholarship_enabled">Enable scholarship stage</Label>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Applicants can request scholarship review when this is enabled.
+                      Applicants can request scholarship review when this is enabled. The label is configurable below.
                     </p>
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="scholarship_label">Scholarship section label</Label>
+                  <Input
+                    id="scholarship_label"
+                    value={setupForm.scholarship_label}
+                    onChange={(event) =>
+                      setSetupForm((current) => ({ ...current, scholarship_label: event.target.value }))
+                    }
+                  />
                 </div>
 
                 <div className="space-y-3">
@@ -425,29 +524,162 @@ export function AdminManageApplicantsPage() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
                     <FileCheck2 className="size-4 text-muted-foreground" />
-                    <Label>Required Documents</Label>
+                      <Label>Document Types</Label>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => addDocument()}
+                    >
+                      Add custom
+                    </Button>
                   </div>
-                  <div className="grid gap-2 rounded-lg border border-border p-3">
-                    {(setupPayload?.document_types ?? []).map((documentType) => (
-                      <label key={documentType.value} className="flex items-center gap-2 text-sm">
+                  <div className="space-y-3 rounded-lg border border-border p-3">
+                    {setupForm.document_types.map((documentType, index) => (
+                      <div key={documentType.value + "_" + index} className="space-y-2 rounded-md border border-border/70 p-3">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={documentType.label}
+                            onChange={(event) => updateDocumentAt(index, { label: event.target.value })}
+                            aria-label={"Document " + (index + 1) + " label"}
+                          />
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            onClick={() => removeDocument(index)}
+                            aria-label={"Remove " + documentType.label}
+                          >
+                            <X className="size-3" />
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs">
+                          <span className="rounded bg-muted px-2 py-1">{documentType.value}</span>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              className="size-4"
+                              checked={Boolean(documentType.required)}
+                              onChange={(event) => updateDocumentAt(index, { required: event.target.checked })}
+                            />
+                            Required
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <span>File type</span>
+                            <select
+                              className="h-8 rounded-md border border-input bg-transparent px-2"
+                              value={documentType.kind ?? "file"}
+                              onChange={(event) =>
+                                updateDocumentAt(index, { kind: event.target.value as "file" | "image" })
+                              }
+                            >
+                              <option value="file">Any allowed file</option>
+                              <option value="image">Image only</option>
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                    {setupForm.document_types.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No document types enabled.</p>
+                    ) : null}
+                    {(setupPayload?.document_type_options ?? [])
+                      .filter((item) => !setupForm.document_types.some((document) => document.value === item.value))
+                      .length ? (
+                      <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+                        <select
+                          className="h-9 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
+                          defaultValue=""
+                          onChange={(event) => {
+                            const item = setupPayload?.document_type_options.find(
+                              (option) => option.value === event.target.value
+                            )
+                            if (item) addDocument({ ...item, required: false })
+                            event.target.value = ""
+                          }}
+                        >
+                          <option value="">Add a standard document type...</option>
+                          {(setupPayload?.document_type_options ?? [])
+                            .filter((item) => !setupForm.document_types.some((document) => document.value === item.value))
+                            .map((item) => (
+                              <option key={item.value} value={item.value}>{item.label}</option>
+                            ))}
+                        </select>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <Label>Workflow stages and status labels</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Disable scholarship or interview stages for institutions that do not use them.
+                    </p>
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-border p-3">
+                    {setupForm.workflow_steps.map((step, index) => (
+                      <label key={step.value} className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
                           className="size-4"
-                          checked={setupForm.required_documents.includes(documentType.value)}
+                          checked={step.enabled}
                           onChange={(event) =>
                             setSetupForm((current) => ({
                               ...current,
-                              required_documents: toggleValue(
-                                current.required_documents,
-                                documentType.value,
-                                event.target.checked
+                              workflow_steps: current.workflow_steps.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, enabled: event.target.checked } : item
                               ),
                             }))
                           }
                         />
-                        <span>{documentType.label}</span>
+                        <Input
+                          value={step.label}
+                          onChange={(event) =>
+                            setSetupForm((current) => ({
+                              ...current,
+                              workflow_steps: current.workflow_steps.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, label: event.target.value } : item
+                              ),
+                            }))
+                          }
+                          className="h-8"
+                          aria-label={step.value + " step label"}
+                        />
+                      </label>
+                    ))}
+                    {setupForm.status_options.map((statusOption, index) => (
+                      <label key={statusOption.value} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="size-4"
+                          checked={statusOption.enabled}
+                          onChange={(event) =>
+                            setSetupForm((current) => ({
+                              ...current,
+                              status_options: current.status_options.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, enabled: event.target.checked } : item
+                              ),
+                            }))
+                          }
+                        />
+                        <Input
+                          value={statusOption.label}
+                          onChange={(event) =>
+                            setSetupForm((current) => ({
+                              ...current,
+                              status_options: current.status_options.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, label: event.target.value } : item
+                              ),
+                            }))
+                          }
+                          className="h-8"
+                          aria-label={statusOption.value + " status label"}
+                        />
                       </label>
                     ))}
                   </div>

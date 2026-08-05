@@ -16,7 +16,7 @@ type BackendRouteResponse = {
 
 declare global {
   interface Window {
-    __AIU_BACKEND_ROUTE_RESPONSE__?: BackendRouteResponse
+    __UMS_BACKEND_ROUTE_RESPONSE__?: BackendRouteResponse
   }
 }
 
@@ -75,7 +75,7 @@ export function BackendRouteConnector() {
           checkedAt: new Date().toISOString(),
         }
 
-        window.__AIU_BACKEND_ROUTE_RESPONSE__ = nextResult
+        window.__UMS_BACKEND_ROUTE_RESPONSE__ = nextResult
         window.dispatchEvent(
           new CustomEvent("ums:backend-route-response", {
             detail: nextResult,
@@ -96,7 +96,7 @@ export function BackendRouteConnector() {
           error: error instanceof Error ? error.message : "Backend route request failed.",
         }
 
-        window.__AIU_BACKEND_ROUTE_RESPONSE__ = nextResult
+        window.__UMS_BACKEND_ROUTE_RESPONSE__ = nextResult
         window.dispatchEvent(
           new CustomEvent("ums:backend-route-response", {
             detail: nextResult,

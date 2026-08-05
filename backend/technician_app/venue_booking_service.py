@@ -2,7 +2,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from admin_app.models import (
     ClassMeeting,
@@ -11,6 +11,14 @@ from admin_app.models import (
     VenueBookingRequest,
 )
 from admin_app.settings_registry import setting_value
+from admin_app.settings_registry import (
+    venue_booking_is_blackout_date,
+    venue_booking_policy_payload,
+    venue_booking_policy_settings,
+    venue_booking_requester_roles,
+    venue_booking_required_fields,
+    venue_category_label,
+)
 from core.common.profiles import profile_display_name
 from notifications_package.service import notify_profile, notify_profiles
 
@@ -25,11 +33,60 @@ class BookingConflictError(Exception):
     pass
 
 
+class BookingPolicyError(Exception):
+    pass
+
+
 def times_overlap(start_a, end_a, start_b, end_b):
     return start_a < end_b and end_a > start_b
 
 
-def validate_booking_payload(data):
+def booking_policy_payload():
+    return {
+        **venue_booking_policy_payload(),
+        "booking_types": [
+            {"value": value, "label": label}
+            for value, label in VenueBookingRequest.TYPE_CHOICES
+        ],
+    }
+
+
+def venue_booking_approval_mode():
+    settings = venue_booking_policy_settings()
+    return str(settings.get("approval_mode") or "manual").strip().lower()
+
+
+def venue_booking_reviewer_role():
+    settings = venue_booking_policy_settings()
+    return str(settings.get("reviewer_role") or Profile.ROLE_TECHNICIAN).strip().lower()
+
+
+def requester_role_allowed(role):
+    return str(role or "").strip().lower() in venue_booking_requester_roles()
+
+
+def can_review_venue_bookings(profile):
+    return (
+        venue_booking_approval_mode() != "auto_approve"
+        and bool(profile)
+        and profile.role == venue_booking_reviewer_role()
+    )
+
+
+def _duration_minutes(booking_date, start_time, end_time):
+    start = datetime.combine(booking_date, start_time)
+    end = datetime.combine(booking_date, end_time)
+    return int((end - start).total_seconds() // 60)
+
+
+def _required_field_names(booking_type):
+    return set(venue_booking_required_fields(booking_type))
+
+
+def validate_booking_payload(data, requester_role=None):
+    if requester_role and not requester_role_allowed(requester_role):
+        return None, "Your role is not allowed to request venue bookings."
+
     venue = Venue.objects.select_related("building").filter(
         pk=data.get("venue_id"),
         is_active=True,
@@ -41,12 +98,13 @@ def validate_booking_payload(data):
     if booking_type not in dict(VenueBookingRequest.TYPE_CHOICES):
         return None, "Select event or personal use."
 
+    required_fields = _required_field_names(booking_type)
     purpose = str(data.get("purpose") or "").strip()
-    if len(purpose) < 3:
+    if "purpose" in required_fields and len(purpose) < 3:
         return None, "Provide the purpose of the venue booking."
 
     explanation = str(data.get("explanation") or "").strip()
-    if len(explanation) < 20:
+    if "explanation" in required_fields and len(explanation) < 20:
         return None, "Provide a detailed explanation of at least 20 characters."
 
     booking_date = parse_date(str(data.get("booking_date") or ""))
@@ -57,6 +115,8 @@ def validate_booking_payload(data):
     minimum_notice = setting_value("workflow", "venue_booking_min_notice_days")
     if booking_date < timezone.localdate() + timedelta(days=minimum_notice):
         return None, f"Venue bookings require at least {minimum_notice} day(s) notice."
+    if venue_booking_is_blackout_date(booking_date):
+        return None, "Venue bookings are not allowed on the selected blackout date."
 
     start_time = parse_time(str(data.get("start_time") or ""))
     end_time = parse_time(str(data.get("end_time") or ""))
@@ -64,6 +124,15 @@ def validate_booking_payload(data):
         return None, "Select a valid start and end time."
     if start_time >= end_time:
         return None, "End time must be after start time."
+
+    policy = venue_booking_policy_settings()
+    duration = _duration_minutes(booking_date, start_time, end_time)
+    min_duration = int(policy.get("min_duration_minutes") or 1)
+    max_duration = int(policy.get("max_duration_hours") or 1) * 60
+    if duration < min_duration:
+        return None, f"Venue bookings must be at least {min_duration} minute(s)."
+    if duration > max_duration:
+        return None, f"Venue bookings cannot exceed {policy.get('max_duration_hours')} hour(s)."
 
     return {
         "venue": venue,
@@ -191,6 +260,8 @@ def venues_payload():
             "id": venue.id,
             "code": venue.code,
             "name": venue.name,
+            "category": venue.category,
+            "category_label": venue_category_label(venue.category),
             "building": venue.building.name,
             "capacity": venue.capacity,
         }
@@ -212,10 +283,16 @@ def serialize_booking(booking):
             "id": booking.venue_id,
             "code": booking.venue.code,
             "name": booking.venue.name,
+            "category": booking.venue.category,
+            "category_label": venue_category_label(booking.venue.category),
             "building": booking.venue.building.name,
             "capacity": booking.venue.capacity,
         },
         "booking_type": booking.booking_type,
+        "booking_type_label": dict(VenueBookingRequest.TYPE_CHOICES).get(
+            booking.booking_type,
+            booking.booking_type.replace("_", " ").title(),
+        ),
         "purpose": booking.purpose,
         "explanation": booking.explanation,
         "booking_date": booking.booking_date.isoformat(),
@@ -241,7 +318,9 @@ def bookings_queryset():
 
 
 def venue_booking_reviewer_profiles():
-    return Profile.objects.filter(role=Profile.ROLE_TECHNICIAN, is_active=True)
+    if venue_booking_approval_mode() == "auto_approve":
+        return Profile.objects.none()
+    return Profile.objects.filter(role=venue_booking_reviewer_role(), is_active=True)
 
 
 @transaction.atomic
@@ -255,22 +334,49 @@ def submit_booking(requester, payload):
     if conflict:
         raise BookingConflictError(conflict)
 
-    booking = VenueBookingRequest.objects.create(requester=requester, **payload)
+    approval_mode = venue_booking_approval_mode()
+    create_kwargs = {}
+    if approval_mode == "auto_approve":
+        create_kwargs = {
+            "status": VenueBookingRequest.STATUS_APPROVED,
+            "reviewed_at": timezone.now(),
+        }
+    booking = VenueBookingRequest.objects.create(
+        requester=requester,
+        **payload,
+        **create_kwargs,
+    )
     if setting_value("notifications", "notify_approvals"):
-        notify_profiles(
-            venue_booking_reviewer_profiles(),
-            actor=requester,
-            event_type="venues.booking_requested",
-            verb=f"Venue booking requested for {booking.venue.name}",
-            data={
-                "venue_booking_request_id": booking.id,
-                "venue_id": booking.venue_id,
-                "booking_date": booking.booking_date.isoformat(),
-                "start_time": booking.start_time.strftime("%H:%M"),
-                "end_time": booking.end_time.strftime("%H:%M"),
-            },
-            url="/technician/venue-bookings",
-        )
+        notification_data = {
+            "venue_booking_request_id": booking.id,
+            "venue_id": booking.venue_id,
+            "booking_date": booking.booking_date.isoformat(),
+            "start_time": booking.start_time.strftime("%H:%M"),
+            "end_time": booking.end_time.strftime("%H:%M"),
+        }
+        if approval_mode == "auto_approve":
+            notify_profile(
+                requester,
+                actor=requester,
+                event_type="venues.booking_auto_approved",
+                verb=f"Your venue booking for {booking.venue.name} was approved.",
+                data=notification_data,
+                url=f"/{requester.role}/venue-bookings",
+            )
+        else:
+            reviewer_role = venue_booking_reviewer_role()
+            notify_profiles(
+                venue_booking_reviewer_profiles(),
+                actor=requester,
+                event_type="venues.booking_requested",
+                verb=f"Venue booking requested for {booking.venue.name}",
+                data=notification_data,
+                url=(
+                    "/admin/venue-bookings"
+                    if reviewer_role == Profile.ROLE_ADMIN
+                    else "/technician/venue-bookings"
+                ),
+            )
     return booking
 
 
@@ -312,6 +418,9 @@ def cancel_booking(booking_id, requester):
 
 @transaction.atomic
 def decide_booking(booking_id, reviewer, decision, rejection_reason=""):
+    if not can_review_venue_bookings(reviewer):
+        raise BookingPolicyError("Venue booking requests are not assigned to your role.")
+
     booking = VenueBookingRequest.objects.select_for_update().filter(pk=booking_id).first()
     if not booking:
         raise ValueError("Venue booking request not found.")

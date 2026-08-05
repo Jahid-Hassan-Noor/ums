@@ -7,12 +7,13 @@ import { ArrowRight } from "lucide-react"
 import { applicationStatusLabel } from "@/components/apply/application-status-steps"
 import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
-import { loadApplyApplications } from "@/lib/apply"
+import { loadApplyApplications, loadApplyOptions, type ApplyOptions } from "@/lib/apply"
 
 export function ApplyStatus() {
   const [application, setApplication] = useState<
     Awaited<ReturnType<typeof loadApplyApplications>>[number] | null
   >(null)
+  const [options, setOptions] = useState<ApplyOptions | null>(null)
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
@@ -21,9 +22,11 @@ export function ApplyStatus() {
     const timer = window.setTimeout(() => {
       setIsLoading(true)
       setError("")
-      void loadApplyApplications()
-        .then((applications) => {
-          if (active) setApplication(applications[0] ?? null)
+      void Promise.all([loadApplyApplications(), loadApplyOptions()])
+        .then(([applications, nextOptions]) => {
+          if (!active) return
+          setApplication(applications[0] ?? null)
+          setOptions(nextOptions)
         })
         .catch((caught) => {
           if (active) {
@@ -98,7 +101,7 @@ export function ApplyStatus() {
                 Current Status
               </p>
               <p className="mt-2 text-2xl font-semibold">
-                {applicationStatusLabel(application.status)}
+                {applicationStatusLabel(application.status, options?.status_options)}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
                 {application.application_number || "Draft application"}
@@ -121,7 +124,7 @@ export function ApplyStatus() {
                     >
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-sm font-medium">
-                          {applicationStatusLabel(event.to_status)}
+                          {applicationStatusLabel(event.to_status, options?.status_options)}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {new Date(event.created_at).toLocaleString()}

@@ -33,11 +33,18 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  getUmsNavItemByUrl,
-  ROLE_ZONES,
   type UmsIconKey,
+  type UmsNavItem,
   type UserRole,
 } from "@/lib/ums-roles"
+import {
+  applyUmsTerminology,
+  disabledUmsRouteModules,
+  filterUmsNavItemsBySettings,
+  isUmsRoleFeaturePathEnabled,
+  loadPublicUmsSettings,
+  zoneForUmsRole,
+} from "@/lib/ums-settings"
 
 const iconMap: Record<UmsIconKey, LucideIcon> = {
   academic: Building2,
@@ -111,13 +118,28 @@ function filterExecutivePages<T extends { url: string }>(items: T[], academicWor
   return items.filter((item) => !nonAcademicExecutiveHiddenUrls.has(item.url))
 }
 
+function getNavItemByUrl(items: UmsNavItem[], url: string) {
+  for (const item of items) {
+    if (item.url === url) return item
+    const subItem = item.items?.find((candidate) => candidate.url === url)
+    if (subItem) {
+      return {
+        ...subItem,
+        icon: item.icon,
+      }
+    }
+  }
+  return null
+}
+
 type RoleZonePageProps = {
   role: UserRole
   path?: string[]
 }
 
 export async function RoleZonePage({ role, path = [] }: RoleZonePageProps) {
-  const zone = ROLE_ZONES[role]
+  const publicSettings = await loadPublicUmsSettings()
+  const zone = zoneForUmsRole(role, publicSettings)
   const cookieStore = await cookies()
   const executiveHasAcademicWorkflows =
     role !== "executive" ||
@@ -128,6 +150,14 @@ export async function RoleZonePage({ role, path = [] }: RoleZonePageProps) {
   }
 
   const currentUrl = zonePath(role, path)
+  if (!isUmsRoleFeaturePathEnabled(currentUrl, publicSettings, role)) {
+    const params = new URLSearchParams({ next: currentUrl })
+    const modules = disabledUmsRouteModules(currentUrl, publicSettings, role)
+    if (modules.length) {
+      params.set("modules", modules.join(","))
+    }
+    redirect(`/module-unavailable?${params.toString()}`)
+  }
   if (
     role === "executive" &&
     !executiveHasAcademicWorkflows &&
@@ -137,6 +167,11 @@ export async function RoleZonePage({ role, path = [] }: RoleZonePageProps) {
   }
 
   const isDashboard = currentUrl === zone.dashboardPath
+  const filteredNavMain = filterUmsNavItemsBySettings(
+    zone.navMain,
+    publicSettings,
+    role
+  )
   const page = isDashboard
     ? {
         title:
@@ -146,18 +181,21 @@ export async function RoleZonePage({ role, path = [] }: RoleZonePageProps) {
         url: zone.dashboardPath,
         description:
           role === "executive" && !executiveHasAcademicWorkflows
-            ? "A centre workspace for public centre details, centre programmes, calendar items, and notifications."
+            ? applyUmsTerminology(
+                "A centre workspace for public centre details, centre programmes, calendar items, and notifications.",
+                publicSettings
+              )
             : zone.description,
         icon: "dashboard" as UmsIconKey,
       }
-    : getUmsNavItemByUrl(role, currentUrl)
+    : getNavItemByUrl(filteredNavMain, currentUrl)
 
   if (!page) {
     notFound()
   }
 
   const availablePages = filterExecutivePages(
-    zone.navMain.flatMap((item) => [
+    filteredNavMain.flatMap((item) => [
     {
       title: item.title,
       url: item.url,
@@ -179,7 +217,9 @@ export async function RoleZonePage({ role, path = [] }: RoleZonePageProps) {
           "Maintain the assigned centre profile and public centre details.",
           "Add and update centre programmes that do not require class scheduling.",
           "Coordinate centre activities without course offering or timetable workflows.",
-        ]
+        ].map((priority) =>
+          applyUmsTerminology(priority, publicSettings)
+        )
       : zone.priorities
   const metrics =
     role === "executive" && !executiveHasAcademicWorkflows
@@ -202,7 +242,11 @@ export async function RoleZonePage({ role, path = [] }: RoleZonePageProps) {
             subtitle: "Course and timetable workflows are hidden for this centre.",
             icon: "settings" as UmsIconKey,
           },
-        ]
+        ].map((metric) => ({
+          ...metric,
+          title: applyUmsTerminology(metric.title, publicSettings),
+          subtitle: applyUmsTerminology(metric.subtitle, publicSettings),
+        }))
       : zone.metrics
 
   return (

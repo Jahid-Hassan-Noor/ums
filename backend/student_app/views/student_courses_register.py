@@ -12,6 +12,7 @@ from student_app.registration_service import (
     current_credit_hours,
     drop_student_course,
     get_student_profile,
+    registration_credit_policy,
     register_student,
     serialize_offering_for_registration,
     student_offerings,
@@ -22,6 +23,7 @@ from student_app.serializers import CourseRegistrationSerializer, RegistrationPe
 def registration_payload(student, semester):
     period = active_registration_period(semester)
     evaluation_gate = registration_evaluation_gate(student, target_semester=semester)
+    credit_policy = registration_credit_policy(student=student, semester=semester)
     registrations = (
         CourseRegistration.objects.select_related(
             "offering",
@@ -53,9 +55,14 @@ def registration_payload(student, semester):
         "evaluation_gate": evaluation_gate,
         "credit_hours": {
             "registered": current_credit_hours(student, semester) if semester else 0,
-            "maximum": semester.max_credit_hours if semester else 0,
+            "minimum": credit_policy["minimum"] if semester else 0,
+            "maximum": credit_policy["maximum"] if semester else 0,
+            "source": credit_policy["source"] if semester else "",
         },
-        "offerings": [serialize_offering_for_registration(offering) for offering in offerings],
+        "offerings": [
+            serialize_offering_for_registration(offering, student=student)
+            for offering in offerings
+        ],
         "registrations": CourseRegistrationSerializer(registrations, many=True).data,
     }
 

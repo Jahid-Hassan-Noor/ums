@@ -64,7 +64,7 @@ def _admin_insights():
             "value": aged_tickets,
             "total": open_tickets.count(),
             "level": _insight_level(aged_tickets, watch=1, risk=5),
-            "description": "ICT tickets open for three or more days.",
+            "description": "Service desk tickets open for three or more days.",
             "action": "Review technician workload and unresolved student issues.",
         },
         {

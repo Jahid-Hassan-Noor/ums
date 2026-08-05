@@ -6,11 +6,13 @@ from django.test import TestCase
 from django.utils import timezone
 from PIL import Image
 
-from admin_app.models import ClassMeeting, Course, CourseOffering, Profile, School, Semester, TimetableSlot
+from admin_app.models import ClassMeeting, Course, CourseOffering, Profile, School, Semester, SystemSetting, TimetableSlot
+from admin_app.settings_registry import invalidate_settings_cache
 from student_app.models import AttendanceRecord, Enrollment
 from teacher_app.attendance_service import (
     attendance_summary_for_offering,
     manual_mark_attendance,
+    qr_ttl_seconds,
     reschedule_or_cancel_class,
     send_low_attendance_warnings,
     start_attendance_session,
@@ -195,6 +197,9 @@ class CourseContentAndAttendanceTests(TestCase):
         )
         Enrollment.objects.create(student=self.student, offering=self.offering, created_by=self.teacher)
 
+    def tearDown(self):
+        invalidate_settings_cache()
+
     def _profile(self, username, role):
         user = User.objects.create_user(username=username, password="pass")
         profile = user.profile
@@ -222,6 +227,15 @@ class CourseContentAndAttendanceTests(TestCase):
                 data__course_code=self.course.code,
             ).exists()
         )
+
+    def test_attendance_qr_ttl_uses_academic_policy_setting(self):
+        SystemSetting.objects.create(
+            key="ums.academic",
+            value={"attendance_code_expiry_minutes": 5},
+        )
+        invalidate_settings_cache()
+
+        self.assertEqual(qr_ttl_seconds(), 300)
 
     def test_resource_upload_validation_allows_pdf_and_ppt_only(self):
         pdf = SimpleUploadedFile("outline.pdf", b"content", content_type="application/pdf")

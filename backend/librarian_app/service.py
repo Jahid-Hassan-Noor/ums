@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -5,8 +6,403 @@ from django.db import transaction
 from django.utils import timezone
 
 from admin_app.models import Profile
+from core.common.money import format_money, parse_decimal
+from core.common.request_utils import parse_bool, parse_int
 from librarian_app.models import BookAcquisitionRequest, BookCopy, BorrowingLimit, BorrowRequest, Fine as LibraryFine, Laptop, LibraryRoom, Loan
 from notifications_package.service import notify_profile, notify_roles
+
+
+ASSET_OTHER = "other_asset"
+
+LIBRARY_ASSET_LABELS = {
+    BorrowRequest.ASSET_BOOK: "Books",
+    BorrowRequest.ASSET_LAPTOP: "Laptops",
+    BorrowRequest.ASSET_ROOM: "Discussion rooms",
+    ASSET_OTHER: "Other assets",
+}
+
+LIBRARY_POLICY_DEFAULTS = {
+    "books_enabled": True,
+    "laptops_enabled": True,
+    "rooms_enabled": True,
+    "other_assets_enabled": False,
+    "book_requests_enabled": True,
+    "laptop_requests_enabled": True,
+    "room_reservations_enabled": True,
+    "other_asset_requests_enabled": False,
+    "book_max_borrow_at_a_time": 3,
+    "book_max_keep_at_a_time": 5,
+    "laptop_max_borrow_at_a_time": 1,
+    "laptop_max_keep_at_a_time": 1,
+    "room_max_borrow_at_a_time": 1,
+    "room_max_keep_at_a_time": 1,
+    "other_asset_max_borrow_at_a_time": 1,
+    "other_asset_max_keep_at_a_time": 1,
+    "book_loan_period_days": 14,
+    "laptop_loan_period_days": 7,
+    "room_loan_period_hours": 2,
+    "other_asset_loan_period_days": 7,
+    "book_max_renewals": 2,
+    "laptop_max_renewals": 0,
+    "room_max_renewals": 0,
+    "other_asset_max_renewals": 0,
+    "book_renewal_period_days": 14,
+    "laptop_renewal_period_days": 7,
+    "room_renewal_period_hours": 1,
+    "other_asset_renewal_period_days": 7,
+    "book_daily_fine_amount": "1.00",
+    "laptop_daily_fine_amount": "5.00",
+    "room_daily_fine_amount": "0.00",
+    "other_asset_daily_fine_amount": "1.00",
+}
+
+LIBRARY_BOOL_POLICY_KEYS = {
+    key for key, value in LIBRARY_POLICY_DEFAULTS.items() if isinstance(value, bool)
+}
+LIBRARY_DECIMAL_POLICY_KEYS = {
+    "book_daily_fine_amount",
+    "laptop_daily_fine_amount",
+    "room_daily_fine_amount",
+    "other_asset_daily_fine_amount",
+}
+LIBRARY_INT_POLICY_KEYS = set(LIBRARY_POLICY_DEFAULTS) - LIBRARY_BOOL_POLICY_KEYS - LIBRARY_DECIMAL_POLICY_KEYS
+LIBRARY_POLICY_KEYS = set(LIBRARY_POLICY_DEFAULTS)
+
+_ASSET_CONFIG = {
+    BorrowRequest.ASSET_BOOK: {
+        "enabled_key": "books_enabled",
+        "request_key": "book_requests_enabled",
+        "prefix": "book",
+        "period_key": "book_loan_period_days",
+        "period_unit": "days",
+        "renewal_period_key": "book_renewal_period_days",
+        "renewal_unit": "days",
+        "fine_key": "book_daily_fine_amount",
+    },
+    BorrowRequest.ASSET_LAPTOP: {
+        "enabled_key": "laptops_enabled",
+        "request_key": "laptop_requests_enabled",
+        "prefix": "laptop",
+        "period_key": "laptop_loan_period_days",
+        "period_unit": "days",
+        "renewal_period_key": "laptop_renewal_period_days",
+        "renewal_unit": "days",
+        "fine_key": "laptop_daily_fine_amount",
+    },
+    BorrowRequest.ASSET_ROOM: {
+        "enabled_key": "rooms_enabled",
+        "request_key": "room_reservations_enabled",
+        "prefix": "room",
+        "period_key": "room_loan_period_hours",
+        "period_unit": "hours",
+        "renewal_period_key": "room_renewal_period_hours",
+        "renewal_unit": "hours",
+        "fine_key": "room_daily_fine_amount",
+    },
+    ASSET_OTHER: {
+        "enabled_key": "other_assets_enabled",
+        "request_key": "other_asset_requests_enabled",
+        "prefix": "other_asset",
+        "period_key": "other_asset_loan_period_days",
+        "period_unit": "days",
+        "renewal_period_key": "other_asset_renewal_period_days",
+        "renewal_unit": "days",
+        "fine_key": "other_asset_daily_fine_amount",
+    },
+}
+
+
+def _config_for_asset(asset_type):
+    if asset_type not in _ASSET_CONFIG:
+        raise ValidationError("Select a supported library asset type.")
+    return _ASSET_CONFIG[asset_type]
+
+
+def _asset_label(asset_type):
+    return LIBRARY_ASSET_LABELS.get(asset_type, "Library assets").lower()
+
+
+def _loan_filter_for_asset(asset_type):
+    if asset_type == BorrowRequest.ASSET_BOOK:
+        return {"book_copy__isnull": False}
+    if asset_type == BorrowRequest.ASSET_LAPTOP:
+        return {"laptop__isnull": False}
+    if asset_type == BorrowRequest.ASSET_ROOM:
+        return {"room__isnull": False}
+    return {}
+
+
+def asset_type_for_loan(loan):
+    if loan.book_copy_id:
+        return BorrowRequest.ASSET_BOOK
+    if loan.laptop_id:
+        return BorrowRequest.ASSET_LAPTOP
+    if loan.room_id:
+        return BorrowRequest.ASSET_ROOM
+    return ASSET_OTHER
+
+
+def _raw_library_settings():
+    from admin_app.settings_registry import all_settings
+
+    return all_settings().get("librarian_library", {})
+
+
+def _decimal_policy_value(value, default):
+    try:
+        return format_money(parse_decimal(value, allow_zero=True))
+    except ValidationError:
+        return default
+
+
+def library_policy_settings(values=None):
+    if values is None:
+        values = _raw_library_settings()
+    elif "librarian_library" in values:
+        values = values.get("librarian_library", {})
+
+    policy = {}
+    for key, default in LIBRARY_POLICY_DEFAULTS.items():
+        raw_value = values.get(key, default)
+        if key in LIBRARY_BOOL_POLICY_KEYS:
+            policy[key] = parse_bool(raw_value, default=default)
+        elif key in LIBRARY_DECIMAL_POLICY_KEYS:
+            policy[key] = _decimal_policy_value(raw_value, default)
+        else:
+            parsed = parse_int(raw_value, default=default)
+            minimum = 0 if key.endswith("_max_renewals") else 1
+            policy[key] = parsed if parsed >= minimum else default
+
+    for asset_type, config in _ASSET_CONFIG.items():
+        prefix = config["prefix"]
+        borrow_key = f"{prefix}_max_borrow_at_a_time"
+        keep_key = f"{prefix}_max_keep_at_a_time"
+        if policy[borrow_key] > policy[keep_key]:
+            policy[borrow_key] = policy[keep_key]
+    return policy
+
+
+def _normalize_bool_update(key, value):
+    if isinstance(value, bool):
+        return value
+    token = str(value).strip().lower()
+    if token not in {"1", "true", "yes", "on", "0", "false", "no", "off"}:
+        raise ValidationError({key: "Provide true or false."})
+    return parse_bool(value)
+
+
+def _normalize_int_update(key, value):
+    parsed = parse_int(value, default=None)
+    if parsed is None:
+        raise ValidationError({key: "Provide a valid whole number."})
+    minimum = 0 if key.endswith("_max_renewals") else 1
+    if parsed < minimum:
+        raise ValidationError({key: f"Must be at least {minimum}."})
+    if parsed > 24 and key.endswith("_period_hours"):
+        raise ValidationError({key: "Must be 24 or less."})
+    if parsed > 365 and key.endswith("_period_days"):
+        raise ValidationError({key: "Must be 365 or less."})
+    if parsed > 99 and key.endswith(("_at_a_time", "_keep_at_a_time")):
+        raise ValidationError({key: "Must be 99 or less."})
+    if parsed > 12 and key.endswith("_max_renewals"):
+        raise ValidationError({key: "Must be 12 or less."})
+    return parsed
+
+
+def normalize_library_policy_updates(data):
+    updates = {}
+    for key in LIBRARY_POLICY_KEYS:
+        if key not in data:
+            continue
+        if key in LIBRARY_BOOL_POLICY_KEYS:
+            updates[key] = _normalize_bool_update(key, data[key])
+        elif key in LIBRARY_DECIMAL_POLICY_KEYS:
+            updates[key] = format_money(parse_decimal(data[key], field=key, allow_zero=True))
+        else:
+            updates[key] = _normalize_int_update(key, data[key])
+
+    for asset_type, config in _ASSET_CONFIG.items():
+        prefix = config["prefix"]
+        borrow_key = f"{prefix}_max_borrow_at_a_time"
+        keep_key = f"{prefix}_max_keep_at_a_time"
+        borrow_value = updates.get(borrow_key)
+        keep_value = updates.get(keep_key)
+        if borrow_value is not None and keep_value is not None and borrow_value > keep_value:
+            raise ValidationError({borrow_key: "Borrow limit cannot exceed holding limit."})
+    return updates
+
+
+def library_services_payload(policy=None):
+    policy = policy or library_policy_settings()
+    return {
+        "books_enabled": bool(policy["books_enabled"]),
+        "laptops_enabled": bool(policy["laptops_enabled"]),
+        "rooms_enabled": bool(policy["rooms_enabled"]),
+        "other_assets_enabled": bool(policy["other_assets_enabled"]),
+    }
+
+
+def library_asset_enabled(asset_type, policy=None):
+    policy = policy or library_policy_settings()
+    return bool(policy[_config_for_asset(asset_type)["enabled_key"]])
+
+
+def library_requesting_enabled(asset_type, policy=None):
+    policy = policy or library_policy_settings()
+    config = _config_for_asset(asset_type)
+    return library_asset_enabled(asset_type, policy) and bool(policy[config["request_key"]])
+
+
+def enabled_library_asset_types(policy=None):
+    policy = policy or library_policy_settings()
+    return [
+        asset_type
+        for asset_type in (BorrowRequest.ASSET_BOOK, BorrowRequest.ASSET_LAPTOP, BorrowRequest.ASSET_ROOM)
+        if library_asset_enabled(asset_type, policy)
+    ]
+
+
+def _duration_delta(asset_type, *, renewal=False, policy=None):
+    policy = policy or library_policy_settings()
+    config = _config_for_asset(asset_type)
+    value = policy[config["renewal_period_key"] if renewal else config["period_key"]]
+    unit = config["renewal_unit"] if renewal else config["period_unit"]
+    if unit == "hours":
+        return timedelta(hours=value)
+    return timedelta(days=value)
+
+
+def _duration_payload(asset_type, *, renewal=False, policy=None):
+    policy = policy or library_policy_settings()
+    config = _config_for_asset(asset_type)
+    key = config["renewal_period_key"] if renewal else config["period_key"]
+    unit = config["renewal_unit"] if renewal else config["period_unit"]
+    value = policy[key]
+    return {"value": value, "unit": unit, unit: value}
+
+
+def default_due_at_for_asset(asset_type, *, from_time=None, policy=None):
+    return (from_time or timezone.now()) + _duration_delta(asset_type, policy=policy)
+
+
+def validate_due_at_for_asset(asset_type, due_at, *, borrowed_at=None, policy=None):
+    if not due_at:
+        raise ValidationError("Provide a valid due date and time.")
+    policy = policy or library_policy_settings()
+    start = borrowed_at or timezone.now()
+    max_due_at = default_due_at_for_asset(asset_type, from_time=start, policy=policy)
+    if due_at > max_due_at:
+        duration = _duration_payload(asset_type, policy=policy)
+        raise ValidationError(
+            f"{LIBRARY_ASSET_LABELS[asset_type]} loans cannot exceed "
+            f"{duration['value']} {duration['unit']}."
+        )
+    return due_at
+
+
+def validate_library_service_available(asset_type, policy=None):
+    if not library_asset_enabled(asset_type, policy):
+        raise ValidationError(f"{LIBRARY_ASSET_LABELS[asset_type]} service is currently disabled.")
+
+
+def validate_library_request_available(asset_type, policy=None):
+    validate_library_service_available(asset_type, policy)
+    if not library_requesting_enabled(asset_type, policy):
+        raise ValidationError(f"Student requests for {_asset_label(asset_type)} are currently disabled.")
+
+
+def _policy_limit_for_asset(asset_type, *, student=None, policy=None):
+    policy = policy or library_policy_settings()
+    if asset_type == BorrowRequest.ASSET_BOOK and student is not None:
+        limit = get_borrowing_limit(student, policy=policy)
+        return {
+            "max_borrow_at_a_time": limit.max_borrow_at_a_time,
+            "max_keep_at_a_time": limit.max_keep_at_a_time,
+        }
+    config = _config_for_asset(asset_type)
+    prefix = config["prefix"]
+    return {
+        "max_borrow_at_a_time": policy[f"{prefix}_max_borrow_at_a_time"],
+        "max_keep_at_a_time": policy[f"{prefix}_max_keep_at_a_time"],
+    }
+
+
+def library_policy_payload(*, student=None, policy=None):
+    policy = policy or library_policy_settings()
+    limits = {}
+    loan_periods = {}
+    renewal_rules = {}
+    fine_rules = {}
+    reservation_rules = {}
+    service_types = []
+
+    for asset_type, config in _ASSET_CONFIG.items():
+        limits[asset_type] = _policy_limit_for_asset(asset_type, student=student, policy=policy)
+        loan_periods[asset_type] = _duration_payload(asset_type, policy=policy)
+        renewal_rules[asset_type] = {
+            "max_renewals": policy[f"{config['prefix']}_max_renewals"],
+            "period": _duration_payload(asset_type, renewal=True, policy=policy),
+        }
+        fine_rules[asset_type] = {
+            "daily_rate": policy[config["fine_key"]],
+        }
+        reservation_rules[asset_type] = {
+            "enabled": bool(policy[config["request_key"]]),
+        }
+        service_types.append(
+            {
+                "key": asset_type,
+                "label": LIBRARY_ASSET_LABELS[asset_type],
+                "enabled": bool(policy[config["enabled_key"]]),
+                "requesting_enabled": bool(policy[config["request_key"]]),
+                "supported": asset_type != ASSET_OTHER,
+            }
+        )
+
+    return {
+        **library_services_payload(policy),
+        "service_types": service_types,
+        "limits": limits,
+        "loan_periods": loan_periods,
+        "fine_rules": fine_rules,
+        "renewal_rules": renewal_rules,
+        "reservation_rules": reservation_rules,
+    }
+
+
+def _active_asset_loan_count(student, asset_type):
+    return Loan.objects.filter(
+        student=student,
+        status=Loan.STATUS_ACTIVE,
+        **_loan_filter_for_asset(asset_type),
+    ).count()
+
+
+def _pending_asset_request_count(student, asset_type):
+    return BorrowRequest.objects.filter(
+        student=student,
+        asset_type=asset_type,
+        status=BorrowRequest.STATUS_PENDING,
+    ).count()
+
+
+def enforce_library_request_limit(student, asset_type, policy=None):
+    policy = policy or library_policy_settings()
+    limit = _policy_limit_for_asset(asset_type, student=student, policy=policy)
+    active_count = _active_asset_loan_count(student, asset_type)
+    pending_count = _pending_asset_request_count(student, asset_type)
+    held_count = active_count + pending_count
+    label = _asset_label(asset_type)
+    if held_count >= limit["max_keep_at_a_time"]:
+        raise ValidationError(
+            f"You already hold or have pending requests for {held_count} {label}. "
+            f"Return or close one before requesting another "
+            f"(limit: {limit['max_keep_at_a_time']})."
+        )
+    if held_count >= limit["max_borrow_at_a_time"]:
+        raise ValidationError(
+            f"You have reached the request limit of {limit['max_borrow_at_a_time']} {label}."
+        )
 
 
 def borrow_request_asset_label(borrow_request):
@@ -187,15 +583,16 @@ def notify_student_book_acquisition_decision(acquisition_request):
     )
 
 
-def get_borrowing_limit(student):
+def get_borrowing_limit(student, *, policy=None):
     """Return the BorrowingLimit for this student, falling back to the default."""
-    personal = getattr(student, "borrowing_limit", None)
-    if personal:
-        return personal
+    if student is not None:
+        personal = getattr(student, "borrowing_limit", None)
+        if personal:
+            return personal
     default = BorrowingLimit.objects.filter(is_default=True).first()
     if default:
         return default
-    # Fallback: no limit configured, use sensible defaults
+    policy = policy or library_policy_settings()
     return type(
         "FallbackLimit",
         (),
@@ -204,8 +601,8 @@ def get_borrowing_limit(student):
             "pk": None,
             "student": None,
             "student_id": None,
-            "max_borrow_at_a_time": 3,
-            "max_keep_at_a_time": 5,
+            "max_borrow_at_a_time": policy["book_max_borrow_at_a_time"],
+            "max_keep_at_a_time": policy["book_max_keep_at_a_time"],
             "is_default": True,
             "created_at": None,
             "updated_at": None,
@@ -213,40 +610,21 @@ def get_borrowing_limit(student):
     )()
 
 
-def _check_asset_borrowing_limits(student, asset_type):
+def _check_asset_borrowing_limits(student, asset_type, *, policy=None):
     """Enforce borrowing limits before issuing a loan."""
-    limit = get_borrowing_limit(student)
-    if asset_type == BorrowRequest.ASSET_BOOK:
-        active_book_loans = Loan.objects.filter(
-            student=student,
-            status=Loan.STATUS_ACTIVE,
-            book_copy__isnull=False,
-        ).count()
-        if active_book_loans >= limit.max_keep_at_a_time:
-            raise ValidationError(
-                f"You already hold {active_book_loans} book(s). "
-                f"Return a book before borrowing another (limit: {limit.max_keep_at_a_time})."
-            )
-        if active_book_loans >= limit.max_borrow_at_a_time:
-            raise ValidationError(
-                f"You have reached the borrow limit of {limit.max_borrow_at_a_time} book(s) at a time."
-            )
-    elif asset_type == BorrowRequest.ASSET_LAPTOP:
-        active_laptop_loans = Loan.objects.filter(
-            student=student,
-            status=Loan.STATUS_ACTIVE,
-            laptop__isnull=False,
-        ).count()
-        if active_laptop_loans >= 1:
-            raise ValidationError("You already have a laptop on loan. Return it before borrowing another.")
-    elif asset_type == BorrowRequest.ASSET_ROOM:
-        active_room_loans = Loan.objects.filter(
-            student=student,
-            status=Loan.STATUS_ACTIVE,
-            room__isnull=False,
-        ).count()
-        if active_room_loans >= 1:
-            raise ValidationError("You already have a room allocated. Return it before reserving another.")
+    policy = policy or library_policy_settings()
+    limit = _policy_limit_for_asset(asset_type, student=student, policy=policy)
+    active_count = _active_asset_loan_count(student, asset_type)
+    label = _asset_label(asset_type)
+    if active_count >= limit["max_keep_at_a_time"]:
+        raise ValidationError(
+            f"You already hold {active_count} {label}. "
+            f"Return one before borrowing another (limit: {limit['max_keep_at_a_time']})."
+        )
+    if active_count >= limit["max_borrow_at_a_time"]:
+        raise ValidationError(
+            f"You have reached the borrow limit of {limit['max_borrow_at_a_time']} {label}."
+        )
 
 
 @transaction.atomic
@@ -308,17 +686,18 @@ def issue_loan(
         if not request and room.reservation_requests.filter(status=BorrowRequest.STATUS_PENDING).exists():
             raise ValidationError("This discussion room is reserved for another student.")
 
-    # Check library service availability
-    from admin_app.settings_registry import all_settings
-    lib_settings = all_settings().get("librarian_library", {})
-    if book_copy and not bool(lib_settings.get("books_enabled", True)):
-        raise ValidationError("Book borrowing is temporarily unavailable.")
-    if laptop and not bool(lib_settings.get("laptops_enabled", True)):
-        raise ValidationError("Laptop borrowing is currently disabled.")
-    if room and not bool(lib_settings.get("rooms_enabled", True)):
-        raise ValidationError("Discussion room booking is currently disabled.")
-
-    _check_asset_borrowing_limits(student, asset_type="book" if book_copy else "laptop" if laptop else "room")
+    asset_type = (
+        BorrowRequest.ASSET_BOOK
+        if book_copy
+        else BorrowRequest.ASSET_LAPTOP
+        if laptop
+        else BorrowRequest.ASSET_ROOM
+    )
+    policy = library_policy_settings()
+    validate_library_service_available(asset_type, policy)
+    borrowed_at = timezone.now()
+    validate_due_at_for_asset(asset_type, due_at, borrowed_at=borrowed_at, policy=policy)
+    _check_asset_borrowing_limits(student, asset_type=asset_type, policy=policy)
 
     loan = Loan.objects.create(
         student=student,
@@ -327,7 +706,9 @@ def issue_loan(
         room=room,
         request=request,
         assigned_by=assigned_by,
+        borrowed_at=borrowed_at,
         due_at=due_at,
+        max_renewals=policy[f"{_config_for_asset(asset_type)['prefix']}_max_renewals"],
         notes=notes,
     )
     if book_copy:
@@ -434,8 +815,6 @@ def return_loan(loan_id, *, returned_by=None, condition_notes=""):
     )
     return loan
 
-from datetime import timedelta
-
 @transaction.atomic
 def renew_loan(loan_id, *, due_at=None, requested_by=None):
     """Renew an active loan, extending its due date within renewal limits.
@@ -448,18 +827,27 @@ def renew_loan(loan_id, *, due_at=None, requested_by=None):
     loan = Loan.objects.select_for_update().filter(pk=loan_id, status=Loan.STATUS_ACTIVE).first()
     if not loan:
         raise ValidationError("Active loan not found.")
-    if loan.renewal_count >= loan.max_renewals:
+    asset_type = asset_type_for_loan(loan)
+    policy = library_policy_settings()
+    config = _config_for_asset(asset_type)
+    max_renewals = policy[f"{config['prefix']}_max_renewals"]
+    if loan.renewal_count >= max_renewals:
         raise ValidationError("Maximum renewals reached for this loan.")
-    # Determine new due date
     if due_at:
         new_due = due_at
     else:
-        # default extension of 14 days from current due
-        new_due = loan.due_at + timedelta(days=14)
+        new_due = loan.due_at + _duration_delta(asset_type, renewal=True, policy=policy)
+    renewal_limit_due = loan.due_at + _duration_delta(asset_type, renewal=True, policy=policy)
+    if new_due > renewal_limit_due:
+        duration = _duration_payload(asset_type, renewal=True, policy=policy)
+        raise ValidationError(
+            f"{LIBRARY_ASSET_LABELS[asset_type]} renewals cannot exceed "
+            f"{duration['value']} {duration['unit']}."
+        )
     loan.due_at = new_due
     loan.renewal_count += 1
-    loan.save(update_fields=["due_at", "renewal_count", "updated_at"])
-    # Notify student
+    loan.max_renewals = max_renewals
+    loan.save(update_fields=["due_at", "renewal_count", "max_renewals", "updated_at"])
     if requested_by:
         notify_profile(
             loan.student,
@@ -481,10 +869,16 @@ def _calculate_overdue_fine(loan, daily_rate=1.0):
     return Decimal(days_overdue) * Decimal(str(daily_rate))
 
 @transaction.atomic
-def apply_overdue_fine(loan_id, *, daily_rate=1.0):
+def apply_overdue_fine(loan_id, *, daily_rate=None):
     loan = Loan.objects.select_for_update().filter(pk=loan_id).first()
     if not loan:
         raise ValidationError("Loan not found.")
+    asset_type = asset_type_for_loan(loan)
+    policy = library_policy_settings()
+    if daily_rate in (None, ""):
+        daily_rate = policy[_config_for_asset(asset_type)["fine_key"]]
+    else:
+        daily_rate = parse_decimal(daily_rate, field="daily_rate", allow_zero=True)
     fine_amount = _calculate_overdue_fine(loan, daily_rate)
     if fine_amount > 0:
         loan.fine_amount = fine_amount

@@ -7,6 +7,12 @@ import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { apiFetch } from "@/lib/auth"
+import {
+  DEFAULT_UMS_PUBLIC_SETTINGS,
+  formatUmsMoney,
+  loadPublicUmsSettings,
+  type UmsPublicSettings,
+} from "@/lib/ums-settings"
 
 type CanteenAccount = {
   month: string
@@ -28,29 +34,36 @@ type StudentDashboardResponse = {
   canteen_message: string
 }
 
-function money(value: string) {
-  return `RM ${Number(value || 0).toFixed(2)}`
+function money(value: string, settings: UmsPublicSettings) {
+  return formatUmsMoney(value, settings)
 }
 
 export default function StudentCanteenPage() {
   const [account, setAccount] = useState<CanteenAccount | null>(null)
   const [message, setMessage] = useState("")
+  const [publicSettings, setPublicSettings] = useState(DEFAULT_UMS_PUBLIC_SETTINGS)
+  const diningLabel = publicSettings.module_labels.canteen || publicSettings.policies.dining.label || "Dining"
+  const diningLabelLower = diningLabel.toLowerCase()
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
 
   const loadCanteenAccount = useCallback(async () => {
     setError("")
-    const response = await apiFetch<StudentDashboardResponse>("/student/dashboard")
+    const [response, settings] = await Promise.all([
+      apiFetch<StudentDashboardResponse>("/student/dashboard"),
+      loadPublicUmsSettings(),
+    ])
     setAccount(response.canteen_account)
     setMessage(response.canteen_message)
+    setPublicSettings(settings)
   }, [])
 
   const refreshCanteenAccount = useCallback(() => {
     setLoading(true)
     void loadCanteenAccount()
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load canteen balance."))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : `Unable to load ${diningLabelLower} balance.`))
       .finally(() => setLoading(false))
-  }, [loadCanteenAccount])
+  }, [diningLabelLower, loadCanteenAccount])
 
   useEffect(() => {
     const timer = window.setTimeout(refreshCanteenAccount, 0)
@@ -62,7 +75,7 @@ export default function StudentCanteenPage() {
       <Header
         breadcrumbItems={[
           { href: "/student", title: "Student" },
-          { href: "/student/canteen", title: "Canteen" },
+          { href: "/student/canteen", title: diningLabel },
         ]}
       />
       <main className="flex-1 px-4 pb-8 pt-4 sm:px-6">
@@ -71,10 +84,10 @@ export default function StudentCanteenPage() {
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border/70 pb-4">
               <div>
                 <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-                  <Utensils className="size-6" /> Canteen
+                  <Utensils className="size-6" /> {diningLabel}
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Check your current monthly meal allowance and canteen purchases.
+                  Check your current monthly meal allowance and {diningLabelLower} purchases.
                 </p>
               </div>
               <Button variant="outline" disabled={loading} onClick={refreshCanteenAccount}>
@@ -97,19 +110,19 @@ export default function StudentCanteenPage() {
                   <CardContent className="space-y-3">
                     <div className="rounded-lg border bg-emerald-50 p-4 text-emerald-900">
                       <p className="text-sm">Current balance</p>
-                      <p className="mt-1 text-4xl font-semibold">{money(account.balance)}</p>
+                      <p className="mt-1 text-4xl font-semibold">{money(account.balance, publicSettings)}</p>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>Monthly allowance</span>
-                      <strong>{money(account.allowance_amount)}</strong>
+                      <strong>{money(account.allowance_amount, publicSettings)}</strong>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>Admin additions</span>
-                      <strong>{money(account.adjustment_amount)}</strong>
+                      <strong>{money(account.adjustment_amount, publicSettings)}</strong>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>Spent this month</span>
-                      <strong>{money(account.spent_amount)}</strong>
+                      <strong>{money(account.spent_amount, publicSettings)}</strong>
                     </div>
                   </CardContent>
                 </Card>
@@ -117,7 +130,7 @@ export default function StudentCanteenPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Transactions This Month</CardTitle>
-                    <CardDescription>Your canteen purchases for the current allowance month.</CardDescription>
+                    <CardDescription>Your {diningLabelLower} purchases for the current allowance month.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {account.transactions.length ? (
@@ -127,16 +140,16 @@ export default function StudentCanteenPage() {
                           className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
                         >
                           <div>
-                            <p className="font-medium">{transaction.description || "Canteen purchase"}</p>
+                            <p className="font-medium">{transaction.description || `${diningLabel} purchase`}</p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(transaction.created_at).toLocaleString()} · {transaction.caterer_name}
                             </p>
                           </div>
-                          <strong>{money(transaction.amount)}</strong>
+                          <strong>{money(transaction.amount, publicSettings)}</strong>
                         </div>
                       ))
                     ) : (
-                      <p className="text-sm text-muted-foreground">No canteen transactions this month.</p>
+                      <p className="text-sm text-muted-foreground">No {diningLabelLower} transactions this month.</p>
                     )}
                   </CardContent>
                 </Card>

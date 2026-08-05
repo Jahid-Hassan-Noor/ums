@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from admin_app import models
 from auth_app.permissions import IsAdminRole
 from admin_app.serializers import BuildingSerializer, VenueSerializer
+from admin_app.settings_registry import venue_booking_policy_payload
 from core.common.errors import first_error as _first_error
 
 
@@ -19,6 +20,7 @@ class AdminVenues(APIView):
             {
                 "title": "Venues & Infrastructure",
                 "section": "admin",
+                "policy": venue_booking_policy_payload(),
                 "buildings": BuildingSerializer(buildings, many=True).data,
                 "venues": VenueSerializer(venues, many=True).data,
             },

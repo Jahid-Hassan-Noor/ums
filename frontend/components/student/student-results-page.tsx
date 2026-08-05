@@ -89,6 +89,14 @@ type ResultSummary = {
   academic_status: string
 }
 
+type ResultLabels = {
+  grade_point: string
+  gpa: string
+  cgpa: string
+  grade_scale_heading: string
+  grade_scale_description: string
+}
+
 type SemesterResultsResponse = {
   title: string
   student: StudentInfo
@@ -98,6 +106,7 @@ type SemesterResultsResponse = {
   records: ResultRecord[]
   summary: ResultSummary
   grade_scale: GradeScaleRow[]
+  result_labels?: ResultLabels
 }
 
 type TranscriptResponse = Omit<SemesterResultsResponse, "selected_semester">
@@ -305,10 +314,14 @@ function ErrorState({ error }: { error: string }) {
 function SummaryCards({
   summary,
   publishedCount,
+  labels,
 }: {
   summary: ResultSummary
   publishedCount: number
+  labels?: ResultLabels
 }) {
+  const gpaLabel = labels?.gpa ?? "GPA"
+  const cgpaLabel = labels?.cgpa ?? "CGPA"
   const items = [
     {
       label: "Published Courses",
@@ -320,10 +333,10 @@ function SummaryCards({
       value: summary.cumulative_credit_earned,
       icon: BarChart3,
     },
-    { label: "CGPA", value: summary.cgpa, icon: FileText },
+    { label: cgpaLabel, value: summary.cgpa, icon: FileText },
   ]
   if (summary.include_gpa) {
-    items.splice(2, 0, { label: "GPA", value: summary.gpa, icon: BarChart3 })
+    items.splice(2, 0, { label: gpaLabel, value: summary.gpa, icon: BarChart3 })
   }
   return (
     <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-4">
@@ -409,13 +422,22 @@ function ResultTable({ groups }: { groups: ResultGroup[] }) {
   )
 }
 
-function GradeScaleTable({ rows }: { rows: GradeScaleRow[] }) {
+function GradeScaleTable({
+  rows,
+  labels,
+}: {
+  rows: GradeScaleRow[]
+  labels?: ResultLabels
+}) {
   return (
     <Card className="border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle className="text-lg">GPA Calculation</CardTitle>
+        <CardTitle className="text-lg">
+          {labels?.grade_scale_heading ?? "Grade Scale"}
+        </CardTitle>
         <CardDescription>
-          AIU grading scale used for GPA and CGPA calculation.
+          {labels?.grade_scale_description ??
+            "Institutional grading scale used for grade point calculation."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -425,7 +447,9 @@ function GradeScaleTable({ rows }: { rows: GradeScaleRow[] }) {
               <tr className="border-b bg-muted/60 text-left">
                 <th className="px-3 py-2 font-medium">Grade</th>
                 <th className="px-3 py-2 font-medium">Score</th>
-                <th className="px-3 py-2 font-medium">Grade Point</th>
+                <th className="px-3 py-2 font-medium">
+                  {labels?.grade_point ?? "Grade Point"}
+                </th>
                 <th className="px-3 py-2 font-medium">
                   Qualitative Assessment
                 </th>
@@ -544,9 +568,10 @@ function SemesterResultsView() {
           <SummaryCards
             summary={data.summary}
             publishedCount={data.records.length}
+            labels={data.result_labels}
           />
           <ResultTable groups={data.groups} />
-          <GradeScaleTable rows={data.grade_scale} />
+          <GradeScaleTable rows={data.grade_scale} labels={data.result_labels} />
         </>
       ) : null}
     </ResultsShell>
@@ -600,9 +625,10 @@ function TranscriptView() {
           <SummaryCards
             summary={data.summary}
             publishedCount={data.records.length}
+            labels={data.result_labels}
           />
           <ResultTable groups={data.groups} />
-          <GradeScaleTable rows={data.grade_scale} />
+          <GradeScaleTable rows={data.grade_scale} labels={data.result_labels} />
         </>
       ) : null}
     </ResultsShell>

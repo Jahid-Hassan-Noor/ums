@@ -1,12 +1,18 @@
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.text import slugify
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from auth_app.permissions import IsExecutiveRole
 from admin_app.report_exports import completed_xlsx_response
+from core.common.academic_policy import (
+    evaluation_activity_label,
+    evaluation_default_survey_title,
+    evaluation_required_by_default,
+)
 from executive_app.course_schedule import (
     get_executive_profile,
     get_executive_scope,
@@ -108,6 +114,7 @@ class ExecutiveEvaluationTemplates(APIView):
         ensure_starter_template(profile)
         return Response(
             {
+                "evaluation_label": evaluation_activity_label(),
                 "scope": scope_payload(scope),
                 "templates": [
                     serialize_template(template)
@@ -212,9 +219,11 @@ class ExecutiveEvaluationSurveys(APIView):
             "instructor",
             "instructor__user",
         )
+        label = evaluation_activity_label()
         return Response(
             {
-                "title": "SEC-SET Course Evaluations",
+                "title": f"{label}s",
+                "evaluation_label": label,
                 "scope": scope_payload(scope),
                 "offerings": [_offering_payload(offering) for offering in offerings],
                 "surveys": [
@@ -265,14 +274,17 @@ class ExecutiveEvaluationSurveys(APIView):
             template=template,
             title=(
                 str(request.data.get("title") or "").strip()
-                or f"SEC-SET: {offering.course.code} {offering.course.title}"
+                or evaluation_default_survey_title(offering)
             ),
             instructions=str(request.data.get("instructions") or "").strip(),
             questions=questions,
             opens_at=opens_at,
             closes_at=closes_at,
             is_published=_boolean(request.data.get("is_published"), default=True),
-            is_required=_boolean(request.data.get("is_required"), default=True),
+            is_required=_boolean(
+                request.data.get("is_required"),
+                default=evaluation_required_by_default(),
+            ),
             created_by=profile,
         )
         try:
@@ -385,12 +397,14 @@ class ExecutiveEvaluationSurveyExport(APIView):
         if not survey:
             return Response({"detail": "Evaluation survey not found."}, status=status.HTTP_404_NOT_FOUND)
         safe_code = survey.offering.course.code.lower().replace(" ", "-")
+        label = evaluation_activity_label()
+        safe_label = slugify(label) or "course-evaluation"
         return completed_xlsx_response(
             request,
-            name=f"SEC-SET {survey.offering.course.code}",
+            name=f"{label} {survey.offering.course.code}",
             export_type="course-evaluation",
-            filename=f"sec-set-{safe_code}-{survey.offering.semester_id}.xlsx",
-            sheet_name="SEC-SET",
+            filename=f"{safe_label}-{safe_code}-{survey.offering.semester_id}.xlsx",
+            sheet_name=label[:31],
             rows=export_rows(survey),
             metadata={
                 "scope": scope_payload(scope),

@@ -1,11 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { AlertCircle, CheckCircle2, CreditCard, ExternalLink, Loader2, RefreshCw, ShieldAlert, Wallet } from "lucide-react"
+import { AlertCircle, CheckCircle2, CreditCard, Loader2, RefreshCw, ShieldAlert, Wallet } from "lucide-react"
 
 import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import {
   fetchStudentFines,
   initiateFinePay,
@@ -13,8 +14,10 @@ import {
   fineStatusLabel,
   type Fine,
 } from "@/lib/fines"
+import { formatUmsMoney } from "@/lib/ums-settings"
 
 export function StudentFinesPage() {
+  const settings = usePublicUmsSettings()
   const [fines, setFines] = useState<Fine[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -37,7 +40,10 @@ export function StudentFinesPage() {
   }, [loadFines])
 
   useEffect(() => {
-    refresh()
+    const timer = window.setTimeout(() => {
+      refresh()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [refresh])
 
   async function handlePayFine(fine: Fine) {
@@ -46,9 +52,9 @@ export function StudentFinesPage() {
     try {
       const res = await initiateFinePay(fine.id)
       if (res.checkout_url) {
-        window.location.href = res.checkout_url
+        window.location.assign(res.checkout_url)
       } else {
-        setError("Could not generate payment link. Please contact the Finance Office.")
+        setSuccess(res.message || "Manual/offline payment mode is active. Please settle this charge with the Finance Office.")
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start checkout process.")
@@ -97,7 +103,7 @@ export function StudentFinesPage() {
           <Card className="border-amber-200 bg-amber-50/20">
             <CardHeader className="pb-2">
               <CardDescription className="text-amber-800 font-semibold">Outstanding Balance</CardDescription>
-              <CardTitle className="text-3xl text-amber-950">RM {totalOutstanding.toFixed(2)}</CardTitle>
+              <CardTitle className="text-3xl text-amber-950">{formatUmsMoney(totalOutstanding, settings)}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xs text-amber-800/80">Total pending or overdue fees requiring settlement.</p>
@@ -172,7 +178,7 @@ export function StudentFinesPage() {
                     <div className="flex items-center gap-4 self-stretch md:self-auto justify-between border-t md:border-0 border-border/40 pt-3 md:pt-0">
                       <div className="text-right">
                         <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Amount Due</div>
-                        <div className="text-xl font-bold text-slate-900">{fine.currency} {Number(fine.amount).toFixed(2)}</div>
+                        <div className="text-xl font-bold text-slate-900">{formatUmsMoney(fine.amount, settings, fine.currency)}</div>
                       </div>
                       {(fine.status === "pending" || fine.status === "overdue") ? (
                         <Button

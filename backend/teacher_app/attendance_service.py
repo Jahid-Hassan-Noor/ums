@@ -9,6 +9,7 @@ from django.utils.dateparse import parse_date, parse_time
 
 from admin_app.models import ClassMeeting, Profile
 from admin_app.settings_registry import setting_value
+from core.common.academic_policy import attendance_qr_ttl_seconds
 from core.media_access import protected_media_url
 from core.upload_security import (
     ALLOWED_IMAGE_EXTENSIONS_DOTTED,
@@ -29,7 +30,7 @@ MEDICAL_CERTIFICATE_EXTENSIONS = frozenset({".pdf"}) | ALLOWED_IMAGE_EXTENSIONS_
 
 
 def qr_ttl_seconds():
-    return 60
+    return attendance_qr_ttl_seconds()
 
 
 def teacher_meetings(profile):

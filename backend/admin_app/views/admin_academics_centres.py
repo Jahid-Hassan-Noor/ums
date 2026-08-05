@@ -29,9 +29,17 @@ class AdminAcademicsCentres(APIView):
         centres = models.Center.objects.all().order_by("name")
         return Response(
             {
-                "title": "Academic Centres",
+                "title": "Centres",
                 "section": "admin",
                 "centres": CenterSerializer(centres, many=True).data,
+                "center_types": [
+                    {"value": value, "label": label}
+                    for value, label in models.Center.CENTER_TYPE_CHOICES
+                ],
+                "academic_calendar_modes": [
+                    {"value": value, "label": label}
+                    for value, label in models.Center.ACADEMIC_CALENDAR_MODE_CHOICES
+                ],
             },
             status=status.HTTP_200_OK,
         )

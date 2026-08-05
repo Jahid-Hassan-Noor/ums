@@ -1,8 +1,10 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
 
 from admin_app import models
+from admin_app.role_config import SPECIAL_OWNER_ROLES, resolve_role_ownership
 from auth_app.password_policy import password_policy_errors
 from core.media_access import public_profile_picture_url
 from core.upload_security import image_upload_error
@@ -117,6 +119,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         allow_null=True,
         write_only=True,
     )
+    department_id = serializers.PrimaryKeyRelatedField(
+        source="department",
+        queryset=models.Department.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
     program_id = serializers.PrimaryKeyRelatedField(
         source="program",
         queryset=models.Program.objects.filter(is_active=True),
@@ -142,6 +151,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             "school_id",
             "center_id",
             "unit_id",
+            "department_id",
             "program_id",
         )
         extra_kwargs = {"password": {"write_only": True}}
@@ -157,6 +167,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         school = attrs.get("school")
         center = attrs.get("center")
         unit = attrs.get("unit")
+        department = attrs.get("department")
         teacher_assignments = attrs.get("teacher_assignments", [])
 
         if role == models.Profile.ROLE_ADMIN:
@@ -189,11 +200,35 @@ class RegisterSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"unit_id": "Selected unit does not belong to the selected centre."}
                 )
+            if department and unit.department_id and unit.department_id != department.id:
+                raise serializers.ValidationError(
+                    {"unit_id": "Selected unit does not belong to the selected department."}
+                )
             if not school and not center and len(unit_scopes) == 1:
                 kind, unit_parent = unit_scopes[0]
                 attrs[kind] = unit_parent
                 school = attrs.get("school")
                 center = attrs.get("center")
+            if not department and unit.department_id:
+                attrs["department"] = unit.department
+                department = unit.department
+
+        if department:
+            if school and department.school_id and department.school_id != school.id:
+                raise serializers.ValidationError(
+                    {"department_id": "Selected department does not belong to the selected school."}
+                )
+            if center and department.center_id and department.center_id != center.id:
+                raise serializers.ValidationError(
+                    {"department_id": "Selected department does not belong to the selected centre."}
+                )
+            if not school and not center:
+                if department.school_id:
+                    attrs["school"] = department.school
+                    school = department.school
+                elif department.center_id:
+                    attrs["center"] = department.center
+                    center = department.center
 
         if role == models.Profile.ROLE_EXECUTIVE:
             if not unit:
@@ -212,39 +247,22 @@ class RegisterSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"unit_id": "Selected unit does not belong to the selected centre."}
                 )
-        if role == models.Profile.ROLE_LIBRARIAN:
-            center = models.Center.objects.filter(code="COR", is_active=True).first()
-            unit = models.Unit.objects.filter(code="COR-ADMIN", is_active=True).first()
-            if not center or not unit:
-                raise serializers.ValidationError(
-                    {"role": "The COR centre and COR-ADMIN unit must exist before creating librarians."}
+        if role in SPECIAL_OWNER_ROLES:
+            try:
+                ownership = resolve_role_ownership(
+                    role,
+                    school=school,
+                    center=center,
+                    unit=unit,
+                    department=department,
                 )
-            attrs["school"] = None
-            attrs["center"] = center
-            attrs["unit"] = unit
-            school = None
-        if role == models.Profile.ROLE_CATERER:
-            center = models.Center.objects.filter(code="CSAA", is_active=True).first()
-            unit = models.Unit.objects.filter(code="CTN-ADMIN", is_active=True).first()
-            if not center or not unit:
-                raise serializers.ValidationError(
-                    {"role": "The CSAA centre and CTN-ADMIN unit must exist before creating caterers."}
-                )
-            attrs["school"] = None
-            attrs["center"] = center
-            attrs["unit"] = unit
-            school = None
-        if role == models.Profile.ROLE_TECHNICIAN:
-            department = models.Department.objects.filter(code="ICT", is_active=True).first()
-            if not department:
-                raise serializers.ValidationError(
-                    {"role": "The standalone ICT department must exist before creating technicians."}
-                )
-            attrs["school"] = None
-            attrs["center"] = None
-            attrs["unit"] = None
-            school = None
-            center = None
+            except DjangoValidationError as error:
+                raise serializers.ValidationError(error.message_dict) from error
+            attrs.update(ownership)
+            school = ownership["school"]
+            center = ownership["center"]
+            unit = ownership["unit"]
+            department = ownership["department"]
         if school and center:
             raise serializers.ValidationError(
                 {"school_id": "Assign only one school or centre."}
@@ -320,6 +338,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         school = validated_data.pop("school", None)
         center = validated_data.pop("center", None)
         unit = validated_data.pop("unit", None)
+        department = validated_data.pop("department", None)
         program = validated_data.pop("program", None)
         password = validated_data.pop("password")
 
@@ -331,11 +350,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         profile.school = school
         profile.center = center
         profile.unit = unit
+        profile.department = department
         if role == models.Profile.ROLE_STUDENT:
             profile.program = program
-        if role == models.Profile.ROLE_TECHNICIAN:
-            profile.department = models.Department.objects.get(code="ICT", is_active=True)
-        elif unit and unit.department_id:
+        if not department and unit and unit.department_id:
             profile.department = unit.department
         if role == models.Profile.ROLE_STUDENT:
             profile.student_id = ums_id
@@ -476,21 +494,27 @@ class UserSerializer(serializers.ModelSerializer):
                 "id": None,
                 "code": "",
                 "name": "Unassigned",
+                "academic_center": False,
                 "academic_workflows": False,
+                "semester_workflows": False,
+                "academic_calendar_mode": "",
+                "semester_calendar_group": "",
             }
 
         kind, unit = next(iter(unique_scopes.values()))
-        academic_workflows = kind == "school" or models.Program.objects.filter(
-            center=unit,
-            program_type=models.Program.PROGRAM_ACADEMIC,
-            is_active=True,
-        ).exists()
+        academic_workflows = kind == "school" or unit.uses_semester_calendar()
         return {
             "kind": kind,
             "id": unit.id,
             "code": unit.code,
             "name": unit.name,
+            "academic_center": bool(kind == "center" and unit.is_academic_center()),
             "academic_workflows": academic_workflows,
+            "semester_workflows": academic_workflows,
+            "academic_calendar_mode": unit.academic_calendar_mode if kind == "center" else "",
+            "semester_calendar_group": unit.effective_semester_calendar_group()
+            if kind == "center" and unit.uses_semester_calendar()
+            else "",
             "unit_id": profile.unit_id,
             "unit_name": profile.unit.name if profile.unit_id else "",
         }

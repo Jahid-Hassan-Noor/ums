@@ -16,14 +16,25 @@ from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
-from admin_app.models import Admin, Center, IELTSSession, School, Semester, SemesterHoliday, Profile, Unit
+from admin_app.models import (
+    Admin,
+    AcademicSession,
+    Center,
+    IELTSSession,
+    School,
+    Semester,
+    SemesterConfiguration,
+    SemesterHoliday,
+    Profile,
+    Unit,
+)
 from auth_app.serializers import RegisterSerializer
 from executive_app.views.executive_courses_offer import (
     calendar_group_for_scope,
     semester_accepts_course_offers,
     semesters_accepting_course_offers,
 )
-from executive_app.course_schedule import teachers_for_scope
+from executive_app.course_schedule import scope_supports_academic_workflows, teachers_for_scope
 from student_app.models import RegistrationPeriod
 from student_app.models import Student
 from teacher_app.models import Teacher, TeacherScopeAssignment
@@ -658,7 +669,7 @@ class AccountRecoveryTests(TestCase):
 
 @override_settings(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-    DEFAULT_FROM_EMAIL="AIU Portal <portal@example.com>",
+    DEFAULT_FROM_EMAIL="University Portal <portal@example.com>",
     FRONTEND_BASE_URL="http://localhost:3000",
 )
 class AdminCreateAccountEmailTests(TestCase):
@@ -700,6 +711,8 @@ class AdminCreateAccountEmailTests(TestCase):
         self.assertTrue(user.check_password("Abcdefg1"))
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["new-student@example.com"])
+        self.assertEqual(mail.outbox[0].subject, "Your University Portal account credentials")
+        self.assertIn("A University Portal student account has been created", mail.outbox[0].body)
         self.assertIn("Full name: New Student", mail.outbox[0].body)
         self.assertIn("Username: new_student", mail.outbox[0].body)
         self.assertIn("Email: new-student@example.com", mail.outbox[0].body)
@@ -849,6 +862,134 @@ class AdminSemesterEndpointTests(TestCase):
             recipients[role] = user.profile
         return recipients
 
+    def test_admin_can_configure_semesters_per_academic_year(self):
+        response = self.client.post(
+            "/admin/semesters",
+            {
+                "action": "update_semester_configuration",
+                "calendar_group": Semester.CALENDAR_UNDERGRADUATE,
+                "semesters_per_year": 2,
+                "semester_lengths": [
+                    {
+                        "name": "Autumn Term",
+                        "weeks": 14,
+                        "semester_type": Semester.TYPE_LONG,
+                        "default_classes_per_week": 1,
+                    },
+                    {
+                        "name": "Spring Term",
+                        "weeks": 16,
+                        "semester_type": Semester.TYPE_LONG,
+                        "default_classes_per_week": 1,
+                    },
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        config = SemesterConfiguration.objects.get(calendar_group=Semester.CALENDAR_UNDERGRADUATE)
+        self.assertEqual(config.semesters_per_year, 2)
+        self.assertEqual([item["weeks"] for item in config.semester_lengths], [14, 16])
+        self.assertEqual(response.json()["semester_configuration"]["semester_lengths"][1]["name"], "Spring Term")
+
+    def test_admin_can_configure_custom_center_calendar_group(self):
+        center = Center.objects.create(
+            code="HON",
+            name="Honours Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_SEMESTER,
+            semester_calendar_group="center:honours",
+        )
+
+        list_response = self.client.get("/admin/semesters")
+        self.assertEqual(list_response.status_code, 200, list_response.json())
+        self.assertIn(
+            "center:honours",
+            {choice["value"] for choice in list_response.json()["calendar_groups"]},
+        )
+
+        response = self.client.post(
+            "/admin/semesters",
+            {
+                "action": "update_semester_configuration",
+                "calendar_group": center.semester_calendar_group,
+                "semesters_per_year": 1,
+                "semester_lengths": [
+                    {
+                        "name": "Honours Year",
+                        "weeks": 40,
+                        "semester_type": Semester.TYPE_LONG,
+                        "default_classes_per_week": 1,
+                    },
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertTrue(
+            SemesterConfiguration.objects.filter(calendar_group="center:honours").exists()
+        )
+
+    def test_semester_plan_uses_configured_length_for_selected_semester(self):
+        SemesterConfiguration.objects.create(
+            calendar_group=Semester.CALENDAR_UNDERGRADUATE,
+            semesters_per_year=4,
+            semester_lengths=[
+                {
+                    "number": 1,
+                    "name": "Term 1",
+                    "weeks": 10,
+                    "semester_type": Semester.TYPE_LONG,
+                    "default_classes_per_week": 1,
+                },
+                {
+                    "number": 2,
+                    "name": "Term 2",
+                    "weeks": 10,
+                    "semester_type": Semester.TYPE_LONG,
+                    "default_classes_per_week": 1,
+                },
+                {
+                    "number": 3,
+                    "name": "Term 3",
+                    "weeks": 8,
+                    "semester_type": Semester.TYPE_SHORT,
+                    "default_classes_per_week": 2,
+                },
+                {
+                    "number": 4,
+                    "name": "Term 4",
+                    "weeks": 6,
+                    "semester_type": Semester.TYPE_SHORT,
+                    "default_classes_per_week": 3,
+                },
+            ],
+        )
+
+        response = self.client.post(
+            "/admin/semesters",
+            {
+                "action": "create_semester",
+                "name": "Term 4, Session 2028",
+                "academic_session": "2028",
+                "calendar_group": Semester.CALENDAR_UNDERGRADUATE,
+                "semester_number": 4,
+                "start_date": "2028-10-01",
+                "end_date": "2028-11-15",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        semester = Semester.objects.get(name="Term 4, Session 2028")
+        self.assertEqual(semester.semester_number, 4)
+        self.assertEqual(semester.planned_weeks, 6)
+        self.assertEqual(semester.semester_type, Semester.TYPE_SHORT)
+        self.assertEqual(semester.default_classes_per_week, 3)
+        self.assertEqual(response.json()["semester"]["expected_weeks"], 6)
+
     def test_admin_can_start_semester_with_default_registration_phases(self):
         recipients = self.notification_recipients("semester")
         response = self.client.post(
@@ -970,16 +1111,16 @@ class AdminSemesterEndpointTests(TestCase):
             "/admin/semesters",
             {
                 "action": "start_semester",
-                "name": "CFGS Semester 1, 2026/2027",
-                "academic_session": "2026/2027",
+                "name": "Foundation Semester 1, 2027/2028",
+                "academic_session": "2027/2028",
                 "calendar_group": Semester.CALENDAR_FOUNDATION,
                 "semester_type": Semester.TYPE_LONG,
-                "start_date": "2026-04-06",
-                "end_date": "2026-08-02",
-                "revision_starts_on": "2026-07-20",
-                "revision_ends_on": "2026-07-26",
-                "examination_starts_on": "2026-07-27",
-                "examination_ends_on": "2026-08-02",
+                "start_date": "2027-04-06",
+                "end_date": "2027-08-02",
+                "revision_starts_on": "2027-07-20",
+                "revision_ends_on": "2027-07-26",
+                "examination_starts_on": "2027-07-27",
+                "examination_ends_on": "2027-08-02",
             },
             format="json",
         )
@@ -1035,8 +1176,14 @@ class AdminSemesterEndpointTests(TestCase):
                 ).exists()
             )
 
-    def test_lc_is_limited_to_two_ielts_sessions_per_academic_year(self):
-        center = Center.objects.create(code="LC", name="Language Centre")
+    def test_whole_year_center_is_limited_by_configured_sessions_per_academic_year(self):
+        center = Center.objects.create(
+            code="LANG",
+            name="Language Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_WHOLE_YEAR,
+            annual_session_limit=2,
+        )
         payload = {
             "action": "create_ielts_session",
             "academic_session": "2026/2027",
@@ -1062,6 +1209,56 @@ class AdminSemesterEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400, response.json())
         self.assertEqual(IELTSSession.objects.filter(academic_session="2026/2027").count(), 2)
 
+    def test_academic_session_model_keeps_legacy_ielts_alias(self):
+        center = Center.objects.create(
+            code="CPD",
+            name="Professional Development Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_WHOLE_YEAR,
+        )
+        session = AcademicSession.objects.create(
+            academic_session="2026/2027",
+            title="Placement Session",
+            center=center,
+            exam_date="2026-11-20",
+            capacity=25,
+        )
+
+        self.assertIs(IELTSSession, AcademicSession)
+        self.assertEqual(AcademicSession._meta.db_table, "admin_app_ieltssession")
+        self.assertEqual(IELTSSession.objects.get(pk=session.pk).title, "Placement Session")
+
+    def test_admin_can_create_academic_session_with_neutral_action(self):
+        center = Center.objects.create(
+            code="EXT",
+            name="Extension Learning Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_WHOLE_YEAR,
+            annual_session_limit=1,
+        )
+
+        response = self.client.post(
+            "/admin/semesters",
+            {
+                "action": "create_academic_session",
+                "academic_session": "2026/2027",
+                "center": center.id,
+                "capacity": 30,
+                "registration_opens_at": "2026-09-01T00:00:00Z",
+                "registration_closes_at": "2026-09-30T23:59:59Z",
+                "title": "Professional Entry Session",
+                "exam_date": "2026-10-15",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        payload = response.json()
+        self.assertEqual(payload["message"], "Academic session created successfully.")
+        self.assertEqual(payload["academic_session"]["title"], "Professional Entry Session")
+        self.assertEqual(payload["ielts_session"]["id"], payload["academic_session"]["id"])
+        self.assertEqual(AcademicSession.objects.count(), 1)
+
     def test_planned_semester_is_available_during_course_offering_window(self):
         now = timezone.now()
         semester = Semester.objects.create(
@@ -1078,12 +1275,40 @@ class AdminSemesterEndpointTests(TestCase):
         self.assertTrue(semester_accepts_course_offers(semester, now=now))
         self.assertTrue(semesters_accepting_course_offers(now=now).filter(pk=semester.pk).exists())
 
-    def test_executive_center_scope_uses_cfgs_calendar_but_lc_has_no_semesters(self):
-        cfgs = Center.objects.create(code="CFGS", name="Centre for Foundation and General Studies")
-        lc = Center.objects.create(code="LC", name="Language Centre")
+    def test_executive_center_scope_uses_configured_calendar_mode(self):
+        foundation_center = Center.objects.create(
+            code="FOUND",
+            name="Foundation Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_SEMESTER,
+            semester_calendar_group=Semester.CALENDAR_FOUNDATION,
+        )
+        custom_center = Center.objects.create(
+            code="HON",
+            name="Honours Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_SEMESTER,
+            semester_calendar_group="center:honours",
+        )
+        year_round_center = Center.objects.create(
+            code="LANG",
+            name="Language Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_WHOLE_YEAR,
+        )
+        support_center = Center.objects.create(
+            code="ICT",
+            name="ICT Centre",
+            center_type=Center.CENTER_NON_ACADEMIC,
+        )
 
         self.assertEqual(
-            calendar_group_for_scope({"kind": "center", "unit": cfgs}),
+            calendar_group_for_scope({"kind": "center", "unit": foundation_center}),
             Semester.CALENDAR_FOUNDATION,
         )
-        self.assertIsNone(calendar_group_for_scope({"kind": "center", "unit": lc}))
+        self.assertEqual(
+            calendar_group_for_scope({"kind": "center", "unit": custom_center}),
+            "center:honours",
+        )
+        self.assertIsNone(calendar_group_for_scope({"kind": "center", "unit": year_round_center}))
+        self.assertFalse(scope_supports_academic_workflows({"kind": "center", "unit": support_center}))

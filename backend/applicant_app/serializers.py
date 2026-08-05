@@ -7,7 +7,12 @@ from rest_framework import serializers
 from admin_app.settings_registry import setting_value
 from auth_app.models import Profile, ensure_role_detail, prune_role_details
 from auth_app.password_policy import password_policy_errors
-from applicant_app.admissions_setup import admissions_setup
+from applicant_app.admissions_setup import (
+    admission_status_choices,
+    admissions_setup,
+    document_type_config,
+    is_image_document_type,
+)
 from applicant_app.countries import COUNTRY_CHOICES
 from core.media_access import protected_media_url
 from core.upload_security import (
@@ -20,12 +25,6 @@ from . import models
 
 
 User = get_user_model()
-IMAGE_DOCUMENT_TYPES = {
-    models.ApplicationDocument.TYPE_PASSPORT,
-    models.ApplicationDocument.TYPE_PHOTO,
-}
-
-
 class ApplicantSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source="user.id", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
@@ -270,6 +269,7 @@ class ApplicationProgrammeSerializer(serializers.ModelSerializer):
 
 class ApplicationDocumentSerializer(serializers.ModelSerializer):
     file = serializers.FileField(write_only=True)
+    document_type = serializers.CharField(max_length=50)
     file_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -313,13 +313,17 @@ class ApplicationDocumentSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         upload = attrs.get("file")
         document_type = attrs.get("document_type")
+        if not document_type_config(document_type):
+            raise serializers.ValidationError(
+                {"document_type": "This document type is not enabled for the current admissions workflow."}
+            )
         if not upload:
             return attrs
 
         extension = image_file_extension(upload)
         maximum_bytes = setting_value("workflow", "applicant_max_upload_mb") * 1024 * 1024
         maximum_label = f"{setting_value('workflow', 'applicant_max_upload_mb')} MB"
-        if document_type in IMAGE_DOCUMENT_TYPES:
+        if is_image_document_type(document_type):
             if extension not in ALLOWED_IMAGE_EXTENSIONS:
                 raise serializers.ValidationError(
                     {
@@ -507,12 +511,18 @@ class ApplicationSubmitSerializer(serializers.Serializer):
 
 
 class StaffApplicationStatusSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=models.AdmissionApplication.STATUS_CHOICES)
+    status = serializers.CharField(max_length=30)
     note = serializers.CharField(required=False, allow_blank=True)
     review_notes = serializers.CharField(required=False, allow_blank=True)
     interview_at = serializers.DateTimeField(required=False, allow_null=True)
     interview_location = serializers.CharField(required=False, allow_blank=True, max_length=255)
     interview_details = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_status(self, value):
+        enabled_statuses = {choice[0] for choice in admission_status_choices()}
+        if value not in enabled_statuses:
+            raise serializers.ValidationError("This status is not enabled for the current admissions workflow.")
+        return value
 
 
 class StaffDocumentReviewSerializer(serializers.Serializer):

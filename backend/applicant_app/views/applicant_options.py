@@ -18,6 +18,7 @@ class ApplicantOptionsView(APIView):
     def get(self, request, *args, **kwargs):
         intakes = models.ApplicationIntake.objects.filter(is_active=True)
         programmes = models.ApplicationProgramme.objects.filter(is_active=True)
+        setup_payload = admissions_setup_payload()
         return Response(
             {
                 "intakes": ApplicationIntakeSerializer(intakes, many=True).data,
@@ -26,19 +27,14 @@ class ApplicantOptionsView(APIView):
                     {"value": value, "label": label}
                     for value, label in models.ApplicationIntake.APPLICATION_TYPE_CHOICES
                 ],
-                "document_types": [
-                    {"value": value, "label": label}
-                    for value, label in models.ApplicationDocument.DOCUMENT_TYPE_CHOICES
-                ],
+                "document_types": setup_payload["document_types"],
                 "countries": [
                     {"value": value, "label": label}
                     for value, label in COUNTRY_CHOICES
                 ],
-                "steps": [
-                    {"value": value, "label": label}
-                    for value, label in models.AdmissionApplication.STEP_CHOICES
-                ],
-                "admissions_setup": admissions_setup_payload()["settings"],
+                "steps": setup_payload["steps"],
+                "status_options": setup_payload["status_options"],
+                "admissions_setup": setup_payload["settings"],
             },
             status=status.HTTP_200_OK,
         )

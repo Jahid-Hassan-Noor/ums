@@ -16,6 +16,7 @@ from accountant_app.models import (
 )
 from accountant_app.service import display_name, money, profile_identifier
 from admin_app.models import Profile
+from admin_app.settings_registry import default_currency_code, format_currency_amount
 from core.common.pagination import paginate
 
 
@@ -48,6 +49,15 @@ def _student_or_error(student_id):
     return student
 
 
+def _currency_code(value=None):
+    code = str(value or default_currency_code()).strip().upper()
+    return code if len(code) == 3 and code.isalpha() else default_currency_code()
+
+
+def _money_label(amount, currency=None):
+    return format_currency_amount(amount, currency_code=_currency_code(currency))
+
+
 def student_payload(profile):
     return {
         "id": profile.id,
@@ -76,6 +86,7 @@ def charge_payload(charge):
         "source_id": charge.source_id,
         "description": charge.description,
         "amount": money(charge.amount),
+        "amount_display": _money_label(charge.amount, charge.currency),
         "currency": charge.currency,
         "due_date": charge.due_date.isoformat() if charge.due_date else None,
         "status": charge.status,
@@ -90,9 +101,11 @@ def ledger_entry_payload(entry):
         "charge_id": entry.charge_id,
         "entry_type": entry.entry_type,
         "amount": money(entry.amount),
+        "amount_display": _money_label(entry.amount, entry.currency),
         "currency": entry.currency,
         "description": entry.description,
         "balance_after": money(entry.balance_after),
+        "balance_after_display": _money_label(entry.balance_after, entry.currency),
         "posted_at": entry.posted_at.isoformat(),
         "posted_by": display_name(entry.posted_by) if entry.posted_by_id else "",
     }
@@ -127,16 +140,17 @@ def current_balance_for_student(student):
     return debit_total - credit_total
 
 
-def sync_balance_snapshot(student, balance):
+def sync_balance_snapshot(student, balance, currency=None):
     StudentBalanceSnapshot.objects.update_or_create(
         student=student,
-        defaults={"balance": balance, "currency": "MYR"},
+        defaults={"balance": balance, "currency": _currency_code(currency)},
     )
 
 
 @transaction.atomic
-def record_ledger_entry(*, student, entry_type, amount, description, actor=None, charge=None):
+def record_ledger_entry(*, student, entry_type, amount, description, actor=None, charge=None, currency=None):
     amount = _decimal(amount)
+    entry_currency = _currency_code(currency or getattr(charge, "currency", None))
     if entry_type not in BALANCE_INCREASE_TYPES | BALANCE_DECREASE_TYPES:
         raise ValidationError({"entry_type": "Unsupported ledger entry type."})
 
@@ -152,11 +166,12 @@ def record_ledger_entry(*, student, entry_type, amount, description, actor=None,
         charge=charge,
         entry_type=entry_type,
         amount=amount,
+        currency=entry_currency,
         description=description,
         balance_after=balance_after,
         posted_by=actor,
     )
-    sync_balance_snapshot(student, balance_after)
+    sync_balance_snapshot(student, balance_after, entry_currency)
     return entry
 
 
@@ -198,6 +213,7 @@ def create_student_charge(*, actor, data):
             name=data.get("category_name"),
         )
     amount = _decimal(data.get("amount"))
+    currency = _currency_code(data.get("currency"))
     description = str(data.get("description") or category.name).strip()
     if not description:
         raise ValidationError({"description": "Charge description is required."})
@@ -209,6 +225,7 @@ def create_student_charge(*, actor, data):
         source_id=data.get("source_id") or None,
         description=description,
         amount=amount,
+        currency=currency,
         due_date=data.get("due_date") or None,
         issued_by=actor,
     )
@@ -219,6 +236,7 @@ def create_student_charge(*, actor, data):
         amount=amount,
         description=description,
         actor=actor,
+        currency=currency,
     )
     return charge
 
@@ -233,6 +251,7 @@ def ensure_charge_for_fine(fine):
             "category": category,
             "description": fine.reason,
             "amount": fine.amount,
+            "currency": _currency_code(fine.currency),
             "due_date": fine.due_date.date() if fine.due_date else None,
             "issued_by": fine.issued_by.profile if fine.issued_by_id else None,
         },
@@ -245,6 +264,7 @@ def ensure_charge_for_fine(fine):
             amount=fine.amount,
             description=f"Fine issued: {fine.reason}",
             actor=fine.issued_by.profile if fine.issued_by_id else None,
+            currency=fine.currency,
         )
     return charge
 
@@ -271,13 +291,16 @@ def settle_charge_for_fine(fine, *, actor=None, entry_type=StudentLedgerEntry.EN
 
 def student_finance_summary(student):
     balance = current_balance_for_student(student)
+    snapshot = StudentBalanceSnapshot.objects.filter(student=student).first()
+    currency = _currency_code(snapshot.currency if snapshot else None)
     holds = StudentFinanceHold.objects.filter(student=student, is_active=True)
     charges = StudentCharge.objects.select_related("category", "student", "student__user").filter(student=student)
     entries = StudentLedgerEntry.objects.select_related("student", "student__user", "posted_by", "posted_by__user").filter(student=student)
     return {
         "student": student_payload(student),
         "balance": money(balance),
-        "currency": "MYR",
+        "balance_display": _money_label(balance, currency),
+        "currency": currency,
         "active_holds": [hold_payload(hold) for hold in holds],
         "charges": [charge_payload(charge) for charge in charges[:100]],
         "ledger_entries": [ledger_entry_payload(entry) for entry in entries[:200]],
@@ -295,9 +318,14 @@ def student_balance_summaries(*, query=None):
         )
     rows = []
     for student in students[:200]:
+        snapshot = StudentBalanceSnapshot.objects.filter(student=student).first()
+        balance = snapshot.balance if snapshot else current_balance_for_student(student)
+        currency = _currency_code(snapshot.currency if snapshot else None)
         rows.append({
             "student": student_payload(student),
-            "balance": money(current_balance_for_student(student)),
+            "balance": money(balance),
+            "balance_display": _money_label(balance, currency),
+            "currency": currency,
             "active_holds": StudentFinanceHold.objects.filter(student=student, is_active=True).count(),
         })
     return rows
@@ -339,6 +367,7 @@ def payment_plan_payload(plan):
         "charge_id": plan.charge_id,
         "description": plan.description,
         "total_amount": money(plan.total_amount),
+        "total_amount_display": _money_label(plan.total_amount, plan.currency),
         "currency": plan.currency,
         "installment_count": plan.installment_count,
         "frequency": plan.frequency,
@@ -355,6 +384,7 @@ def installment_payload(installment):
         "id": installment.id,
         "installment_number": installment.installment_number,
         "amount": money(installment.amount),
+        "amount_display": _money_label(installment.amount, installment.plan.currency),
         "due_date": installment.due_date.isoformat(),
         "status": installment.status,
         "paid_at": installment.paid_at.isoformat() if installment.paid_at else None,
@@ -386,9 +416,11 @@ def dashboard_summary():
     )
 
     return {
+        "currency": default_currency_code(),
         "total_students": total_students,
         "students_with_balance": students_with_balance,
         "total_outstanding": money(total_outstanding),
+        "total_outstanding_display": _money_label(total_outstanding),
         "active_holds": active_holds,
         "total_charges": total_charges,
         "total_charges_amount": money(total_charges_amount),
@@ -397,7 +429,13 @@ def dashboard_summary():
         "overdue_charges": overdue_charges,
         "active_plans": active_plans,
         "category_breakdown": [
-            {"code": row["category__code"], "name": row["category__name"], "total": money(row["total"]), "count": row["count"]}
+            {
+                "code": row["category__code"],
+                "name": row["category__name"],
+                "total": money(row["total"]),
+                "total_display": _money_label(row["total"]),
+                "count": row["count"],
+            }
             for row in category_breakdown
         ],
     }
@@ -415,12 +453,16 @@ def student_balance_summaries_paginated(*, query=None, sort_by=None, page=1, pag
 
     rows = []
     for student in students:
-        balance = current_balance_for_student(student)
+        snapshot = StudentBalanceSnapshot.objects.filter(student=student).first()
+        balance = snapshot.balance if snapshot else current_balance_for_student(student)
+        currency = _currency_code(snapshot.currency if snapshot else None)
         holds_count = StudentFinanceHold.objects.filter(student=student, is_active=True).count()
         last_entry = StudentLedgerEntry.objects.filter(student=student).order_by("-posted_at").first()
         rows.append({
             "student": student_payload(student),
             "balance": money(balance),
+            "balance_display": _money_label(balance, currency),
+            "currency": currency,
             "balance_raw": balance,
             "active_holds": holds_count,
             "last_activity": last_entry.posted_at.isoformat() if last_entry else None,
@@ -478,6 +520,7 @@ def create_bulk_charge(*, actor, data):
     category_id = data.get("category_id")
     student_ids = data.get("student_ids", [])
     amount = _decimal(data.get("amount"))
+    currency = _currency_code(data.get("currency"))
     description = str(data.get("description") or "").strip()
     due_date = data.get("due_date") or None
 
@@ -506,6 +549,7 @@ def create_bulk_charge(*, actor, data):
                 source_type=StudentCharge.SOURCE_MANUAL,
                 description=description,
                 amount=amount,
+                currency=currency,
                 due_date=due_date,
                 issued_by=actor,
             )
@@ -516,6 +560,7 @@ def create_bulk_charge(*, actor, data):
                 amount=amount,
                 description=description,
                 actor=actor,
+                currency=currency,
             )
             charges.append(charge_payload(charge))
         except (ValidationError, Exception) as exc:
@@ -528,6 +573,7 @@ def create_bulk_charge(*, actor, data):
 def create_payment_plan(*, actor, data):
     student = _student_or_error(data.get("student_id"))
     total_amount = _decimal(data.get("total_amount"))
+    currency = _currency_code(data.get("currency"))
     installment_count = int(data.get("installment_count", 2))
     frequency = data.get("frequency", PaymentPlan.FREQUENCY_MONTHLY)
     description = str(data.get("description") or "").strip()
@@ -545,6 +591,7 @@ def create_payment_plan(*, actor, data):
         charge=charge,
         description=description or f"Payment plan for {student.user.get_full_name() or student.user.username}",
         total_amount=total_amount,
+        currency=currency,
         installment_count=installment_count,
         frequency=frequency,
         created_by=actor,
@@ -593,6 +640,7 @@ def record_plan_payment(*, actor, plan_id, data):
         amount=installment.amount,
         description=f"Payment plan installment #{installment.installment_number} for: {plan.description}",
         actor=actor,
+        currency=plan.currency,
     )
 
     installment.status = PaymentPlanInstallment.STATUS_PAID

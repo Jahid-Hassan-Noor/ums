@@ -26,14 +26,32 @@ import { Textarea } from "@/components/ui/textarea"
 import { apiFetch } from "@/lib/auth"
 import { statusBadgeVariant } from "@/lib/status-utils"
 
-type BookingRole = "student" | "teacher" | "technician"
+type BookingRole = "student" | "teacher" | "technician" | "admin"
 
 type Venue = {
   id: number
   code: string
   name: string
+  category: string
+  category_label: string
   building: string
   capacity: number | null
+}
+
+type BookingTypeOption = {
+  value: "event" | "personal"
+  label: string
+}
+
+type VenueBookingPolicy = {
+  label: string
+  requester_roles: string[]
+  approval_mode: "manual" | "auto_approve"
+  reviewer_role: "technician" | "admin"
+  min_duration_minutes: number
+  max_duration_hours: number
+  required_fields: Record<"event" | "personal", string[]>
+  booking_types: BookingTypeOption[]
 }
 
 type BookingRequest = {
@@ -47,6 +65,7 @@ type BookingRequest = {
   }
   venue: Venue
   booking_type: "event" | "personal"
+  booking_type_label: string
   purpose: string
   explanation: string
   booking_date: string
@@ -60,6 +79,7 @@ type BookingRequest = {
 
 type BookingResponse = {
   role: BookingRole
+  policy: VenueBookingPolicy
   venues: Venue[]
   requests: BookingRequest[]
 }
@@ -75,6 +95,7 @@ const emptyForm = {
 }
 
 function roleLabel(role: BookingRole) {
+  if (role === "admin") return "Admin"
   if (role === "technician") return "Technician"
   if (role === "teacher") return "Teacher"
   return "Student"
@@ -87,7 +108,7 @@ function localDateInputValue() {
 }
 
 export function VenueBookingPage({ role }: { role: BookingRole }) {
-  const isReviewer = role === "technician"
+  const isReviewer = role === "technician" || role === "admin"
   const [data, setData] = useState<BookingResponse | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [rejectionReasons, setRejectionReasons] = useState<
@@ -97,9 +118,30 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
-  const endpoint = isReviewer
-    ? "/ict-helpdesk/technician/venue-bookings"
-    : `/${role}/venue-bookings`
+  const endpoint =
+    role === "technician"
+      ? "/ict-helpdesk/technician/venue-bookings"
+      : `/${role}/venue-bookings`
+  const decisionEndpoint =
+    role === "admin"
+      ? "/admin/venue-bookings"
+      : "/ict-helpdesk/technician/venue-bookings"
+  const policy = data?.policy
+  const canRequest =
+    !isReviewer && (policy?.requester_roles || []).includes(role)
+  const bookingTypes = policy?.booking_types?.length
+    ? policy.booking_types
+    : [
+        { value: "event" as const, label: "Event" },
+        { value: "personal" as const, label: "Personal use" },
+      ]
+  const requiredFields =
+    policy?.required_fields?.[form.booking_type as "event" | "personal"] || [
+      "purpose",
+      "explanation",
+    ]
+  const purposeRequired = requiredFields.includes("purpose")
+  const explanationRequired = requiredFields.includes("explanation")
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -153,7 +195,7 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
     setSuccess("")
     try {
       await apiFetch(
-        `/ict-helpdesk/technician/venue-bookings/${requestId}/decision`,
+        `${decisionEndpoint}/${requestId}/decision`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -261,13 +303,13 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
           ))}
         </section>
 
-        {!isReviewer ? (
+        {canRequest ? (
           <Card>
             <CardHeader>
               <CardTitle>New Venue Request</CardTitle>
               <CardDescription>
-                Provide the exact date, time, and a clear explanation of how the
-                venue will be used.
+                Booking duration limit: {policy?.min_duration_minutes ?? 30} minutes
+                to {policy?.max_duration_hours ?? 8} hours.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -292,7 +334,7 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
                     <option value="">Select an available venue</option>
                     {(data?.venues || []).map((venue) => (
                       <option key={venue.id} value={venue.id}>
-                        {venue.building} - {venue.name}
+                        {venue.building} - {venue.name} ({venue.category_label})
                         {venue.capacity ? ` (${venue.capacity} people)` : ""}
                       </option>
                     ))}
@@ -311,15 +353,18 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
                       }))
                     }
                   >
-                    <option value="event">Event</option>
-                    <option value="personal">Personal use</option>
+                    {bookingTypes.map((bookingType) => (
+                      <option key={bookingType.value} value={bookingType.value}>
+                        {bookingType.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2 lg:col-span-2">
                   <Label htmlFor="purpose">Purpose</Label>
                   <Input
                     id="purpose"
-                    required
+                    required={purposeRequired}
                     placeholder="Student society workshop"
                     value={form.purpose}
                     onChange={(event) =>
@@ -382,8 +427,8 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
                   <Label htmlFor="explanation">Detailed explanation</Label>
                   <Textarea
                     id="explanation"
-                    minLength={20}
-                    required
+                    minLength={explanationRequired ? 20 : undefined}
+                    required={explanationRequired}
                     placeholder="Explain the activity, expected attendees, setup, and why this venue is suitable."
                     value={form.explanation}
                     onChange={(event) =>
@@ -406,6 +451,15 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
                 </div>
               </form>
             </CardContent>
+          </Card>
+        ) : !isReviewer && !isLoading ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Venue Requests Unavailable</CardTitle>
+              <CardDescription>
+                {policy?.label || "Venue Booking"} is not enabled for {roleLabel(role).toLowerCase()} requests.
+              </CardDescription>
+            </CardHeader>
           </Card>
         ) : null}
 
@@ -433,14 +487,17 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold">{request.purpose}</h3>
+                      <h3 className="font-semibold">
+                        {request.purpose || request.booking_type_label}
+                      </h3>
                       <Badge variant={statusBadgeVariant(request.status)}>
                         {request.status}
                       </Badge>
                       <Badge variant="outline">
-                        {request.booking_type === "event"
-                          ? "Event"
-                          : "Personal use"}
+                        {request.booking_type_label ||
+                          (request.booking_type === "event"
+                            ? "Event"
+                            : "Personal use")}
                       </Badge>
                     </div>
                     {isReviewer ? (
@@ -457,7 +514,8 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
                 <div className="grid gap-2 text-sm sm:grid-cols-2">
                   <p className="flex items-center gap-2">
                     <MapPin className="size-4 text-muted-foreground" />
-                    {request.venue.building} - {request.venue.name}
+                    {request.venue.building} - {request.venue.name} (
+                    {request.venue.category_label})
                   </p>
                   <p className="flex items-center gap-2">
                     <Clock3 className="size-4 text-muted-foreground" />
@@ -465,9 +523,11 @@ export function VenueBookingPage({ role }: { role: BookingRole }) {
                     {request.end_time}
                   </p>
                 </div>
-                <p className="rounded-lg bg-muted/60 p-3 text-sm">
-                  {request.explanation}
-                </p>
+                {request.explanation ? (
+                  <p className="rounded-lg bg-muted/60 p-3 text-sm">
+                    {request.explanation}
+                  </p>
+                ) : null}
                 {request.rejection_reason ? (
                   <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                     Rejection reason: {request.rejection_reason}

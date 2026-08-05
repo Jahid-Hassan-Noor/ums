@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from auth_app.permissions import IsStudentRole
+from core.common.academic_policy import evaluation_activity_label
 from executive_app.evaluation_service import (
     serialize_student_survey,
     student_surveys,
@@ -49,7 +50,8 @@ class StudentEvaluations(APIView):
         ]
         return Response(
             {
-                "title": "Student Evaluations of Course Content and Teaching",
+                "title": f"Student {evaluation_activity_label()}s",
+                "evaluation_label": evaluation_activity_label(),
                 "summary": {
                     "total": len(serialized),
                     "pending": sum(1 for survey in serialized if not survey["submitted"]),
@@ -111,7 +113,7 @@ class StudentEvaluationDetail(APIView):
             )
         return Response(
             {
-                "message": "Thank you. Your SEC-SET evaluation has been submitted.",
+                "message": f"Thank you. Your {evaluation_activity_label().lower()} has been submitted.",
                 "submitted_at": response.submitted_at.isoformat(),
             },
             status=status.HTTP_201_CREATED,

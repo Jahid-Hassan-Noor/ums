@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.text import slugify
 from executive_app.models import TimetableSlot
 from auth_app.models import (
     Admin as AuthAdmin,
@@ -30,21 +31,80 @@ class School(models.Model):
 
 class Center(models.Model):
     CENTER_ACADEMIC = "academic"
-    CENTER_ADMINISTRATIVE = "administrative"
+    CENTER_NON_ACADEMIC = "non_academic"
+    CENTER_ADMINISTRATIVE = CENTER_NON_ACADEMIC
     CENTER_TYPE_CHOICES = [
         (CENTER_ACADEMIC, "Academic"),
-        (CENTER_ADMINISTRATIVE, "Administrative"),
+        (CENTER_NON_ACADEMIC, "Non-academic"),
+    ]
+
+    CALENDAR_SEMESTER = "semester"
+    CALENDAR_WHOLE_YEAR = "whole_year"
+    ACADEMIC_CALENDAR_MODE_CHOICES = [
+        (CALENDAR_SEMESTER, "Semester based"),
+        (CALENDAR_WHOLE_YEAR, "Whole year"),
     ]
 
     code = models.CharField(max_length=20, unique=True)
     slug = models.SlugField(max_length=255, unique=True, null=True, blank=True)
     name = models.CharField(max_length=255)
     center_type = models.CharField(max_length=30, choices=CENTER_TYPE_CHOICES, default=CENTER_ACADEMIC)
+    academic_calendar_mode = models.CharField(
+        max_length=30,
+        choices=ACADEMIC_CALENDAR_MODE_CHOICES,
+        default=CALENDAR_SEMESTER,
+    )
+    semester_calendar_group = models.CharField(max_length=30, blank=True, default="")
+    annual_session_limit = models.PositiveSmallIntegerField(default=0)
     description = models.TextField(blank=True)
     about = models.TextField(blank=True)
     offerings = models.JSONField(default=list, blank=True)
     image_url = models.CharField(max_length=500, blank=True)
     is_active = models.BooleanField(default=True)
+
+    def is_academic_center(self):
+        return self.center_type == self.CENTER_ACADEMIC
+
+    def default_semester_calendar_group(self):
+        code = slugify(self.code or "") or "centre"
+        return f"center:{code[:23]}"
+
+    def effective_semester_calendar_group(self):
+        return self.semester_calendar_group or self.default_semester_calendar_group()
+
+    def uses_semester_calendar(self):
+        return (
+            self.is_academic_center()
+            and self.academic_calendar_mode == self.CALENDAR_SEMESTER
+        )
+
+    def normalize_academic_configuration(self):
+        if self.center_type == "administrative":
+            self.center_type = self.CENTER_NON_ACADEMIC
+        if not self.is_academic_center():
+            self.academic_calendar_mode = self.CALENDAR_SEMESTER
+            self.semester_calendar_group = ""
+            self.annual_session_limit = 0
+            return
+        if self.academic_calendar_mode == self.CALENDAR_SEMESTER:
+            self.semester_calendar_group = self.effective_semester_calendar_group()
+            self.annual_session_limit = 0
+        else:
+            self.semester_calendar_group = ""
+
+    def clean(self):
+        self.normalize_academic_configuration()
+
+    def save(self, *args, **kwargs):
+        self.normalize_academic_configuration()
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {
+                "academic_calendar_mode",
+                "center_type",
+                "semester_calendar_group",
+                "annual_session_limit",
+            }
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.code
@@ -137,14 +197,16 @@ class Semester(models.Model):
     CALENDAR_UNDERGRADUATE = "undergraduate"
     CALENDAR_FOUNDATION = "foundation"
     CALENDAR_CHOICES = [
-        (CALENDAR_UNDERGRADUATE, "Schools / undergraduate programmes"),
-        (CALENDAR_FOUNDATION, "CFGS / foundation studies"),
+        (CALENDAR_UNDERGRADUATE, "Main semester calendar"),
+        (CALENDAR_FOUNDATION, "Foundation / centre semester calendar"),
     ]
 
     name = models.CharField(max_length=255, unique=True)
     academic_session = models.CharField(max_length=100, blank=True)
     semester_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_LONG)
-    calendar_group = models.CharField(max_length=30, choices=CALENDAR_CHOICES, default=CALENDAR_UNDERGRADUATE)
+    calendar_group = models.CharField(max_length=30, default=CALENDAR_UNDERGRADUATE)
+    semester_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    planned_weeks = models.PositiveSmallIntegerField(null=True, blank=True)
     starting_week = models.PositiveSmallIntegerField(default=1)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
@@ -179,6 +241,10 @@ class Semester(models.Model):
     def clean(self):
         if self.start_date and self.end_date and self.start_date > self.end_date:
             raise ValidationError({"end_date": "Semester end date must be after the start date."})
+        if self.semester_number is not None and self.semester_number < 1:
+            raise ValidationError({"semester_number": "Semester number must be at least 1."})
+        if self.planned_weeks is not None and self.planned_weeks < 1:
+            raise ValidationError({"planned_weeks": "Planned weeks must be at least 1."})
         if (
             self.course_offering_opens_at
             and self.course_offering_closes_at
@@ -191,12 +257,6 @@ class Semester(models.Model):
             raise ValidationError(
                 {"course_offering_closes_at": "Course offering requires both an opening and closing time."}
             )
-        if self.semester_type == self.TYPE_SHORT and self.default_classes_per_week < 2:
-            raise ValidationError(
-                {"default_classes_per_week": "Short semesters require at least two weekly class sessions."}
-            )
-        if self.calendar_group == self.CALENDAR_FOUNDATION and self.semester_type != self.TYPE_LONG:
-            raise ValidationError({"semester_type": "CFGS uses long semesters only."})
 
         date_pairs = [
             (
@@ -274,7 +334,140 @@ class SemesterHoliday(models.Model):
         return f"{self.semester} - {self.name}"
 
 
-class IELTSSession(models.Model):
+class SemesterConfiguration(models.Model):
+    MIN_SEMESTERS_PER_YEAR = 1
+    MAX_SEMESTERS_PER_YEAR = 12
+    MIN_WEEKS_PER_SEMESTER = 1
+    MAX_WEEKS_PER_SEMESTER = 52
+
+    calendar_group = models.CharField(
+        max_length=30,
+        unique=True,
+        default=Semester.CALENDAR_UNDERGRADUATE,
+    )
+    semesters_per_year = models.PositiveSmallIntegerField(default=3)
+    semester_lengths = models.JSONField(default=list, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("calendar_group",)
+
+    @classmethod
+    def default_lengths(cls, count=3):
+        defaults = [
+            {
+                "number": 1,
+                "name": "Semester 1",
+                "weeks": 17,
+                "semester_type": Semester.TYPE_LONG,
+                "default_classes_per_week": 1,
+            },
+            {
+                "number": 2,
+                "name": "Semester 2",
+                "weeks": 17,
+                "semester_type": Semester.TYPE_LONG,
+                "default_classes_per_week": 1,
+            },
+            {
+                "number": 3,
+                "name": "Semester 3",
+                "weeks": 9,
+                "semester_type": Semester.TYPE_SHORT,
+                "default_classes_per_week": 2,
+            },
+        ]
+        while len(defaults) < count:
+            number = len(defaults) + 1
+            defaults.append(
+                {
+                    "number": number,
+                    "name": f"Semester {number}",
+                    "weeks": 15,
+                    "semester_type": Semester.TYPE_LONG,
+                    "default_classes_per_week": 1,
+                }
+            )
+        return defaults[:count]
+
+    @classmethod
+    def normalize_lengths(cls, value, count):
+        if count < cls.MIN_SEMESTERS_PER_YEAR or count > cls.MAX_SEMESTERS_PER_YEAR:
+            raise ValidationError(
+                {
+                    "semesters_per_year": (
+                        f"Configure between {cls.MIN_SEMESTERS_PER_YEAR} "
+                        f"and {cls.MAX_SEMESTERS_PER_YEAR} semesters per academic year."
+                    )
+                }
+            )
+        if not isinstance(value, list):
+            raise ValidationError({"semester_lengths": "Semester lengths must be a list."})
+        if len(value) != count:
+            raise ValidationError({"semester_lengths": "Provide one length row for each semester."})
+
+        semester_types = dict(Semester.TYPE_CHOICES)
+        defaults = cls.default_lengths(count)
+        normalized = []
+        for index, item in enumerate(value, start=1):
+            if not isinstance(item, dict):
+                raise ValidationError({"semester_lengths": f"Semester {index} is invalid."})
+            default = defaults[index - 1]
+            try:
+                weeks = int(item.get("weeks", default["weeks"]))
+                default_classes = int(
+                    item.get("default_classes_per_week", default["default_classes_per_week"])
+                )
+            except (TypeError, ValueError):
+                raise ValidationError(
+                    {"semester_lengths": f"Semester {index} requires valid whole numbers."}
+                ) from None
+            if weeks < cls.MIN_WEEKS_PER_SEMESTER or weeks > cls.MAX_WEEKS_PER_SEMESTER:
+                raise ValidationError(
+                    {
+                        "semester_lengths": (
+                            f"Semester {index} must be between {cls.MIN_WEEKS_PER_SEMESTER} "
+                            f"and {cls.MAX_WEEKS_PER_SEMESTER} weeks."
+                        )
+                    }
+                )
+            if default_classes < 1:
+                raise ValidationError(
+                    {"semester_lengths": f"Semester {index} requires at least one class per week."}
+                )
+            semester_type = str(item.get("semester_type") or default["semester_type"]).strip()
+            if semester_type not in semester_types:
+                raise ValidationError({"semester_lengths": f"Semester {index} has an unknown type."})
+            normalized.append(
+                {
+                    "number": index,
+                    "name": str(item.get("name") or default["name"]).strip() or default["name"],
+                    "weeks": weeks,
+                    "semester_type": semester_type,
+                    "default_classes_per_week": default_classes,
+                }
+            )
+        return normalized
+
+    def clean(self):
+        self.semester_lengths = self.normalize_lengths(
+            self.semester_lengths or self.default_lengths(self.semesters_per_year),
+            self.semesters_per_year,
+        )
+
+    def definition_for(self, number):
+        for definition in self.semester_lengths:
+            if definition.get("number") == number:
+                return definition
+        return None
+
+    def __str__(self):
+        return f"{self.calendar_group} semester structure"
+
+
+class AcademicSession(models.Model):
     academic_session = models.CharField(max_length=100)
     title = models.CharField(max_length=255)
     center = models.ForeignKey(Center, on_delete=models.SET_NULL, null=True, blank=True)
@@ -288,8 +481,11 @@ class IELTSSession(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = "admin_app_ieltssession"
         ordering = ("exam_date", "title")
         unique_together = ("academic_session", "title")
+        verbose_name = "Academic session"
+        verbose_name_plural = "Academic sessions"
 
     def clean(self):
         if (
@@ -298,11 +494,14 @@ class IELTSSession(models.Model):
             and self.registration_opens_at > self.registration_closes_at
         ):
             raise ValidationError(
-                {"registration_closes_at": "IELTS registration must close after it opens."}
+                {"registration_closes_at": "Registration must close after it opens."}
             )
 
     def __str__(self):
         return f"{self.title} ({self.academic_session})"
+
+
+IELTSSession = AcademicSession
 
 
 class Course(models.Model):
@@ -333,6 +532,11 @@ class CourseOffering(models.Model):
     instructor = models.ForeignKey("auth_app.Profile", on_delete=models.SET_NULL, null=True, blank=True)
     eligible_schools = models.ManyToManyField(
         School,
+        blank=True,
+        related_name="eligible_course_offerings",
+    )
+    eligible_centers = models.ManyToManyField(
+        Center,
         blank=True,
         related_name="eligible_course_offerings",
     )
@@ -444,6 +648,7 @@ class Venue(models.Model):
     building = models.ForeignKey(Building, on_delete=models.CASCADE, related_name="venues")
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
+    category = models.CharField(max_length=40, default="classroom", db_index=True)
     floor = models.CharField(max_length=50, blank=True)
     capacity = models.PositiveIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -502,11 +707,12 @@ class HostelRoom(models.Model):
         unique_together = ("hostel", "floor", "number")
 
     def build_code(self):
-        room_number = self.number.zfill(2) if self.number.isdigit() else self.number.upper()
-        return f"{self.hostel.code.upper()}-{self.floor:02d}-{room_number}"
+        from admin_app.settings_registry import hostel_room_code
+
+        return hostel_room_code(self.hostel.code, self.floor, self.number)
 
     def save(self, *args, **kwargs):
-        if self.hostel_id:
+        if self.hostel_id and not self.code:
             self.code = self.build_code()
         super().save(*args, **kwargs)
 
@@ -675,7 +881,7 @@ class AcademicEvent(models.Model):
         (TYPE_ASSIGNMENT, "Assignment"),
         (TYPE_EXAM, "Exam"),
         (TYPE_REGISTRATION, "Registration"),
-        (TYPE_IELTS, "IELTS"),
+        (TYPE_IELTS, "Academic session"),
         (TYPE_LEAVE, "Leave"),
         (TYPE_ELECTION, "Election"),
         (TYPE_PUBLIC, "Public"),

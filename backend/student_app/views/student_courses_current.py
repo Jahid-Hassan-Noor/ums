@@ -3,7 +3,12 @@ from auth_app.permissions import IsStudentRole
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from student_app.models import Enrollment
-from student_app.registration_service import active_semester, get_student_profile, profile_display_name
+from student_app.registration_service import (
+    active_semester,
+    get_student_profile,
+    profile_display_name,
+    registration_credit_policy,
+)
 from teacher_app.attendance_service import student_attendance_summary
 
 
@@ -37,6 +42,7 @@ class StudentCoursesCurrent(APIView):
         }
         courses = []
         total_credits = 0
+        credit_policy = registration_credit_policy(student=student, semester=semester) if semester else None
         for enrollment in enrollments:
             offering = enrollment.offering
             total_credits += offering.course.credits
@@ -80,14 +86,14 @@ class StudentCoursesCurrent(APIView):
                     "id": semester.id,
                     "name": semester.name,
                     "academic_session": semester.academic_session,
-                    "max_credit_hours": semester.max_credit_hours,
+                    "max_credit_hours": credit_policy["maximum"],
                 }
                 if semester
                 else None,
                 "summary": {
                     "course_count": len(courses),
                     "registered_credit_hours": total_credits,
-                    "max_credit_hours": semester.max_credit_hours if semester else 0,
+                    "max_credit_hours": credit_policy["maximum"] if credit_policy else 0,
                 },
                 "courses": courses,
             },

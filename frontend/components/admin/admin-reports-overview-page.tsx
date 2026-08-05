@@ -26,7 +26,7 @@ const sections = [
   {
     title: "Operations Reports",
     href: "/admin/reports/operations",
-    description: "Venue, hostel, canteen, library, ICT, and audit exports.",
+    description: "Venue, hostel, canteen, library, service desk, and audit exports.",
     icon: Building2,
     detail: "Campus operations and governance",
   },

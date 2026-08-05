@@ -20,6 +20,7 @@ from admin_app.settings_registry import (
     section_payload,
     section_from_setting_key,
     setting_key,
+    setup_completeness_payload,
     validate_section_values,
 )
 from core.upload_security import image_file_extension, validate_image_upload
@@ -46,6 +47,7 @@ class AdminSettings(APIView):
             {
                 "title": "Settings",
                 "section": "admin",
+                "setup_checklist": setup_completeness_payload(values),
                 "sections": [
                     section_payload(section, values[section], records.get(section))
                     for section in SETTINGS_SECTIONS
@@ -116,6 +118,9 @@ class AdminSettings(APIView):
                     else "No settings values changed."
                 ),
                 "section": section_payload(section, normalized, record),
+                "setup_checklist": setup_completeness_payload(
+                    {**current_sections, section: normalized}
+                ),
             },
             status=status.HTTP_200_OK,
         )
@@ -213,6 +218,9 @@ class AdminSettings(APIView):
                 "message": f"{field['label']} uploaded successfully.",
                 "url": image_url,
                 "section": section_payload(section, normalized, record),
+                "setup_checklist": setup_completeness_payload(
+                    {**current_sections, section: normalized}
+                ),
             },
             status=status.HTTP_200_OK,
         )

@@ -18,7 +18,6 @@ export default function NotFound() {
           eyebrow="404"
           title="Page not found."
           description="The page you are looking for is not available in the public website or portal."
-          image="/images/aiu/campus-welcome.jpg"
           actions={[
             { label: "Go Home", href: "/" },
             {
@@ -48,7 +47,7 @@ export default function NotFound() {
                 Public Website
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                Return to the AIU public homepage and continue through the main
+                Return to the public homepage and continue through the main
                 navigation.
               </p>
             </Link>

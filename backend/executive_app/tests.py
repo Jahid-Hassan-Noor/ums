@@ -241,7 +241,7 @@ class CourseEvaluationWorkflowTests(TestCase):
         )
 
         self.assertEqual(response_status, 403)
-        self.assertIn("SEC-SET", error)
+        self.assertIn("course evaluation", error.lower())
         self.assertIn(self.current_offering.course.code, error)
 
         client = APIClient()
@@ -283,7 +283,7 @@ class CourseEvaluationWorkflowTests(TestCase):
         )
 
         self.assertEqual(response_status, 403)
-        self.assertIn("SEC-SET", error)
+        self.assertIn("course evaluation", error.lower())
         self.assertIn(self.current_offering.course.code, error)
 
     def test_executive_launch_and_analytics_track_completion(self):

@@ -46,6 +46,7 @@ type TextAnalytics = {
 type SurveyDetail = {
   id: number
   title: string
+  evaluation_label?: string
   instructions: string
   offering: {
     id: number
@@ -106,6 +107,7 @@ export default function ExecutiveEvaluationDetailPage() {
     isPublished: false,
     isRequired: true,
   })
+  const evaluationLabel = survey?.evaluation_label ?? "Course Evaluation"
 
   function applySurvey(payload: SurveyDetail) {
     setSurvey(payload)
@@ -211,7 +213,7 @@ export default function ExecutiveEvaluationDetailPage() {
       <Header
         breadcrumbItems={[
           { href: "/executive", title: "Executive" },
-          { href: "/executive/evaluations", title: "SEC-SET Evaluations" },
+          { href: "/executive/evaluations", title: `${evaluationLabel}s` },
           { href: `/executive/evaluations/${surveyId}`, title: survey?.offering.course.code ?? "Survey" },
         ]}
       />
@@ -235,7 +237,7 @@ export default function ExecutiveEvaluationDetailPage() {
             <section className="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{survey.offering.course.code} SEC-SET</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{survey.offering.course.code} {evaluationLabel}</h1>
                   <span className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${stateClass(survey.state)}`}>{survey.state}</span>
                   {survey.is_required ? <Badge variant="outline">Registration requirement</Badge> : null}
                 </div>

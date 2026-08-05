@@ -46,6 +46,8 @@ const statusOptions = [
   ["withdrawn", "Withdrawn"],
 ]
 
+type ConfiguredStatusOption = ApplyOption & { enabled: boolean }
+
 const documentStatusOptions = [
   ["uploaded", "Uploaded"],
   ["accepted", "Accepted"],
@@ -125,8 +127,10 @@ function displayName(applicant?: AdminApplicant | null) {
   return `${applicant.first_name ?? ""} ${applicant.last_name ?? ""}`.trim() || applicant.username
 }
 
-function statusLabel(status: string) {
-  return statusOptions.find(([value]) => value === status)?.[1] ?? status
+function statusLabel(status: string, configuredOptions: ConfiguredStatusOption[] = []) {
+  return configuredOptions.find((option) => option.value === status)?.label
+    ?? statusOptions.find(([value]) => value === status)?.[1]
+    ?? status
 }
 
 function documentLabel(options: ApplyOption[], documentType: string) {
@@ -144,6 +148,7 @@ export function AdminManageApplicantDetailPage({ applicantId }: { applicantId: s
   const [detail, setDetail] = useState<AdminApplicantDetail | null>(null)
   const [countries, setCountries] = useState<ApplyOption[]>([])
   const [documentTypes, setDocumentTypes] = useState<ApplyOption[]>([])
+  const [configuredStatusOptions, setConfiguredStatusOptions] = useState<ConfiguredStatusOption[]>([])
   const [accountForm, setAccountForm] = useState<AccountForm>(accountFormFromApplicant(null))
   const [statusForm, setStatusForm] = useState<StatusForm>(statusFormFromApplication(null))
   const [documentForms, setDocumentForms] = useState<Record<string, { status: string; notes: string }>>({})
@@ -182,6 +187,7 @@ export function AdminManageApplicantDetailPage({ applicantId }: { applicantId: s
       setDetail(nextDetail)
       setCountries(options.countries ?? [])
       setDocumentTypes(setup.document_types ?? options.document_types ?? [])
+      setConfiguredStatusOptions(options.status_options ?? [])
       setAccountForm(accountFormFromApplicant(nextDetail.applicant))
       const nextApplication = nextDetail.applications[0] ?? null
       setStatusForm(statusFormFromApplication(nextApplication))
@@ -455,7 +461,7 @@ export function AdminManageApplicantDetailPage({ applicantId }: { applicantId: s
                             {application.application_number || "Draft application"} • {formatDateTime(application.updated_at)}
                           </CardDescription>
                         </div>
-                        <Badge variant="outline">{statusLabel(application.status)}</Badge>
+                        <Badge variant="outline">{statusLabel(application.status, configuredStatusOptions)}</Badge>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-5">
@@ -724,8 +730,10 @@ export function AdminManageApplicantDetailPage({ applicantId }: { applicantId: s
                           value={statusForm.status}
                           onChange={(event) => setStatusForm((current) => ({ ...current, status: event.target.value }))}
                         >
-                          {statusOptions.map(([value, label]) => (
-                            <option key={value} value={value}>{label}</option>
+                          {(configuredStatusOptions.length
+                            ? configuredStatusOptions.filter((option) => option.enabled)
+                            : statusOptions.map(([value, label]) => ({ value, label, enabled: true }))).map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
                         </select>
                       </div>

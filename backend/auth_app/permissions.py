@@ -1,5 +1,6 @@
 from rest_framework.permissions import BasePermission
 
+from admin_app.settings_registry import features_enabled_for_path
 from auth_app.models import Profile
 
 
@@ -25,7 +26,10 @@ class HasProfileRole(BasePermission):
 
     def has_permission(self, request, view):
         role = profile_role_for_user(request.user)
-        return role in self.allowed_roles
+        return role in self.allowed_roles and features_enabled_for_path(
+            request.path,
+            role=role,
+        )
 
 
 class IsActiveUmsUser(HasProfileRole):

@@ -1,7 +1,24 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.text import slugify
 
 from auth_app.models import Profile
+
+
+def _normalized_key(value, fallback="custom"):
+    key = slugify(str(value or "").strip()).replace("-", "_")
+    return (key or fallback)[:80]
+
+
+def _title_from_key(value):
+    return str(value or "").replace("_", " ").strip().title()
+
+
+def _coerce_positive_int(value, default=0):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
 
 
 class Technician(models.Model):
@@ -43,14 +60,14 @@ class HelpdeskTicket(models.Model):
     CATEGORY_WIFI = "wifi"
     CATEGORY_OTHER = "other"
     CATEGORY_CHOICES = [
-        (CATEGORY_HOTSPOT, "Hotspot account"),
-        (CATEGORY_EMAIL_PASSWORD, "Student email password reset"),
-        (CATEGORY_ID_CARD, "Student ID card replacement"),
-        (CATEGORY_PRINTING, "Student printing code"),
-        (CATEGORY_MOODLE, "Moodle issue"),
-        (CATEGORY_EMAIL_GROUP, "Email group issue"),
-        (CATEGORY_WIFI, "Wi-Fi issue"),
-        (CATEGORY_OTHER, "Other ICT issue"),
+        (CATEGORY_HOTSPOT, "Account access"),
+        (CATEGORY_EMAIL_PASSWORD, "Email or password"),
+        (CATEGORY_ID_CARD, "ID card or access card"),
+        (CATEGORY_PRINTING, "Printing access"),
+        (CATEGORY_MOODLE, "Learning management system"),
+        (CATEGORY_EMAIL_GROUP, "Email group or mailing list"),
+        (CATEGORY_WIFI, "Wi-Fi or network"),
+        (CATEGORY_OTHER, "Other support"),
     ]
 
     STATUS_SUBMITTED = "submitted"
@@ -76,7 +93,7 @@ class HelpdeskTicket(models.Model):
         blank=True,
         related_name="assigned_ict_helpdesk_tickets",
     )
-    category = models.CharField(max_length=40, choices=CATEGORY_CHOICES)
+    category = models.CharField(max_length=40)
     subject = models.CharField(max_length=255)
     description = models.TextField()
     location = models.CharField(max_length=255, blank=True)
@@ -92,16 +109,18 @@ class HelpdeskTicket(models.Model):
 
     def clean(self):
         if self.student_id and self.student.role != "student":
-            raise ValidationError({"student": "ICT helpdesk tickets can only be submitted by students."})
+            raise ValidationError({"student": "Service desk tickets can only be submitted by students."})
         if self.assigned_to_id and self.assigned_to.role != "technician":
-            raise ValidationError({"assigned_to": "ICT helpdesk tickets can only be assigned to technicians."})
+            raise ValidationError({"assigned_to": "Service desk tickets can only be assigned to technicians."})
 
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"ICT-{self.pk or 'NEW'}: {self.subject}"
+        from admin_app.settings_registry import helpdesk_reference
+
+        return f"{helpdesk_reference(self.pk or 'NEW')}: {self.subject}"
 
 
 class HelpdeskTicketUpdate(models.Model):
@@ -126,10 +145,37 @@ class HelpdeskTicketUpdate(models.Model):
 class Election(models.Model):
     TYPE_SRC = "src"
     TYPE_SCHOOL_COMMITTEE = "school_committee"
+    TYPE_STUDENT_COUNCIL = "student_council"
+    TYPE_DEPARTMENT_REPRESENTATIVES = "department_representatives"
     TYPE_CHOICES = [
-        (TYPE_SRC, "SRC election"),
-        (TYPE_SCHOOL_COMMITTEE, "School committee election"),
+        (TYPE_STUDENT_COUNCIL, "Student council election"),
+        (TYPE_DEPARTMENT_REPRESENTATIVES, "Department representatives election"),
+        (TYPE_SRC, "Student representative election"),
+        (TYPE_SCHOOL_COMMITTEE, "School representatives election"),
     ]
+
+    CONSTITUENCY_UNIVERSITY = "university"
+    CONSTITUENCY_SCHOOL = "school"
+    CONSTITUENCY_CENTER = "center"
+    CONSTITUENCY_DEPARTMENT = "department"
+    CONSTITUENCY_PROGRAM = "program"
+    CONSTITUENCY_COHORT = "cohort"
+    CONSTITUENCY_CHOICES = [
+        (CONSTITUENCY_UNIVERSITY, "University-wide"),
+        (CONSTITUENCY_SCHOOL, "School"),
+        (CONSTITUENCY_CENTER, "Center"),
+        (CONSTITUENCY_DEPARTMENT, "Department"),
+        (CONSTITUENCY_PROGRAM, "Program"),
+        (CONSTITUENCY_COHORT, "Cohort"),
+    ]
+    CONSTITUENCY_VALUES = {value for value, _label in CONSTITUENCY_CHOICES}
+
+    SEAT_SCOPE_CONSTITUENCY = "constituency"
+    SEAT_SCOPE_CHOICES = [
+        (SEAT_SCOPE_CONSTITUENCY, "Election constituency"),
+        *CONSTITUENCY_CHOICES,
+    ]
+    SEAT_SCOPE_VALUES = {value for value, _label in SEAT_SCOPE_CHOICES}
 
     STATUS_DRAFT = "draft"
     STATUS_UPCOMING = "upcoming"
@@ -146,12 +192,20 @@ class Election(models.Model):
 
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    election_type = models.CharField(max_length=30, choices=TYPE_CHOICES, default=TYPE_SRC)
+    election_type = models.CharField(max_length=80, default=TYPE_STUDENT_COUNCIL)
+    election_type_label = models.CharField(max_length=120, blank=True)
     school = models.ForeignKey("admin_app.School", on_delete=models.SET_NULL, null=True, blank=True, related_name="committee_elections")
+    constituency_type = models.CharField(max_length=30, choices=CONSTITUENCY_CHOICES, default=CONSTITUENCY_UNIVERSITY)
+    constituency_id = models.PositiveIntegerField(null=True, blank=True)
+    constituency_label = models.CharField(max_length=255, blank=True)
     starts_at = models.DateTimeField(null=True, blank=True)
     ends_at = models.DateTimeField(null=True, blank=True)
     general_selection_count = models.PositiveSmallIntegerField(default=0)
     school_selection_count = models.PositiveSmallIntegerField(default=0)
+    seat_rules = models.JSONField(default=list, blank=True)
+    nomination_rules = models.JSONField(default=dict, blank=True)
+    voter_eligibility = models.JSONField(default=dict, blank=True)
+    result_publication_rules = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     is_active = models.BooleanField(default=False)
     results_published_at = models.DateTimeField(null=True, blank=True)
@@ -163,13 +217,188 @@ class Election(models.Model):
     def __str__(self):
         return self.title
 
+    def get_election_type_display(self):
+        if self.election_type_label:
+            return self.election_type_label
+        return dict(self.TYPE_CHOICES).get(self.election_type, _title_from_key(self.election_type))
+
+    @classmethod
+    def normalize_seat_rules(cls, seat_rules):
+        if not isinstance(seat_rules, list):
+            return []
+
+        normalized = []
+        seen = set()
+        for index, raw_rule in enumerate(seat_rules, start=1):
+            if not isinstance(raw_rule, dict):
+                continue
+            label = str(raw_rule.get("label") or raw_rule.get("name") or "").strip()
+            key = _normalized_key(raw_rule.get("key") or label, f"seat_{index}")
+            suffix = 2
+            unique_key = key
+            while unique_key in seen:
+                suffix += 1
+                unique_key = f"{key[:72]}_{suffix}"
+            seen.add(unique_key)
+
+            scope_type = str(
+                raw_rule.get("scope_type")
+                or raw_rule.get("constituency_type")
+                or cls.SEAT_SCOPE_CONSTITUENCY
+            ).strip()
+            if scope_type not in cls.SEAT_SCOPE_VALUES:
+                scope_type = cls.SEAT_SCOPE_CONSTITUENCY
+
+            scope_id = raw_rule.get("scope_id")
+            try:
+                scope_id = int(scope_id) if scope_id not in (None, "") else None
+            except (TypeError, ValueError):
+                scope_id = None
+
+            normalized.append(
+                {
+                    "key": unique_key,
+                    "label": label or _title_from_key(unique_key),
+                    "selection_count": _coerce_positive_int(raw_rule.get("selection_count"), 1),
+                    "scope_type": scope_type,
+                    "scope_id": scope_id,
+                }
+            )
+        return normalized
+
+    def configured_seat_rules(self):
+        rules = self.normalize_seat_rules(self.seat_rules)
+        if rules:
+            return rules
+
+        if self.election_type == self.TYPE_SCHOOL_COMMITTEE:
+            return [
+                {
+                    "key": ElectionCandidate.CATEGORY_SCHOOL,
+                    "label": "Representatives",
+                    "selection_count": self.school_selection_count,
+                    "scope_type": self.SEAT_SCOPE_CONSTITUENCY,
+                    "scope_id": self.effective_constituency_id(),
+                }
+            ]
+
+        rules = []
+        if self.general_selection_count:
+            rules.append(
+                {
+                    "key": ElectionCandidate.CATEGORY_GENERAL,
+                    "label": "General representatives",
+                    "selection_count": self.general_selection_count,
+                    "scope_type": self.CONSTITUENCY_UNIVERSITY,
+                    "scope_id": None,
+                }
+            )
+        if self.election_type == self.TYPE_SRC:
+            rules.append(
+                {
+                    "key": ElectionCandidate.CATEGORY_SCHOOL,
+                    "label": "School representatives",
+                    "selection_count": self.school_selection_count,
+                    "scope_type": self.CONSTITUENCY_SCHOOL,
+                    "scope_id": None,
+                }
+            )
+        return rules
+
+    def seat_rule_for(self, category):
+        for rule in self.configured_seat_rules():
+            if rule["key"] == category:
+                return rule
+        return None
+
+    def seat_label_for(self, category):
+        rule = self.seat_rule_for(category)
+        if rule:
+            return rule["label"]
+        return dict(ElectionCandidate.CATEGORY_CHOICES).get(category, _title_from_key(category))
+
+    def effective_constituency_type(self):
+        if self.election_type == self.TYPE_SCHOOL_COMMITTEE and self.school_id:
+            return self.CONSTITUENCY_SCHOOL
+        return self.constituency_type or self.CONSTITUENCY_UNIVERSITY
+
+    def effective_constituency_id(self):
+        if self.election_type == self.TYPE_SCHOOL_COMMITTEE and self.school_id:
+            return self.school_id
+        return self.constituency_id
+
+    def _student_scope_id(self, student, scope_type):
+        if scope_type == self.CONSTITUENCY_SCHOOL:
+            return student.school_id
+        if scope_type == self.CONSTITUENCY_CENTER:
+            return student.center_id
+        if scope_type == self.CONSTITUENCY_DEPARTMENT:
+            return student.department_id
+        if scope_type == self.CONSTITUENCY_PROGRAM:
+            return student.program_id
+        if scope_type == self.CONSTITUENCY_COHORT:
+            detail = getattr(student, "student_detail", None)
+            return getattr(detail, "current_year", None) if detail else None
+        return None
+
+    def _matches_eligibility_filters(self, student):
+        filters = self.voter_eligibility if isinstance(self.voter_eligibility, dict) else {}
+        scope_fields = {
+            "school": self.CONSTITUENCY_SCHOOL,
+            "center": self.CONSTITUENCY_CENTER,
+            "department": self.CONSTITUENCY_DEPARTMENT,
+            "program": self.CONSTITUENCY_PROGRAM,
+            "current_year": self.CONSTITUENCY_COHORT,
+        }
+        for field_name, scope_type in scope_fields.items():
+            allowed = filters.get(f"{field_name}_ids", filters.get(f"{field_name}s", filters.get(field_name)))
+            if allowed in (None, "", []):
+                continue
+            if not isinstance(allowed, (list, tuple, set)):
+                allowed = [allowed]
+            allowed_values = {str(value) for value in allowed if value not in (None, "")}
+            if allowed_values and str(self._student_scope_id(student, scope_type)) not in allowed_values:
+                return False
+        return True
+
+    def student_matches_constituency(self, student):
+        constituency_type = self.effective_constituency_type()
+        constituency_id = self.effective_constituency_id()
+        if constituency_type not in self.CONSTITUENCY_VALUES:
+            return False
+        if constituency_type != self.CONSTITUENCY_UNIVERSITY and constituency_id:
+            if str(self._student_scope_id(student, constituency_type)) != str(constituency_id):
+                return False
+        return self._matches_eligibility_filters(student)
+
+    def results_visible_to_students(self):
+        rules = self.result_publication_rules if isinstance(self.result_publication_rules, dict) else {}
+        return self.status == self.STATUS_PUBLISHED or bool(rules.get("show_live_results", True))
+
     def clean(self):
+        self.election_type = _normalized_key(self.election_type or self.election_type_label, self.TYPE_STUDENT_COUNCIL)
+        if not self.election_type_label:
+            self.election_type_label = self.get_election_type_display()
+        if self.constituency_type not in self.CONSTITUENCY_VALUES:
+            raise ValidationError({"constituency_type": "Select a supported election constituency."})
+        if self.election_type == self.TYPE_SCHOOL_COMMITTEE and self.school_id:
+            self.constituency_type = self.CONSTITUENCY_SCHOOL
+            self.constituency_id = self.school_id
+        if self.constituency_type == self.CONSTITUENCY_SCHOOL and self.constituency_id and not self.school_id:
+            self.school_id = self.constituency_id
+        self.seat_rules = self.normalize_seat_rules(self.seat_rules)
         if self.starts_at and self.ends_at and self.starts_at >= self.ends_at:
             raise ValidationError({"ends_at": "Voting must close after it starts."})
-        if self.election_type == self.TYPE_SCHOOL_COMMITTEE and not self.school_id:
-            raise ValidationError({"school": "School committee elections must be assigned to a school."})
-        if self.election_type == self.TYPE_SCHOOL_COMMITTEE and not self.school_selection_count:
-            raise ValidationError({"school_selection_count": "School committee elections need a selection count."})
+        if self.constituency_type != self.CONSTITUENCY_UNIVERSITY and not (
+            self.constituency_id or self.constituency_label
+        ):
+            raise ValidationError({"constituency_id": "Select or name the election constituency."})
+        if self.election_type == self.TYPE_SCHOOL_COMMITTEE and not (
+            self.school_id or self.constituency_id
+        ):
+            raise ValidationError({"school": "Select the election constituency."})
+        if self.election_type == self.TYPE_SCHOOL_COMMITTEE and not self.school_selection_count and not self.seat_rules:
+            raise ValidationError({"school_selection_count": "Configure the required selection count."})
 
     def computed_status(self, now=None):
         from django.utils import timezone
@@ -188,11 +417,15 @@ class Election(models.Model):
         return self.status
 
     def selection_count_for(self, category, school_id=None):
+        if self.election_type == self.TYPE_SRC and category == ElectionCandidate.CATEGORY_SCHOOL and school_id:
+            seat = self.school_seats.filter(school_id=school_id).first()
+            if seat:
+                return seat.seat_count
+        rule = self.seat_rule_for(category)
+        if rule:
+            return _coerce_positive_int(rule.get("selection_count"))
         if category == ElectionCandidate.CATEGORY_GENERAL:
             return self.general_selection_count
-        if self.election_type == self.TYPE_SRC and school_id:
-            seat = self.school_seats.filter(school_id=school_id).first()
-            return seat.seat_count if seat else 0
         return self.school_selection_count
 
 
@@ -230,7 +463,7 @@ class ElectionCandidate(models.Model):
     display_name = models.CharField(max_length=255, blank=True)
     student_identifier = models.CharField(max_length=80, blank=True)
     school = models.ForeignKey("admin_app.School", on_delete=models.SET_NULL, null=True, blank=True, related_name="election_candidates")
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_GENERAL)
+    category = models.CharField(max_length=80, default=CATEGORY_GENERAL)
     details = models.TextField(blank=True)
     manifesto = models.TextField(blank=True)
     photo = models.FileField(upload_to="elections/candidates/", null=True, blank=True)
@@ -245,6 +478,11 @@ class ElectionCandidate(models.Model):
     def __str__(self):
         return self.display_name or f"{self.election_id} - {self.student_id}"
 
+    def get_category_display(self):
+        if self.election_id:
+            return self.election.seat_label_for(self.category)
+        return dict(self.CATEGORY_CHOICES).get(self.category, _title_from_key(self.category))
+
     def clean(self):
         if self.student and self.student.role != Profile.ROLE_STUDENT:
             raise ValidationError({"student": "Election candidates must be students."})
@@ -252,16 +490,30 @@ class ElectionCandidate(models.Model):
             raise ValidationError({"display_name": "Candidate name is required."})
         if not self.election_id:
             return
-        if self.election.election_type == Election.TYPE_SCHOOL_COMMITTEE and self.category != self.CATEGORY_SCHOOL:
-            raise ValidationError({"category": "School committee elections use the school category."})
-        if self.category == self.CATEGORY_SCHOOL and not (self.school_id or self.election.school_id):
-            raise ValidationError({"school": "School category candidates must belong to a school."})
-        if (
-            self.election.election_type == Election.TYPE_SCHOOL_COMMITTEE
-            and self.school_id
-            and self.school_id != self.election.school_id
+        self.category = _normalized_key(self.category, self.CATEGORY_GENERAL)
+        rule = self.election.seat_rule_for(self.category)
+        if not rule:
+            raise ValidationError({"category": "Select a configured ballot category."})
+        if rule.get("scope_type") == Election.CONSTITUENCY_SCHOOL and not (
+            self.school_id or self.election.school_id or rule.get("scope_id")
         ):
-            raise ValidationError({"school": "Candidate school must match the election school."})
+            raise ValidationError({"school": "School-scoped candidates must belong to a school."})
+        if (
+            self.election.effective_constituency_type() == Election.CONSTITUENCY_SCHOOL
+            and self.school_id
+            and self.election.effective_constituency_id()
+            and self.school_id != self.election.effective_constituency_id()
+        ):
+            raise ValidationError({"school": "Candidate school must match the election constituency."})
+        nomination_rules = self.election.nomination_rules if isinstance(self.election.nomination_rules, dict) else {}
+        if nomination_rules.get("require_student_profile") and not self.student_id:
+            raise ValidationError({"student": "Select a linked student for this candidate."})
+        if (
+            self.student_id
+            and nomination_rules.get("candidate_must_match_constituency", True)
+            and not self.election.student_matches_constituency(self.student)
+        ):
+            raise ValidationError({"student": "Candidate must match the election constituency."})
 
     def save(self, *args, **kwargs):
         if self.student_id:
@@ -272,10 +524,14 @@ class ElectionCandidate(models.Model):
                 self.student_identifier = self.student.student_id
             if not self.school_id and self.student.school_id:
                 self.school = self.student.school
-        if self.election_id and self.election.election_type == Election.TYPE_SCHOOL_COMMITTEE:
-            self.category = self.CATEGORY_SCHOOL
-            if not self.school_id:
-                self.school = self.election.school
+        if self.election_id:
+            self.category = _normalized_key(self.category, self.CATEGORY_GENERAL)
+            rule = self.election.seat_rule_for(self.category)
+            if rule and rule.get("scope_type") == Election.CONSTITUENCY_SCHOOL and not self.school_id:
+                if rule.get("scope_id"):
+                    self.school_id = rule["scope_id"]
+                elif self.election.effective_constituency_type() == Election.CONSTITUENCY_SCHOOL:
+                    self.school_id = self.election.effective_constituency_id()
         self.full_clean()
         return super().save(*args, **kwargs)
 
@@ -284,7 +540,7 @@ class Vote(models.Model):
     election = models.ForeignKey(Election, on_delete=models.CASCADE, related_name="votes")
     student = models.ForeignKey("auth_app.Profile", on_delete=models.CASCADE, related_name="election_votes")
     candidate = models.ForeignKey(ElectionCandidate, on_delete=models.CASCADE, related_name="votes")
-    category = models.CharField(max_length=20, choices=ElectionCandidate.CATEGORY_CHOICES, default=ElectionCandidate.CATEGORY_GENERAL)
+    category = models.CharField(max_length=80, default=ElectionCandidate.CATEGORY_GENERAL)
     cast_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

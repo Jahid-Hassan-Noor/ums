@@ -1,6 +1,7 @@
 import re
 
 from admin_app.models import Profile
+from admin_app.settings_registry import institution_name
 from chatbot_app.llm import generate_chat_answer
 from chatbot_app.search_services import retrieve_for_chatbot
 from chatbot_app import tools
@@ -43,12 +44,12 @@ SENSITIVE_PERSONAL_TERMS = {
     "visa",
     "student id",
     "staff id",
-    "aiu id",
 }
 
 
-SYSTEM_PROMPT = """
-You are the AIU Unified Portal assistant.
+def system_prompt():
+    return f"""
+You are the {institution_name()} portal assistant.
 Answer only from the provided context.
 Never invent class times, venues, deadlines, personal data, marks, or identifiers.
 For personal timetable, deadline, course, attendance, or exam questions, the backend tool result is the source of truth.
@@ -232,7 +233,7 @@ def _public_answer(question, intent):
     sources = context["sources"]
     if snippets:
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt()},
             {
                 "role": "user",
                 "content": (
@@ -261,7 +262,7 @@ def _public_answer(question, intent):
 
     return _base_payload(
         (
-            "I can help with public AIU information such as admissions, programmes, "
+            f"I can help with public {institution_name()} information such as admissions, programmes, "
             "schools, services, news, events, official links, and public directory emails. "
             "For personal schedules, assignments, attendance, or exams, please log in first."
         ),
@@ -294,7 +295,7 @@ def _retrieval_answer(user, question, intent):
         for item in results
     ]
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt()},
         {
             "role": "user",
             "content": (

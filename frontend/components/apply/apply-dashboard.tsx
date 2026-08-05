@@ -10,12 +10,13 @@ import {
 } from "@/components/apply/application-status-steps"
 import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
-import { loadApplyApplications } from "@/lib/apply"
+import { loadApplyApplications, loadApplyOptions, type ApplyOptions } from "@/lib/apply"
 
 export function ApplyDashboard() {
   const [applications, setApplications] = useState<
     Awaited<ReturnType<typeof loadApplyApplications>>
   >([])
+  const [options, setOptions] = useState<ApplyOptions | null>(null)
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(true)
 
@@ -24,9 +25,11 @@ export function ApplyDashboard() {
     const timer = window.setTimeout(() => {
       setIsLoading(true)
       setError("")
-      void loadApplyApplications()
-        .then((data) => {
-          if (active) setApplications(data)
+      void Promise.all([loadApplyApplications(), loadApplyOptions()])
+        .then(([data, nextOptions]) => {
+          if (!active) return
+          setApplications(data)
+          setOptions(nextOptions)
         })
         .catch((caught) => {
           if (active) {
@@ -58,7 +61,7 @@ export function ApplyDashboard() {
     () => [
       {
         title: "Application Status",
-        value: applicationStatusLabel(latestApplication?.status),
+        value: applicationStatusLabel(latestApplication?.status, options?.status_options),
         detail:
           latestApplication?.application_number || "Create a draft to begin.",
         icon: FileCheck2,
@@ -78,7 +81,7 @@ export function ApplyDashboard() {
         icon: Upload,
       },
     ],
-    [documentCount, latestApplication]
+    [documentCount, latestApplication, options]
   )
 
   return (
@@ -93,7 +96,7 @@ export function ApplyDashboard() {
         <section className="flex flex-col gap-4 border-b border-border/70 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-teal-700 dark:text-teal-300">
-              AIU Apply
+              University Apply
             </p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
               Application Dashboard
@@ -150,7 +153,7 @@ export function ApplyDashboard() {
           <div className="rounded-lg border border-border bg-background p-5 shadow-sm">
             <h2 className="text-base font-semibold">Application Flow</h2>
             <div className="mt-4">
-              <ApplicationStatusSteps />
+              <ApplicationStatusSteps steps={options?.steps.map((step) => step.label)} />
             </div>
           </div>
 

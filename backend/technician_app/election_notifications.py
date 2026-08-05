@@ -9,10 +9,15 @@ def eligible_students(election):
         role=Profile.ROLE_STUDENT,
         is_active=True,
         user__is_active=True,
+    ).select_related(
+        "user",
+        "student_detail",
+        "student_detail__school",
+        "student_detail__center",
+        "student_detail__department",
+        "student_detail__program",
     )
-    if election.election_type == models.Election.TYPE_SCHOOL_COMMITTEE:
-        students = students.filter(school=election.school)
-    return students
+    return [student for student in students if election.student_matches_constituency(student)]
 
 
 def notify_election_students(election, *, event_type, verb):

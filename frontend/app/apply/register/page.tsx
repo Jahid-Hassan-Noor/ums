@@ -109,7 +109,7 @@ export default function ApplyRegisterPage() {
     <main className="min-h-svh bg-slate-50 px-4 py-8 dark:bg-slate-950">
       <div className="mx-auto w-full max-w-2xl">
         <Link href="/apply" className="text-sm font-semibold text-teal-700 dark:text-teal-300">
-          AIU Apply
+          Apply
         </Link>
         <div className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
           <h1 className="font-display text-2xl font-semibold text-slate-950 dark:text-white">

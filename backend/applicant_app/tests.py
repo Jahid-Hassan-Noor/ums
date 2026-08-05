@@ -380,6 +380,109 @@ class ApplicantAppApiTests(TestCase):
             submit_response.json()["missing"],
         )
 
+    def test_admissions_setup_configures_number_documents_and_workflow(self):
+        admin_user = User.objects.create_superuser(
+            username="configurable_admissions_admin",
+            email="configurable-admissions-admin@example.com",
+            password="pass",
+        )
+        self.client.force_authenticate(user=admin_user)
+        setup_response = self.client.patch(
+            "/admin/manage/applicants/setup",
+            {
+                "application_number_prefix": "UNI",
+                "application_number_format": "{prefix}-{year}-{token}",
+                "document_types": [
+                    {
+                        "value": "motivation_letter",
+                        "label": "Motivation Letter",
+                        "kind": "file",
+                        "required": True,
+                    }
+                ],
+                "required_documents": ["motivation_letter"],
+                "scholarship_enabled": False,
+                "scholarship_label": "Financial Aid",
+                "workflow_steps": [
+                    {"value": "scholarship", "label": "Financial Aid", "enabled": True},
+                    {"value": "interview", "label": "Panel Interview", "enabled": False},
+                ],
+                "status_options": [
+                    {"value": "interview", "label": "Panel Interview", "enabled": False},
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(setup_response.status_code, 200, setup_response.json())
+        setup = setup_response.json()["settings"]
+        self.assertEqual(setup["application_number_prefix"], "UNI")
+        self.assertEqual(setup["document_types"][0]["value"], "motivation_letter")
+        self.assertEqual(setup["required_documents"], ["motivation_letter"])
+        self.assertFalse(setup["scholarship_enabled"])
+        self.assertFalse(
+            next(item for item in setup["status_options"] if item["value"] == "interview")["enabled"]
+        )
+
+        options_response = self.client.get("/applicant/options")
+        self.assertEqual(options_response.status_code, 200)
+        options = options_response.json()
+        self.assertEqual(options["document_types"][0]["value"], "motivation_letter")
+        self.assertNotIn("scholarship", {item["value"] for item in options["steps"]})
+
+        self.client.force_authenticate(user=None)
+        self.register()
+        application_response = self.client.post(
+            "/applicant/applications",
+            {
+                "application_type": "undergraduate",
+                "programme_preferences": [
+                    "Programme 1",
+                    "Programme 2",
+                    "Programme 3",
+                    "Programme 4",
+                ],
+                "personal_information": {
+                    "first_name": "Configurable",
+                    "last_name": "Applicant",
+                    "email": "configurable@example.com",
+                    "phone": "+60123456789",
+                    "identity_number": "P1234567",
+                    "country": "Malaysia",
+                    "nationality": "Malaysia",
+                },
+                "academic_information": {
+                    "highest_qualification": "High School",
+                    "institution_name": "Test School",
+                },
+                "statement_accepted": True,
+            },
+            format="json",
+        )
+        self.assertEqual(application_response.status_code, 201, application_response.json())
+        self.assertRegex(application_response.json()["application_number"], r"^UNI-\d{4}-[A-Z0-9]{8}$")
+
+        upload_response = self.client.post(
+            f"/applicant/applications/{application_response.json()['id']}/documents",
+            {
+                "document_type": "motivation_letter",
+                "file": SimpleUploadedFile(
+                    "motivation.pdf",
+                    b"motivation",
+                    content_type="application/pdf",
+                ),
+            },
+            format="multipart",
+        )
+        self.assertEqual(upload_response.status_code, 201, upload_response.json())
+
+        self.client.force_authenticate(user=admin_user)
+        interview_response = self.client.patch(
+            f"/applicant/staff/applications/{application_response.json()['id']}/status",
+            {"status": models.AdmissionApplication.STATUS_INTERVIEW},
+            format="json",
+        )
+        self.assertEqual(interview_response.status_code, 400)
+
     def test_admin_applicant_management_uses_applicant_record_ids(self):
         admin_user = User.objects.create_superuser(
             username="manage_admin",

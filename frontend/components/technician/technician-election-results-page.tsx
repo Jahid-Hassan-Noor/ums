@@ -41,7 +41,7 @@ function ResultGroup({ group }: { group: ElectionResultGroup }) {
           <h3 className="font-semibold">{group.label}</h3>
           <p className="text-sm text-muted-foreground">{group.total_votes} total votes</p>
         </div>
-        <Badge variant="outline">{titleCase(group.category)}</Badge>
+        <Badge variant="outline">{group.category_label ?? titleCase(group.category)}</Badge>
       </div>
       <div className="mt-4 space-y-3">
         {group.candidates.length ? (
@@ -151,7 +151,7 @@ export function TechnicianElectionResultsPage() {
           <div className="max-w-3xl space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Election Results</h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Live vote counts grouped by election category and school scope.
+              Vote counts grouped by ballot category and constituency.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -208,8 +208,10 @@ export function TechnicianElectionResultsPage() {
                     <Badge variant="outline">{selectedElection.election_type_label}</Badge>
                   </div>
                   <div>
-                    <p className="text-xs font-medium uppercase text-muted-foreground">School</p>
-                    <p className="mt-1">{selectedElection.school_detail?.name ?? "All schools"}</p>
+                    <p className="text-xs font-medium uppercase text-muted-foreground">Constituency</p>
+                    <p className="mt-1">
+                      {selectedElection.constituency_label || selectedElection.constituency_detail?.label || "University-wide"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase text-muted-foreground">Voting Window</p>

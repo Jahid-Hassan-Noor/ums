@@ -22,9 +22,22 @@ type Technician = {
   staff_id: string
   designation: string
   phone: string
+  school_name: string
+  center_name: string
+  unit_name: string
   department_name: string
   specialization: string
   is_active: boolean
+}
+
+function ownerLabel(technician: Technician) {
+  const scope =
+    technician.unit_name ||
+    technician.department_name ||
+    technician.school_name ||
+    technician.center_name ||
+    "No owner configured"
+  return scope
 }
 
 export function AdminManageTechniciansPage() {
@@ -62,7 +75,7 @@ export function AdminManageTechniciansPage() {
       <main className="flex-1 space-y-6 px-4 pt-4 pb-8 sm:px-6">
         <ManagePageHeader
           title="Manage Technicians"
-          description="Maintain ICT Helpdesk accounts under the standalone ICT department."
+          description="Maintain service desk technician accounts assigned to configured owners."
           actions={
             <Button variant="outline" onClick={() => void loadData()}>
               <RefreshCw className="size-4" /> Refresh
@@ -86,8 +99,7 @@ export function AdminManageTechniciansPage() {
               <CardHeader>
                 <CardTitle>{technician.name}</CardTitle>
                 <CardDescription>
-                  {technician.email} ·{" "}
-                  {technician.department_name || "ICT Department"}
+                  {technician.email} - {ownerLabel(technician)}
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">

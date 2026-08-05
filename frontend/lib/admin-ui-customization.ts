@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/auth"
+import type { UmsPublicSettings } from "@/lib/ums-settings"
 
 export type SettingValue = string | number | boolean
 
@@ -35,12 +36,7 @@ export type UiSection = {
   updated_by: string
 }
 
-export type PublicUiPayload = {
-  maintenance: { enabled: boolean }
-  university: Record<string, string>
-  uiCustomization: Record<string, SettingValue>
-  features: Record<string, boolean>
-}
+export type PublicUiPayload = UmsPublicSettings
 
 export type AdminUiCustomizationResponse = {
   section: UiSection

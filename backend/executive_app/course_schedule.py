@@ -68,12 +68,20 @@ def get_executive_scope(profile):
 def scope_payload(scope):
     unit = scope.get("unit")
     kind = scope.get("kind")
+    academic_center = bool(kind == "center" and unit and unit.is_academic_center())
+    semester_workflows = scope_supports_academic_workflows(scope)
     return {
         "kind": kind,
         "id": unit.id if unit else None,
         "code": unit.code if unit else "",
         "name": unit.name if unit else "Unassigned",
-        "academic_workflows": scope_supports_academic_workflows(scope),
+        "academic_center": academic_center,
+        "academic_workflows": semester_workflows,
+        "semester_workflows": semester_workflows,
+        "academic_calendar_mode": unit.academic_calendar_mode if kind == "center" and unit else "",
+        "semester_calendar_group": unit.effective_semester_calendar_group()
+        if kind == "center" and unit and unit.uses_semester_calendar()
+        else "",
     }
 
 
@@ -84,19 +92,23 @@ def scope_supports_academic_workflows(scope):
         return False
     if kind == "school":
         return True
-    return models.Program.objects.filter(
-        center=unit,
-        program_type=models.Program.PROGRAM_ACADEMIC,
-        is_active=True,
-    ).exists()
+    return unit.uses_semester_calendar()
 
 
 def non_academic_scope_response(scope):
+    unit = scope.get("unit")
+    if scope.get("kind") == "center" and unit and unit.is_academic_center():
+        detail = (
+            f"{unit.name} is configured as a whole-year academic centre. "
+            "Semester course, class schedule, and registration workflows are available only for schools and semester-based academic centres."
+        )
+    else:
+        detail = (
+            "This centre is configured as non-academic. "
+            "Course, class schedule, and registration workflows are available only for schools and semester-based academic centres."
+        )
     return {
-        "detail": (
-            "This centre is configured for centre programmes only. "
-            "Course, class schedule, and registration workflows are available only for schools and academic centres."
-        ),
+        "detail": detail,
         "scope": scope_payload(scope),
     }
 
@@ -136,6 +148,8 @@ def offerings_for_scope(scope):
             "instructor__user",
         )
         .prefetch_related(
+            "eligible_schools",
+            "eligible_centers",
             "class_meetings__venue__building",
             "class_meetings__lecturer__user",
             "class_meetings__tutorial_group",
@@ -512,6 +526,14 @@ def serialize_offering(offering):
         "section": offering.section,
         "capacity": offering.capacity,
         "is_active": offering.is_active,
+        "eligible_schools": [
+            {"id": school.id, "code": school.code, "name": school.name}
+            for school in offering.eligible_schools.all()
+        ],
+        "eligible_centers": [
+            {"id": center.id, "code": center.code, "name": center.name}
+            for center in offering.eligible_centers.all()
+        ],
         "tutorial_groups": [
             serialize_tutorial_group(group)
             for group in offering.tutorial_groups.all()

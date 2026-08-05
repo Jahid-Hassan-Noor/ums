@@ -67,7 +67,7 @@ REPORT_DEFINITIONS = {
     },
     "ict-tickets": {
         "group": "operations",
-        "name": "ICT Helpdesk Tickets",
+        "name": "Service Desk Tickets",
         "description": "Helpdesk tickets, assigned technicians, and resolution status.",
         "statuses": [choice[0] for choice in HelpdeskTicket.STATUS_CHOICES],
     },

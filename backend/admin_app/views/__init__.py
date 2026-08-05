@@ -30,9 +30,11 @@ from admin_app.views.admin_public_official_links import *
 from admin_app.views.admin_reports import *
 from admin_app.views.admin_report_exports import *
 from admin_app.views.admin_semesters import *
+from admin_app.views.admin_setup_wizard import *
 from admin_app.views.admin_settings import *
 from admin_app.views.admin_ui_customization import *
 from admin_app.views.admin_statistics import *
 from admin_app.views.admin_ums import *
+from admin_app.views.admin_venue_bookings import *
 from admin_app.views.admin_venues import *
 from admin_app.views.admin_hostels import *

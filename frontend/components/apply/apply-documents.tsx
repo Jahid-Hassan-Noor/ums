@@ -18,7 +18,6 @@ import {
 
 const inputClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-const IMAGE_DOCUMENT_TYPES = new Set(["passport", "photo"])
 const ALLOWED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"]
 const IMAGE_ACCEPT = ALLOWED_IMAGE_EXTENSIONS.join(",")
 
@@ -29,6 +28,10 @@ function fileExtension(filename: string) {
 
 function optionLabel(options: ApplyOptions | null, value: string) {
   return options?.document_types.find((item) => item.value === value)?.label ?? value
+}
+
+function isImageDocument(options: ApplyOptions | null, value: string) {
+  return options?.document_types.find((item) => item.value === value)?.kind === "image"
 }
 
 export function ApplyDocuments() {
@@ -53,7 +56,7 @@ export function ApplyDocuments() {
         if (!isMounted) return
         setOptions(nextOptions)
         setApplications(nextApplications)
-        setDocumentType(nextOptions.document_types[0]?.value ?? "passport")
+        setDocumentType(nextOptions.document_types[0]?.value ?? "")
       } catch (caught) {
         if (isMounted) setError(caught instanceof Error ? caught.message : "Unable to load documents")
       } finally {
@@ -80,7 +83,7 @@ export function ApplyDocuments() {
     if (!application || !file) return
     setMessage("")
     setError("")
-    if (IMAGE_DOCUMENT_TYPES.has(documentType)) {
+    if (isImageDocument(options, documentType)) {
       const extension = fileExtension(file.name)
       if (!ALLOWED_IMAGE_EXTENSIONS.includes(extension)) {
         setError("Identity and photo documents must be jpg, jpeg, png, webp, heic, or heif images.")
@@ -171,13 +174,13 @@ export function ApplyDocuments() {
                   <input
                     id="file"
                     type="file"
-                    accept={IMAGE_DOCUMENT_TYPES.has(documentType) ? IMAGE_ACCEPT : undefined}
+                    accept={isImageDocument(options, documentType) ? IMAGE_ACCEPT : undefined}
                     className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-teal-700 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
                     onChange={(event) => setFile(event.target.files?.[0] ?? null)}
                     required
                   />
                 </div>
-                <Button type="submit" disabled={isUploading || !file}>
+                <Button type="submit" disabled={isUploading || !file || !documentType}>
                   <Upload className="size-4" />
                   {isUploading ? "Uploading..." : "Upload Document"}
                 </Button>

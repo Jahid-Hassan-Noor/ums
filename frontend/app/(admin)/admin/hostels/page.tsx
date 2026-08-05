@@ -46,7 +46,7 @@ type Hostel = {
   id: number
   code: string
   name: string
-  hostel_type: "male" | "female"
+  hostel_type: string
   hostel_type_label: string
   warden_name: string
   warden_phone: string
@@ -75,6 +75,7 @@ type HostelsResponse = {
   section: string
   hostels: Hostel[]
   rooms: HostelRoom[]
+  policy?: HostelPolicy
   student_life?: StudentLife
 }
 
@@ -114,26 +115,59 @@ type StudentLifeResponse = {
   student_life: StudentLife
 }
 
+type ResidenceType = {
+  value: string
+  label: string
+}
+
+type HostelPolicy = {
+  residence_types: ResidenceType[]
+  default_room_capacity: number
+  max_room_capacity: number
+  room_code_format: string
+  bed_assignment_rule: string
+  bed_assignment_rules?: ResidenceType[]
+  eligibility_rules?: string
+}
+
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
-const emptyHostelForm = {
-  code: "",
-  name: "",
-  hostel_type: "male" as "male" | "female",
-  warden_name: "",
-  warden_phone: "",
-  warden_email: "",
-  notes: "",
-  is_active: true,
+const defaultHostelPolicy: HostelPolicy = {
+  residence_types: [
+    { value: "male", label: "Male" },
+    { value: "female", label: "Female" },
+  ],
+  default_room_capacity: 4,
+  max_room_capacity: 26,
+  room_code_format: "{hostel}-{floor}-{room}",
+  bed_assignment_rule: "section_letters",
+  bed_assignment_rules: [],
+  eligibility_rules: "",
 }
 
-const emptyRoomForm = {
-  hostel: 0,
-  floor: "1",
-  number: "",
-  capacity: "4",
-  is_active: true,
+function emptyHostelForm(policy: HostelPolicy = defaultHostelPolicy) {
+  return {
+    code: "",
+    name: "",
+    hostel_type: policy.residence_types[0]?.value ?? "male",
+    warden_name: "",
+    warden_phone: "",
+    warden_email: "",
+    notes: "",
+    is_active: true,
+  }
+}
+
+function emptyRoomForm(policy: HostelPolicy = defaultHostelPolicy) {
+  return {
+    hostel: 0,
+    code: "",
+    floor: "1",
+    number: "",
+    capacity: String(policy.default_room_capacity || 4),
+    is_active: true,
+  }
 }
 
 const emptyEmergencyContact: EmergencyContact = {
@@ -187,7 +221,7 @@ function downloadCsv(filename: string, rows: HostelExportRow[]) {
   const csv = [
     columns.join(","),
     ...rows.map((row) =>
-      columns.map((column) => csvCell(row[column])).join(",")
+      columns.map((column) => csvCell(row[column])).join(","),
     ),
   ].join("\n")
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
@@ -202,6 +236,25 @@ function copyStudentLife(studentLife?: StudentLife | null): StudentLife {
       studentLife?.warden_schedule?.map((entry) => ({ ...entry })) ?? [],
     updated_at: studentLife?.updated_at ?? null,
     updated_by: studentLife?.updated_by ?? "",
+  }
+}
+
+function normalizePolicy(policy?: HostelPolicy | null): HostelPolicy {
+  const residenceTypes =
+    policy?.residence_types?.filter((option) => option.value && option.label) ??
+    []
+  return {
+    ...defaultHostelPolicy,
+    ...policy,
+    residence_types: residenceTypes.length
+      ? residenceTypes
+      : defaultHostelPolicy.residence_types,
+    default_room_capacity:
+      Number(policy?.default_room_capacity) ||
+      defaultHostelPolicy.default_room_capacity,
+    max_room_capacity:
+      Number(policy?.max_room_capacity) ||
+      defaultHostelPolicy.max_room_capacity,
   }
 }
 
@@ -241,12 +294,13 @@ function formatUpdatedAt(value?: string | null) {
 export default function AdminHostelsPage() {
   const [hostels, setHostels] = useState<Hostel[]>([])
   const [rooms, setRooms] = useState<HostelRoom[]>([])
+  const [policy, setPolicy] = useState<HostelPolicy>(defaultHostelPolicy)
   const [selectedHostelId, setSelectedHostelId] = useState<number | null>(null)
   const [studentLife, setStudentLife] = useState<StudentLife>(() =>
-    copyStudentLife(emptyStudentLife)
+    copyStudentLife(emptyStudentLife),
   )
   const [studentLifeForm, setStudentLifeForm] = useState<StudentLife>(() =>
-    copyStudentLife(emptyStudentLife)
+    copyStudentLife(emptyStudentLife),
   )
   const [isLoading, setIsLoading] = useState(true)
   const [isExporting, setIsExporting] = useState(false)
@@ -256,10 +310,14 @@ export default function AdminHostelsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isHostelModalOpen, setIsHostelModalOpen] = useState(false)
   const [editingHostel, setEditingHostel] = useState<Hostel | null>(null)
-  const [hostelForm, setHostelForm] = useState(emptyHostelForm)
+  const [hostelForm, setHostelForm] = useState(() =>
+    emptyHostelForm(defaultHostelPolicy),
+  )
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false)
   const [editingRoom, setEditingRoom] = useState<HostelRoom | null>(null)
-  const [roomForm, setRoomForm] = useState(emptyRoomForm)
+  const [roomForm, setRoomForm] = useState(() =>
+    emptyRoomForm(defaultHostelPolicy),
+  )
 
   async function loadData() {
     setIsLoading(true)
@@ -268,6 +326,8 @@ export default function AdminHostelsPage() {
       const data = await apiFetch<HostelsResponse>("/admin/hostels")
       setHostels(data.hostels ?? [])
       setRooms(data.rooms ?? [])
+      const nextPolicy = normalizePolicy(data.policy)
+      setPolicy(nextPolicy)
       const nextStudentLife = copyStudentLife(data.student_life)
       setStudentLife(nextStudentLife)
       setStudentLifeForm(copyStudentLife(nextStudentLife))
@@ -278,7 +338,7 @@ export default function AdminHostelsPage() {
       }
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Failed to load hostels."
+        caught instanceof Error ? caught.message : "Failed to load hostels.",
       )
     } finally {
       setIsLoading(false)
@@ -299,7 +359,7 @@ export default function AdminHostelsPage() {
     return hostels.filter((hostel) =>
       [hostel.code, hostel.name, hostel.hostel_type_label, hostel.warden_name]
         .filter(Boolean)
-        .some((field) => field.toLowerCase().includes(query))
+        .some((field) => field.toLowerCase().includes(query)),
     )
   }, [hostels, searchQuery])
 
@@ -308,22 +368,19 @@ export default function AdminHostelsPage() {
   const selectedRooms = rooms.filter((room) => room.hostel === selectedHostelId)
   const totalCapacity = rooms.reduce(
     (total, room) => total + (room.capacity || 0),
-    0
+    0,
   )
   const totalResidents = rooms.reduce(
     (total, room) => total + (room.resident_count || 0),
-    0
+    0,
   )
-  const maleHostels = hostels.filter(
-    (hostel) => hostel.hostel_type === "male"
-  ).length
-  const femaleHostels = hostels.filter(
-    (hostel) => hostel.hostel_type === "female"
-  ).length
+  const activeResidenceTypes = new Set(
+    hostels.map((hostel) => hostel.hostel_type).filter(Boolean),
+  ).size
 
   function openAddHostel() {
     setEditingHostel(null)
-    setHostelForm(emptyHostelForm)
+    setHostelForm(emptyHostelForm(policy))
     setIsHostelModalOpen(true)
   }
 
@@ -368,7 +425,7 @@ export default function AdminHostelsPage() {
       await loadData()
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Unable to save hostel."
+        caught instanceof Error ? caught.message : "Unable to save hostel.",
       )
     }
   }
@@ -376,7 +433,7 @@ export default function AdminHostelsPage() {
   async function deleteHostel(hostel: Hostel) {
     if (
       !confirm(
-        `Delete ${hostel.code}? All rooms inside this hostel will be removed.`
+        `Delete ${hostel.code}? All rooms inside this hostel will be removed.`,
       )
     )
       return
@@ -391,7 +448,7 @@ export default function AdminHostelsPage() {
       await loadData()
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Unable to delete hostel."
+        caught instanceof Error ? caught.message : "Unable to delete hostel.",
       )
     }
   }
@@ -399,7 +456,7 @@ export default function AdminHostelsPage() {
   function openAddRoom() {
     if (!selectedHostelId) return
     setEditingRoom(null)
-    setRoomForm({ ...emptyRoomForm, hostel: selectedHostelId })
+    setRoomForm({ ...emptyRoomForm(policy), hostel: selectedHostelId })
     setIsRoomModalOpen(true)
   }
 
@@ -407,6 +464,7 @@ export default function AdminHostelsPage() {
     setEditingRoom(room)
     setRoomForm({
       hostel: room.hostel,
+      code: room.code,
       floor: String(room.floor),
       number: room.number,
       capacity: String(room.capacity),
@@ -420,10 +478,23 @@ export default function AdminHostelsPage() {
     setError("")
     setSuccess("")
     try {
-      const payload = {
-        ...roomForm,
+      const payload: {
+        hostel: number
+        floor: number
+        number: string
+        capacity: number
+        is_active: boolean
+        code?: string
+      } = {
+        hostel: roomForm.hostel,
         floor: Number.parseInt(roomForm.floor, 10),
+        number: roomForm.number,
         capacity: Number.parseInt(roomForm.capacity, 10),
+        is_active: roomForm.is_active,
+      }
+      const normalizedCode = roomForm.code.trim()
+      if (!editingRoom || normalizedCode !== editingRoom.code) {
+        payload.code = normalizedCode
       }
       if (editingRoom) {
         await apiFetch(`/admin/hostels/rooms/${editingRoom.id}`, {
@@ -442,7 +513,9 @@ export default function AdminHostelsPage() {
       await loadData()
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Unable to save hostel room."
+        caught instanceof Error
+          ? caught.message
+          : "Unable to save hostel room.",
       )
     }
   }
@@ -459,7 +532,7 @@ export default function AdminHostelsPage() {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Unable to delete hostel room."
+          : "Unable to delete hostel room.",
       )
     }
   }
@@ -467,13 +540,13 @@ export default function AdminHostelsPage() {
   function updateEmergencyContact(
     index: number,
     field: keyof EmergencyContact,
-    value: string
+    value: string,
   ) {
     setStudentLifeForm((current) => ({
       ...current,
       emergency_contacts: current.emergency_contacts.map(
         (contact, contactIndex) =>
-          contactIndex === index ? { ...contact, [field]: value } : contact
+          contactIndex === index ? { ...contact, [field]: value } : contact,
       ),
     }))
   }
@@ -492,7 +565,7 @@ export default function AdminHostelsPage() {
     setStudentLifeForm((current) => ({
       ...current,
       emergency_contacts: current.emergency_contacts.filter(
-        (_, contactIndex) => contactIndex !== index
+        (_, contactIndex) => contactIndex !== index,
       ),
     }))
   }
@@ -500,12 +573,12 @@ export default function AdminHostelsPage() {
   function updateWardenSchedule(
     index: number,
     field: keyof WardenScheduleEntry,
-    value: string
+    value: string,
   ) {
     setStudentLifeForm((current) => ({
       ...current,
       warden_schedule: current.warden_schedule.map((entry, entryIndex) =>
-        entryIndex === index ? { ...entry, [field]: value } : entry
+        entryIndex === index ? { ...entry, [field]: value } : entry,
       ),
     }))
   }
@@ -524,7 +597,7 @@ export default function AdminHostelsPage() {
     setStudentLifeForm((current) => ({
       ...current,
       warden_schedule: current.warden_schedule.filter(
-        (_, entryIndex) => entryIndex !== index
+        (_, entryIndex) => entryIndex !== index,
       ),
     }))
   }
@@ -541,7 +614,7 @@ export default function AdminHostelsPage() {
           body: JSON.stringify({
             student_life: cleanStudentLifeForm(studentLifeForm),
           }),
-        }
+        },
       )
       const nextStudentLife = copyStudentLife(response.student_life)
       setStudentLife(nextStudentLife)
@@ -551,7 +624,7 @@ export default function AdminHostelsPage() {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Unable to update student hostel information."
+          : "Unable to update student hostel information.",
       )
     } finally {
       setIsSavingStudentLife(false)
@@ -564,18 +637,18 @@ export default function AdminHostelsPage() {
     setSuccess("")
     try {
       const exportData = await apiFetch<HostelExportResponse>(
-        "/admin/hostels/export"
+        "/admin/hostels/export",
       )
       downloadCsv(
         exportData.filename || "hostel-details.csv",
-        exportData.rows ?? []
+        exportData.rows ?? [],
       )
       setSuccess("Hostel details exported.")
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Unable to export hostel details."
+          : "Unable to export hostel details.",
       )
     } finally {
       setIsExporting(false)
@@ -601,8 +674,8 @@ export default function AdminHostelsPage() {
                 Hostels
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                Manage male and female hostel blocks, room capacities, wardens,
-                and student room assignments.
+                Manage residence blocks, room capacities, wardens, and student
+                room assignments.
               </p>
             </div>
           </div>
@@ -658,7 +731,7 @@ export default function AdminHostelsPage() {
           <Card className="border-border/70 bg-card/95 shadow-sm">
             <CardHeader className="pb-2">
               <CardDescription className="text-sm font-medium">
-                Male / Female
+                Residence Types
               </CardDescription>
             </CardHeader>
             <CardContent className="flex items-center gap-3">
@@ -666,7 +739,7 @@ export default function AdminHostelsPage() {
                 <Users className="size-5" />
               </span>
               <p className="text-2xl font-bold tracking-tight">
-                {maleHostels} / {femaleHostels}
+                {activeResidenceTypes} / {policy.residence_types.length}
               </p>
             </CardContent>
           </Card>
@@ -759,7 +832,7 @@ export default function AdminHostelsPage() {
                               updateEmergencyContact(
                                 index,
                                 "label",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -775,7 +848,7 @@ export default function AdminHostelsPage() {
                               updateEmergencyContact(
                                 index,
                                 "available_hours",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -791,7 +864,7 @@ export default function AdminHostelsPage() {
                               updateEmergencyContact(
                                 index,
                                 "phone",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -808,7 +881,7 @@ export default function AdminHostelsPage() {
                               updateEmergencyContact(
                                 index,
                                 "email",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -824,7 +897,7 @@ export default function AdminHostelsPage() {
                             updateEmergencyContact(
                               index,
                               "notes",
-                              event.target.value
+                              event.target.value,
                             )
                           }
                         />
@@ -894,7 +967,7 @@ export default function AdminHostelsPage() {
                               updateWardenSchedule(
                                 index,
                                 "day",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -908,7 +981,7 @@ export default function AdminHostelsPage() {
                               updateWardenSchedule(
                                 index,
                                 "time_range",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -924,7 +997,7 @@ export default function AdminHostelsPage() {
                               updateWardenSchedule(
                                 index,
                                 "warden_name",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -940,7 +1013,7 @@ export default function AdminHostelsPage() {
                               updateWardenSchedule(
                                 index,
                                 "phone",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -956,7 +1029,7 @@ export default function AdminHostelsPage() {
                               updateWardenSchedule(
                                 index,
                                 "location",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                           />
@@ -972,7 +1045,7 @@ export default function AdminHostelsPage() {
                             updateWardenSchedule(
                               index,
                               "notes",
-                              event.target.value
+                              event.target.value,
                             )
                           }
                         />
@@ -1236,12 +1309,15 @@ export default function AdminHostelsPage() {
                       onChange={(event) =>
                         setHostelForm({
                           ...hostelForm,
-                          hostel_type: event.target.value as "male" | "female",
+                          hostel_type: event.target.value,
                         })
                       }
                     >
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
+                      {policy.residence_types.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1349,7 +1425,7 @@ export default function AdminHostelsPage() {
 
       {isRoomModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-md border-border bg-card shadow-lg">
+          <Card className="w-full max-w-lg border-border bg-card shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle>{editingRoom ? "Edit Room" : "Add Room"}</CardTitle>
               <Button
@@ -1383,6 +1459,17 @@ export default function AdminHostelsPage() {
                     ))}
                   </select>
                 </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="room-code">Room Code</Label>
+                  <Input
+                    id="room-code"
+                    placeholder={policy.room_code_format}
+                    value={roomForm.code}
+                    onChange={(event) =>
+                      setRoomForm({ ...roomForm, code: event.target.value })
+                    }
+                  />
+                </div>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <div className="grid gap-2">
                     <Label htmlFor="room-floor">Floor</Label>
@@ -1415,7 +1502,7 @@ export default function AdminHostelsPage() {
                       id="room-capacity"
                       type="number"
                       min="1"
-                      max="26"
+                      max={policy.max_room_capacity}
                       required
                       value={roomForm.capacity}
                       onChange={(event) =>

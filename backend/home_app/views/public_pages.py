@@ -3,7 +3,28 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from home_app.serializers import PublicPageSerializer
-from home_app.views.public_helpers import get_public_page, normalize_route_path
+from home_app.views.public_helpers import (
+    get_public_page,
+    normalize_route_path,
+    published_pages,
+)
+
+
+class PublicPageNavigation(APIView):
+    def get(self, request):
+        pages = published_pages().order_by("section", "sort_order", "title")
+        return Response(
+            {
+                "title": "Public Navigation",
+                "section": "public",
+                "pages": PublicPageSerializer(
+                    pages,
+                    many=True,
+                    context={"request": request},
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class PublicPageDetail(APIView):

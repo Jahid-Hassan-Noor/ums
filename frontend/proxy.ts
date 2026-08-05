@@ -10,7 +10,9 @@ import {
 } from "@/lib/server-session"
 import {
   DEFAULT_UMS_PUBLIC_SETTINGS,
+  disabledUmsRouteModules,
   isUmsFeaturePathEnabled,
+  isUmsRoleFeaturePathEnabled,
   normalizeUmsPublicSettings,
   type UmsPublicSettings,
 } from "@/lib/ums-settings"
@@ -46,7 +48,7 @@ const securityHeaders = {
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' https://aiu.edu.my data: blob:",
+    "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self'",
     "frame-ancestors 'none'",
@@ -100,8 +102,14 @@ function roleForPath(pathname: string): Role | null {
 
 function isMaintenanceBypassPath(pathname: string) {
   const path = normalizedPath(pathname)
-  if (path === "/login" || path === "/maintenance") return true
-  if (path.startsWith("/login/") || path.startsWith("/maintenance/")) return true
+  if (path === "/login" || path === "/maintenance" || path === "/module-unavailable") return true
+  if (
+    path.startsWith("/login/") ||
+    path.startsWith("/maintenance/") ||
+    path.startsWith("/module-unavailable/")
+  ) {
+    return true
+  }
   if (path.startsWith("/_next/") || path.startsWith("/ums-auth/")) return true
   if (path.startsWith("/images/") || path.startsWith("/media/")) return true
   if (path === "/favicon.ico") return true
@@ -190,6 +198,23 @@ function maintenanceRedirect(request: NextRequest, clearCookies: boolean) {
   return withSecurityHeaders(response)
 }
 
+function moduleUnavailableRedirect(
+  request: NextRequest,
+  settings: UmsPublicSettings,
+  role?: Role
+) {
+  const url = request.nextUrl.clone()
+  const requestedPath = `${request.nextUrl.pathname}${request.nextUrl.search}`
+  const modules = disabledUmsRouteModules(request.nextUrl.pathname, settings, role)
+  url.pathname = "/module-unavailable"
+  url.search = ""
+  url.searchParams.set("next", requestedPath)
+  if (modules.length) {
+    url.searchParams.set("modules", modules.join(","))
+  }
+  return withSecurityHeaders(NextResponse.redirect(url))
+}
+
 function authenticatedResponse(
   response: NextResponse,
   request: NextRequest,
@@ -239,7 +264,7 @@ export async function proxy(request: NextRequest) {
 
   const features = publicSettings.features
   if (!isUmsFeaturePathEnabled(request.nextUrl.pathname, features)) {
-    return withSecurityHeaders(new NextResponse("Not found", { status: 404 }))
+    return moduleUnavailableRedirect(request, publicSettings)
   }
 
   const {
@@ -258,6 +283,10 @@ export async function proxy(request: NextRequest) {
   const umsRole = umsIdentity.role
   if (maintenanceEnabled && umsRole !== "admin") {
     return maintenanceRedirect(request, true)
+  }
+
+  if (!isUmsRoleFeaturePathEnabled(request.nextUrl.pathname, publicSettings, umsRole)) {
+    return moduleUnavailableRedirect(request, publicSettings, umsRole)
   }
 
   if (requiredRole && umsRole !== requiredRole) {

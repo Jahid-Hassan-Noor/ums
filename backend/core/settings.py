@@ -113,7 +113,7 @@ EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", 10)
 PASSWORD_RESET_TOKEN_TTL_MINUTES = env_int("PASSWORD_RESET_TOKEN_TTL_MINUTES", 60)
 DEFAULT_FROM_EMAIL = os.getenv(
     "DJANGO_DEFAULT_FROM_EMAIL",
-    os.getenv("DEFAULT_FROM_EMAIL", "AIU Portal <no-reply@aiu.edu.my>"),
+    os.getenv("DEFAULT_FROM_EMAIL", "University Portal <no-reply@example.edu>"),
 )
 
 
@@ -269,7 +269,7 @@ CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-CELERY_TIMEZONE = "Asia/Kuala_Lumpur"
+CELERY_TIMEZONE = os.getenv("DJANGO_CELERY_TIMEZONE", os.getenv("CELERY_TIMEZONE", TIME_ZONE))
 CELERY_BEAT_SCHEDULE = {
     "process-due-reminders-every-minute": {
         "task": "core.enqueue_django_task",

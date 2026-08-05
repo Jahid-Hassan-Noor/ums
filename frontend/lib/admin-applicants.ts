@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/auth"
 import type {
   ApplyAdmissionsSetup,
   ApplyApplication,
+  ApplyDocumentType,
   ApplyDocument,
   ApplyOption,
 } from "@/lib/apply"
@@ -40,7 +41,10 @@ export type AdminApplicantOverview = {
 export type AdminApplicantSetupPayload = {
   settings: ApplyAdmissionsSetup
   detail_fields: (ApplyOption & { section: string })[]
-  document_types: ApplyOption[]
+  document_types: ApplyDocumentType[]
+  document_type_options: ApplyDocumentType[]
+  steps: ApplyOption[]
+  status_options: (ApplyOption & { enabled: boolean })[]
   message?: string
 }
 

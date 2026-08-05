@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accountant_app.service import profile_identifier
+from admin_app.settings_registry import default_currency_code, format_currency_amount
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def create_fine(*, accountant, student_profile, reason, amount, description="", 
         reason=reason,
         description=description,
         amount=amount,
+        currency=default_currency_code(),
         due_date=due_date,
     )
     fine.save()
@@ -67,15 +69,16 @@ def create_fine(*, accountant, student_profile, reason, amount, description="", 
 
 def _create_fine_payment_link(*, fine, request):
     """
-    Build a DuitNow/ToyyibPay payment link for a fine using the existing gateway infrastructure.
+    Build a hosted payment link for a fine using the configured gateway infrastructure.
     Returns the checkout URL string or empty string.
     """
     from accountant_app.models import Fine, FinanceGatewayConfig
     from accountant_app.service import _absolute_backend_url, _callback_url, _create_gateway_checkout
 
     config = FinanceGatewayConfig.objects.filter(pk=1, is_active=True).first()
-    if not config:
+    if not config or config.provider == FinanceGatewayConfig.PROVIDER_MANUAL:
         return ""
+    config.full_clean()
 
     external_ref = f"FINE-{fine.pk}-{uuid.uuid4().hex[:8].upper()}"
     student_name = fine.student.user.get_full_name().strip() or fine.student.user.username
@@ -85,7 +88,7 @@ def _create_fine_payment_link(*, fine, request):
     payload = {
         "userSecretKey": config.secret_key,
         "categoryCode": config.category_code,
-        "billName": f"AIU Fine: {fine.reason[:50]}",
+        "billName": f"Fine: {fine.reason[:50]}",
         "billDescription": fine.description or fine.reason,
         "billPriceSetting": 1,
         "billPayorInfo": 1,
@@ -251,6 +254,7 @@ def fine_payload(fine):
         "reason": fine.reason,
         "description": fine.description,
         "amount": str(fine.amount),
+        "amount_display": format_currency_amount(fine.amount, currency_code=fine.currency),
         "currency": fine.currency,
         "status": fine.status,
         "due_date": fine.due_date.isoformat() if fine.due_date else None,

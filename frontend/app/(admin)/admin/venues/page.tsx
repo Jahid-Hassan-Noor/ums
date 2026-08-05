@@ -38,14 +38,26 @@ type Venue = {
   building_detail?: Building
   code: string
   name: string
+  category: string
+  category_label: string
   floor: string
   capacity: number | null
   is_active: boolean
 }
 
+type VenueCategoryOption = {
+  value: string
+  label: string
+}
+
+type VenueBookingPolicy = {
+  venue_categories: VenueCategoryOption[]
+}
+
 type VenuesResponse = {
   title: string
   section: string
+  policy: VenueBookingPolicy
   buildings: Building[]
   venues: Venue[]
 }
@@ -53,6 +65,7 @@ type VenuesResponse = {
 export default function AdminVenuesPage() {
   const [buildings, setBuildings] = useState<Building[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
+  const [venuePolicy, setVenuePolicy] = useState<VenueBookingPolicy | null>(null)
   const [selectedBuildingId, setSelectedBuildingId] = useState<number | null>(null)
   
   const [isLoading, setIsLoading] = useState(true)
@@ -80,6 +93,7 @@ export default function AdminVenuesPage() {
     building: 0,
     code: "",
     name: "",
+    category: "classroom",
     floor: "",
     capacity: "",
     is_active: true,
@@ -91,6 +105,7 @@ export default function AdminVenuesPage() {
       const data = await apiFetch<VenuesResponse>("/admin/venues")
       setBuildings(data.buildings || [])
       setVenues(data.venues || [])
+      setVenuePolicy(data.policy || null)
       if (data.buildings && data.buildings.length > 0 && selectedBuildingId === null) {
         setSelectedBuildingId(data.buildings[0].id)
       }
@@ -110,6 +125,7 @@ export default function AdminVenuesPage() {
           const data = await apiFetch<VenuesResponse>("/admin/venues")
           setBuildings(data.buildings || [])
           setVenues(data.venues || [])
+          setVenuePolicy(data.policy || null)
           if (data.buildings && data.buildings.length > 0) {
             setSelectedBuildingId((current) => current ?? data.buildings[0].id)
           }
@@ -201,6 +217,7 @@ export default function AdminVenuesPage() {
       building: selectedBuildingId,
       code: "",
       name: "",
+      category: venuePolicy?.venue_categories?.[0]?.value || "classroom",
       floor: "",
       capacity: "",
       is_active: true,
@@ -214,6 +231,7 @@ export default function AdminVenuesPage() {
       building: v.building,
       code: v.code,
       name: v.name,
+      category: v.category || venuePolicy?.venue_categories?.[0]?.value || "classroom",
       floor: v.floor,
       capacity: v.capacity !== null ? String(v.capacity) : "",
       is_active: v.is_active,
@@ -273,6 +291,9 @@ export default function AdminVenuesPage() {
 
   const selectedBuilding = buildings.find((b) => b.id === selectedBuildingId)
   const nestedVenues = venues.filter((v) => v.building === selectedBuildingId)
+  const venueCategories = venuePolicy?.venue_categories?.length
+    ? venuePolicy.venue_categories
+    : [{ value: "classroom", label: "Classroom" }]
 
   // Metrics
   const totalCapacity = venues.reduce((acc, curr) => acc + (curr.capacity || 0), 0)
@@ -481,9 +502,14 @@ export default function AdminVenuesPage() {
                         <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <span className="font-semibold text-foreground">{v.name}</span>
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary font-mono">
-                              {v.code}
-                            </span>
+                            <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                {v.category_label || v.category}
+                              </span>
+                              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary font-mono">
+                                {v.code}
+                              </span>
+                            </div>
                           </div>
                           <div className="space-y-1 text-xs text-muted-foreground">
                             {v.floor && (
@@ -655,6 +681,21 @@ export default function AdminVenuesPage() {
                     value={venueForm.name}
                     onChange={(e) => setVenueForm({ ...venueForm, name: e.target.value })}
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="v-category">Venue Category</Label>
+                  <select
+                    id="v-category"
+                    value={venueForm.category}
+                    onChange={(e) => setVenueForm({ ...venueForm, category: e.target.value })}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background"
+                  >
+                    {venueCategories.map((category) => (
+                      <option key={category.value} value={category.value}>
+                        {category.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="v-floor">Floor</Label>

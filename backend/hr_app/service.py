@@ -7,6 +7,7 @@ from django.db.models import Avg, Count, Sum
 from django.utils import timezone
 
 from admin_app.models import Profile
+from admin_app.settings_registry import default_currency_code
 from core.common.profiles import (
     profile_display_name as display_name,
     profile_identifier,
@@ -539,7 +540,8 @@ def create_or_update_employee(*, actor, data):
     if "work_email" in data:
         employee.work_email = str(data.get("work_email") or "").strip()
     if "salary_currency" in data:
-        employee.salary_currency = str(data.get("salary_currency") or "MYR").strip().upper()[:3] or "MYR"
+        fallback_currency = default_currency_code()
+        employee.salary_currency = str(data.get("salary_currency") or fallback_currency).strip().upper()[:3] or fallback_currency
     if "base_salary" in data:
         employee.base_salary = parse_money(data.get("base_salary"), "base_salary")
     if "current_salary" in data:

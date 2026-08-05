@@ -18,7 +18,12 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from admin_app.settings_registry import feature_enabled, maintenance_mode_enabled
+from admin_app.settings_registry import (
+    feature_enabled,
+    maintenance_mode_enabled,
+    portal_name,
+    role_module_enabled,
+)
 from auth_app.auth_tokens import (
     cap_token_to_ums_session,
     issue_ums_refresh,
@@ -143,14 +148,20 @@ class LoginView(generics.GenericAPIView):
                 {"detail": str(MaintenanceModeUnavailable.default_detail)},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        if role == Profile.ROLE_LIBRARIAN and not feature_enabled("library"):
+        if role == Profile.ROLE_LIBRARIAN and (
+            not feature_enabled("library")
+            or not role_module_enabled(role, "library")
+        ):
             return Response(
-                {"detail": "Librarian access is currently disabled because the library feature has been turned off."},
+                {"detail": "Librarian access is currently disabled by library module settings."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if role == Profile.ROLE_CATERER and not feature_enabled("canteen"):
+        if role == Profile.ROLE_CATERER and (
+            not feature_enabled("canteen")
+            or not role_module_enabled(role, "canteen")
+        ):
             return Response(
-                {"detail": "Caterer access is currently disabled because the canteen feature has been turned off."},
+                {"detail": "Caterer access is currently disabled by dining module settings."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -230,6 +241,7 @@ class ForgotPasswordView(generics.GenericAPIView):
         for profile in profiles:
             user = profile.user
             token = secrets.token_urlsafe(32)
+            configured_portal_name = portal_name()
             profile.password_reset_token = _password_reset_token_digest(token)
             profile.password_reset_requested_at = timezone.now()
             profile.save(
@@ -243,7 +255,7 @@ class ForgotPasswordView(generics.GenericAPIView):
             display_name = user.get_full_name().strip() or user.username
             try:
                 send_mail(
-                    subject="Reset your AIU Portal password",
+                    subject=f"Reset your {configured_portal_name} password",
                     message=(
                         f"Hi {display_name},\n\n"
                         f"Username: {user.username}\n\n"
@@ -440,14 +452,20 @@ class UmsTokenRefreshSerializer(TokenRefreshSerializer):
             )
         if maintenance_mode_enabled() and role != Profile.ROLE_ADMIN:
             raise MaintenanceModeUnavailable()
-        if role == Profile.ROLE_LIBRARIAN and not feature_enabled("library"):
+        if role == Profile.ROLE_LIBRARIAN and (
+            not feature_enabled("library")
+            or not role_module_enabled(role, "library")
+        ):
             raise AuthenticationFailed(
-                "Librarian access is currently disabled because the library feature has been turned off.",
+                "Librarian access is currently disabled by library module settings.",
                 "feature_disabled",
             )
-        if role == Profile.ROLE_CATERER and not feature_enabled("canteen"):
+        if role == Profile.ROLE_CATERER and (
+            not feature_enabled("canteen")
+            or not role_module_enabled(role, "canteen")
+        ):
             raise AuthenticationFailed(
-                "Caterer access is currently disabled because the canteen feature has been turned off.",
+                "Caterer access is currently disabled by dining module settings.",
                 "feature_disabled",
             )
 

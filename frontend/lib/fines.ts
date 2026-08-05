@@ -5,6 +5,7 @@ export type Fine = {
   reason: string
   description: string
   amount: string
+  amount_display?: string
   currency: string
   status: "pending" | "paid" | "overdue" | "deducted"
   due_date: string | null
@@ -66,8 +67,8 @@ export async function fetchStudentFines(): Promise<Fine[]> {
   return response.fines ?? []
 }
 
-export async function initiateFinePay(fineId: number): Promise<{ checkout_url: string; fine: Fine }> {
-  return apiFetch<{ checkout_url: string; fine: Fine }>(`/finance/my-fines/${fineId}/pay`, {
+export async function initiateFinePay(fineId: number): Promise<{ checkout_url: string; fine: Fine; message?: string }> {
+  return apiFetch<{ checkout_url: string; fine: Fine; message?: string }>(`/finance/my-fines/${fineId}/pay`, {
     method: "POST",
   })
 }

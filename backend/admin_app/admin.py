@@ -13,13 +13,14 @@ from .models import (
     Department,
     Hostel,
     HostelRoom,
-    IELTSSession,
+    AcademicSession,
     ImportJob,
     Program,
     ReportExport,
     Room,
     School,
     Semester,
+    SemesterConfiguration,
     SemesterHoliday,
     SystemSetting,
     Unit,
@@ -39,13 +40,14 @@ admin.site.register(CourseTutorialGroup)
 admin.site.register(Department)
 admin.site.register(Hostel)
 admin.site.register(HostelRoom)
-admin.site.register(IELTSSession)
+admin.site.register(AcademicSession)
 admin.site.register(ImportJob)
 admin.site.register(Program)
 admin.site.register(ReportExport)
 admin.site.register(Room)
 admin.site.register(School)
 admin.site.register(Semester)
+admin.site.register(SemesterConfiguration)
 admin.site.register(SemesterHoliday)
 admin.site.register(SystemSetting)
 admin.site.register(Unit)

@@ -7,7 +7,9 @@ import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
+import { DEFAULT_UMS_PUBLIC_SETTINGS, formatUmsMoney, type UmsPublicSettings } from "@/lib/ums-settings"
 
 type CompensationRequest = {
   id: number
@@ -50,16 +52,17 @@ function statusLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function money(value: string, currency = "MYR") {
-  return new Intl.NumberFormat("en-MY", { currency, style: "currency" }).format(Number(value || 0))
+function money(value: string, settings: UmsPublicSettings, currency?: string) {
+  return formatUmsMoney(value, settings, currency)
 }
 
-function formatDate(value: string | null) {
+function formatDate(value: string | null, locale = DEFAULT_UMS_PUBLIC_SETTINGS.localization.locale) {
   if (!value) return "Not set"
-  return new Intl.DateTimeFormat("en-MY", { dateStyle: "medium" }).format(new Date(value))
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(value))
 }
 
 export function AccountantCompensationRequestsPage() {
+  const settings = usePublicUmsSettings()
   const [data, setData] = useState<ResponseData | null>(null)
   const [filter, setFilter] = useState("")
   const [notes, setNotes] = useState<Record<number, string>>({})
@@ -167,14 +170,14 @@ export function AccountantCompensationRequestsPage() {
                         <p className="mt-1 text-sm text-muted-foreground">{item.employee.employee_no} - {statusLabel(item.employee.role)} - {item.employee.position || "No position"}</p>
                       </div>
                       <div className="text-left lg:text-right">
-                        <p className="text-lg font-semibold">{money(item.previous_amount, item.employee.currency)} to {money(item.requested_amount, item.employee.currency)}</p>
-                        <p className="text-xs text-muted-foreground">Effective {formatDate(item.effective_date)}</p>
+                        <p className="text-lg font-semibold">{money(item.previous_amount, settings, item.employee.currency)} to {money(item.requested_amount, settings, item.employee.currency)}</p>
+                        <p className="text-xs text-muted-foreground">Effective {formatDate(item.effective_date, settings.localization.locale)}</p>
                       </div>
                     </div>
                     <div className="grid gap-3 text-sm md:grid-cols-3">
-                      <InfoItem label="Amount" value={money(item.amount, item.employee.currency)} />
+                      <InfoItem label="Amount" value={money(item.amount, settings, item.employee.currency)} />
                       <InfoItem label="Requested By" value={item.requested_by?.name ?? "HR"} />
-                      <InfoItem label="Submitted" value={formatDate(item.created_at)} />
+                      <InfoItem label="Submitted" value={formatDate(item.created_at, settings.localization.locale)} />
                     </div>
                     {item.reason ? <p className="rounded-md bg-muted/60 p-3 text-sm text-muted-foreground">{item.reason}</p> : null}
                     {item.status === "pending" ? (
@@ -186,7 +189,7 @@ export function AccountantCompensationRequestsPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">Reviewed by {item.reviewed_by?.name ?? "Accountant"} on {formatDate(item.reviewed_at)}{item.review_note ? ` - ${item.review_note}` : ""}</p>
+                      <p className="text-sm text-muted-foreground">Reviewed by {item.reviewed_by?.name ?? "Accountant"} on {formatDate(item.reviewed_at, settings.localization.locale)}{item.review_note ? ` - ${item.review_note}` : ""}</p>
                     )}
                   </CardContent>
                 </Card>

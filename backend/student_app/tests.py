@@ -5,11 +5,13 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from admin_app.models import Center, ClassMeeting, Course, CourseLabGroup, CourseOffering, CourseTutorialGroup, Profile, School, Semester, TimetableSlot
+from admin_app.models import Center, ClassMeeting, Course, CourseLabGroup, CourseOffering, CourseTutorialGroup, Department, Profile, School, Semester, SystemSetting, TimetableSlot
+from admin_app.settings_registry import invalidate_settings_cache
 from student_app.leave_service import decide_leave_approval, submit_leave_request
 from student_app.models import CourseRegistration, Enrollment, LeaveApproval, LeaveRequest, RegistrationPeriod, TranscriptRecord
 from student_app.registration_service import (
     active_semester,
+    calendar_group_for_student,
     change_registered_group,
     drop_student_course,
     register_student,
@@ -66,6 +68,9 @@ class CourseRegistrationRuleTests(TestCase):
         )
         self.student = self._student("student_one")
 
+    def tearDown(self):
+        invalidate_settings_cache()
+
     def _student(self, username):
         user = User.objects.create_user(username=username, password="pass")
         profile = user.profile
@@ -107,6 +112,30 @@ class CourseRegistrationRuleTests(TestCase):
         )
         self.assertEqual(response_status, 400)
         self.assertIn("maximum 3 credit hours", error)
+
+    def test_registration_credit_limit_can_be_overridden_by_school_policy(self):
+        SystemSetting.objects.create(
+            key="ums.academic",
+            value={"registration_credit_limit_overrides": "school:SCS,0,4"},
+        )
+        invalidate_settings_cache()
+
+        registration, error, response_status = register_student(
+            student=self.student,
+            offering=self.offering,
+            actor=self.student,
+        )
+        self.assertIsNone(error)
+        self.assertEqual(response_status, 201)
+
+        second_registration, error, response_status = register_student(
+            student=self.student,
+            offering=self.extra_offering,
+            actor=self.student,
+        )
+        self.assertIsNone(error)
+        self.assertEqual(response_status, 201)
+        self.assertEqual(second_registration.status, CourseRegistration.STATUS_APPROVED)
 
     def test_drop_only_phase_rejects_student_add(self):
         self.period.phase = RegistrationPeriod.PHASE_DROP_ONLY
@@ -515,6 +544,45 @@ class CourseRegistrationRuleTests(TestCase):
         unassigned_student.save(update_fields=["school", "updated_at"])
         self.assertFalse(student_offerings(unassigned_student, self.semester).exists())
 
+    def test_student_can_register_for_explicitly_eligible_center_offerings(self):
+        center = Center.objects.create(
+            code="HON",
+            name="Honours Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_SEMESTER,
+            semester_calendar_group=self.semester.calendar_group,
+        )
+        center_student = self._student("center_student")
+        center_student.school = None
+        center_student.center = center
+        center_student.save(update_fields=["school", "center", "updated_at"])
+        other_school = School.objects.create(code="GEN", name="General Studies")
+        shared_course = Course.objects.create(
+            code="GEN1001",
+            title="Shared Seminar",
+            credits=3,
+            school=other_school,
+        )
+        shared_offering = CourseOffering.objects.create(
+            course=shared_course,
+            semester=self.semester,
+            section="S1",
+            capacity=5,
+        )
+
+        self.assertFalse(student_offerings(center_student, self.semester).filter(pk=shared_offering.pk).exists())
+        shared_offering.eligible_centers.add(center)
+
+        registration, error, response_status = register_student(
+            student=center_student,
+            offering=shared_offering,
+            actor=center_student,
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(response_status, 201)
+        self.assertEqual(registration.status, CourseRegistration.STATUS_APPROVED)
+
     def test_executive_manual_registration_creates_approved_enrollment_after_period(self):
         self.period.is_active = False
         self.period.save(update_fields=["is_active", "updated_at"])
@@ -573,12 +641,41 @@ class CourseRegistrationRuleTests(TestCase):
 
         self.assertEqual(active_semester(student=self.student, prefer_registration=True), planned)
 
-        language_center = Center.objects.create(code="LC", name="Language Centre")
+        language_center = Center.objects.create(
+            code="LANG",
+            name="Language Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_WHOLE_YEAR,
+        )
         lc_student = self._student("lc_student")
         lc_student.school = None
         lc_student.center = language_center
         lc_student.save(update_fields=["school", "center", "updated_at"])
         self.assertIsNone(active_semester(student=lc_student, prefer_registration=True))
+
+    def test_active_semester_uses_configured_center_calendar_group(self):
+        center = Center.objects.create(
+            code="LANG",
+            name="Language Centre",
+            center_type=Center.CENTER_ACADEMIC,
+            academic_calendar_mode=Center.CALENDAR_SEMESTER,
+            semester_calendar_group="center:language",
+        )
+        center_semester = Semester.objects.create(
+            name="Language Centre Semester",
+            academic_session="2026/2027",
+            calendar_group=center.semester_calendar_group,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timezone.timedelta(days=90),
+            is_active=True,
+        )
+        center_student = self._student("configured_center_student")
+        center_student.school = None
+        center_student.center = center
+        center_student.save(update_fields=["school", "center", "updated_at"])
+
+        self.assertEqual(calendar_group_for_student(center_student), "center:language")
+        self.assertEqual(active_semester(student=center_student), center_semester)
 
 
 class StudentCoursePageEndpointTests(TestCase):
@@ -755,6 +852,11 @@ class LeaveApprovalWorkflowTests(TestCase):
         self.teacher = self._profile("leave_teacher", Profile.ROLE_TEACHER, "Lecturer")
         self.dean = self._profile("leave_dean", Profile.ROLE_TEACHER, "Dean")
         self.student = self._profile("leave_student", Profile.ROLE_STUDENT, "Student")
+        SystemSetting.objects.create(
+            key="ums.workflow",
+            value={"leave_dean_approver_identifiers": "leave_dean"},
+        )
+        invalidate_settings_cache()
         self.offering = CourseOffering.objects.create(
             course=self.course,
             semester=self.semester,
@@ -773,6 +875,9 @@ class LeaveApprovalWorkflowTests(TestCase):
             status=ClassMeeting.STATUS_SCHEDULED,
         )
         Enrollment.objects.create(student=self.student, offering=self.offering, created_by=self.teacher)
+
+    def tearDown(self):
+        invalidate_settings_cache()
 
     def _profile(self, username, role, designation):
         user = User.objects.create_user(username=username, password="pass")
@@ -820,6 +925,25 @@ class LeaveApprovalWorkflowTests(TestCase):
                 data__leave_request_id=leave_request.id,
             ).exists()
         )
+
+    def test_dean_designation_is_not_used_without_configured_identifier(self):
+        SystemSetting.objects.filter(key="ums.workflow").update(
+            value={"leave_dean_approver_identifiers": ""}
+        )
+        invalidate_settings_cache()
+
+        leave_day = date(2027, 3, 22)
+        leave_request = submit_leave_request(
+            self.student,
+            start_date=leave_day,
+            end_date=leave_day,
+            reason="Medical appointment.",
+        )
+
+        approvals = LeaveApproval.objects.filter(leave_request=leave_request)
+        self.assertEqual(approvals.count(), 1)
+        self.assertTrue(approvals.filter(approver=self.teacher, approval_role=LeaveApproval.ROLE_TEACHER).exists())
+        self.assertFalse(approvals.filter(approver=self.dean, approval_role=LeaveApproval.ROLE_DEAN).exists())
 
     def test_leave_apis_expose_tracking_history_and_teacher_decisions(self):
         leave_day = date(2027, 3, 22)
@@ -1015,6 +1139,51 @@ class StudentElectionWorkflowTests(TestCase):
         accepted_vote = self.client.post(
             f"/student/elections/{election.id}/vote",
             {"category": ElectionCandidate.CATEGORY_SCHOOL, "candidate_ids": [candidate.id]},
+            format="json",
+        )
+        self.assertEqual(accepted_vote.status_code, 201, accepted_vote.json())
+
+    def test_department_election_uses_configured_constituency_and_ballot_label(self):
+        computing = Department.objects.create(code="CS", name="Computer Science", school=self.sci)
+        business = Department.objects.create(code="MGT", name="Management", school=self.biz)
+        self.sci_student.department = computing
+        self.sci_student.save(update_fields=["department", "updated_at"])
+        self.biz_student.department = business
+        self.biz_student.save(update_fields=["department", "updated_at"])
+        election = self._active_election(
+            title="Computer Science Council",
+            election_type="department_council",
+            election_type_label="Department council election",
+            constituency_type=Election.CONSTITUENCY_DEPARTMENT,
+            constituency_id=computing.id,
+            constituency_label=computing.name,
+            general_selection_count=0,
+            seat_rules=[
+                {
+                    "key": "chair",
+                    "label": "Department chair",
+                    "selection_count": 1,
+                    "scope_type": Election.SEAT_SCOPE_CONSTITUENCY,
+                }
+            ],
+        )
+        candidate = self._candidate(election, "Chair Candidate", "chair")
+
+        self.client.force_authenticate(user=self.biz_student.user)
+        business_view = self.client.get("/student/elections")
+        self.assertEqual(business_view.status_code, 200)
+        self.assertEqual(business_view.json()["elections"], [])
+
+        self.client.force_authenticate(user=self.sci_student.user)
+        science_view = self.client.get("/student/elections")
+        self.assertEqual(science_view.status_code, 200)
+        ballot = science_view.json()["elections"][0]["ballots"][0]
+        self.assertEqual(ballot["category"], "chair")
+        self.assertEqual(ballot["label"], "Department chair")
+
+        accepted_vote = self.client.post(
+            f"/student/elections/{election.id}/vote",
+            {"category": "chair", "candidate_ids": [candidate.id]},
             format="json",
         )
         self.assertEqual(accepted_vote.status_code, 201, accepted_vote.json())

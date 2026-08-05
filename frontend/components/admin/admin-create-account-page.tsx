@@ -58,6 +58,7 @@ type AccountForm = {
   school_id: string
   center_id: string
   unit_id: string
+  department_id: string
   program_id: string
   designation: string
 }
@@ -113,6 +114,7 @@ type ScopedAccountConfigResponse = {
   schools?: AcademicUnit[]
   centers?: AcademicUnit[]
   units?: AcademicUnit[]
+  departments?: AcademicUnit[]
 }
 
 type StudentAccountConfigResponse = {
@@ -127,7 +129,7 @@ const roleConfig: Record<AdminCreateAccountRole, RoleConfig> = {
     label: "Student",
     description: "Create a student portal account with a student ID.",
     idLabel: "Student ID",
-    idPlaceholder: "AIU student ID",
+    idPlaceholder: "Student ID",
     icon: GraduationCap,
   },
   teacher: {
@@ -151,7 +153,7 @@ const roleConfig: Record<AdminCreateAccountRole, RoleConfig> = {
     title: "Create Librarian",
     label: "Librarian",
     description:
-      "Create a librarian portal account assigned to COR and COR-ADMIN.",
+      "Create a librarian account assigned to a configured library owner.",
     idLabel: "Staff ID",
     idPlaceholder: "Librarian staff ID",
     icon: BookOpen,
@@ -160,7 +162,7 @@ const roleConfig: Record<AdminCreateAccountRole, RoleConfig> = {
     title: "Create Caterer",
     label: "Caterer",
     description:
-      "Create a canteen worker account assigned to CSAA and CTN-ADMIN.",
+      "Create a dining or canteen worker account assigned to a configured owner.",
     idLabel: "Staff ID",
     idPlaceholder: "Caterer staff ID",
     icon: Users,
@@ -169,7 +171,7 @@ const roleConfig: Record<AdminCreateAccountRole, RoleConfig> = {
     title: "Create Technician",
     label: "Technician",
     description:
-      "Create an ICT Helpdesk technician account assigned to the standalone ICT department.",
+      "Create a service desk technician account assigned to a configured department or unit.",
     idLabel: "Staff ID",
     idPlaceholder: "Technician staff ID",
     icon: Users,
@@ -178,7 +180,7 @@ const roleConfig: Record<AdminCreateAccountRole, RoleConfig> = {
     title: "Create Accountant",
     label: "Accountant",
     description:
-      "Create a finance department account for managing subscriptions and DuitNow settings.",
+      "Create a finance department account for managing subscriptions and payment settings.",
     idLabel: "Staff ID",
     idPlaceholder: "Accountant staff ID",
     icon: WalletCards,
@@ -229,9 +231,35 @@ const roleImportColumns: Record<AdminCreateAccountRole, string[]> = {
     "center_id",
     "center_code",
   ],
-  librarian: [],
-  caterer: [],
-  technician: [],
+  librarian: [
+    "school_id",
+    "school_code",
+    "center_id",
+    "center_code",
+    "unit_id",
+    "unit_code",
+    "designation",
+  ],
+  caterer: [
+    "school_id",
+    "school_code",
+    "center_id",
+    "center_code",
+    "unit_id",
+    "unit_code",
+    "designation",
+  ],
+  technician: [
+    "department_id",
+    "department_code",
+    "unit_id",
+    "unit_code",
+    "school_id",
+    "school_code",
+    "center_id",
+    "center_code",
+    "designation",
+  ],
   accountant: [],
   hr: [],
 }
@@ -249,9 +277,18 @@ const roleImportNotes: Record<AdminCreateAccountRole, string[]> = {
     "unit_id or unit_code is required. Add school or centre columns when the unit needs scope context.",
     "staff_id is accepted instead of ums_id.",
   ],
-  librarian: ["staff_id is accepted instead of ums_id."],
-  caterer: ["staff_id is accepted instead of ums_id."],
-  technician: ["staff_id is accepted instead of ums_id."],
+  librarian: [
+    "staff_id is accepted instead of ums_id.",
+    "Owner columns are optional when role ownership defaults are configured in admin settings.",
+  ],
+  caterer: [
+    "staff_id is accepted instead of ums_id.",
+    "Owner columns are optional when role ownership defaults are configured in admin settings.",
+  ],
+  technician: [
+    "staff_id is accepted instead of ums_id.",
+    "Use department or unit columns, or configure role ownership defaults in admin settings.",
+  ],
   accountant: ["staff_id is accepted instead of ums_id."],
   hr: ["staff_id is accepted instead of ums_id."],
 }
@@ -269,6 +306,7 @@ const emptyForm: AccountForm = {
   school_id: "",
   center_id: "",
   unit_id: "",
+  department_id: "",
   program_id: "",
   designation: "",
 }
@@ -278,6 +316,12 @@ const emptyTeacherAssignment: TeacherAssignmentForm = {
   school_id: "",
   center_id: "",
 }
+
+const ownerScopedRoles = new Set<AdminCreateAccountRole>([
+  "librarian",
+  "caterer",
+  "technician",
+])
 
 function breadcrumbs(accountRole?: AdminCreateAccountRole) {
   const items = [
@@ -427,6 +471,144 @@ function UnitScopeFields({
   )
 }
 
+type SpecialOwnerFieldsProps = {
+  role: AdminCreateAccountRole
+  assignmentType: AccountForm["assignment_type"]
+  schoolId: string
+  centerId: string
+  unitId: string
+  departmentId: string
+  schools: AcademicUnit[]
+  centers: AcademicUnit[]
+  units: AcademicUnit[]
+  departments: AcademicUnit[]
+  onAssignmentTypeChange: (value: AccountForm["assignment_type"]) => void
+  onSchoolChange: (value: string) => void
+  onCenterChange: (value: string) => void
+  onUnitChange: (value: string) => void
+  onDepartmentChange: (value: string) => void
+}
+
+function SpecialOwnerFields({
+  role,
+  assignmentType,
+  schoolId,
+  centerId,
+  unitId,
+  departmentId,
+  schools,
+  centers,
+  units,
+  departments,
+  onAssignmentTypeChange,
+  onSchoolChange,
+  onCenterChange,
+  onUnitChange,
+  onDepartmentChange,
+}: SpecialOwnerFieldsProps) {
+  const scopedUnits = units.filter((unit) =>
+    assignmentType === "school"
+      ? String(unit.school ?? "") === schoolId
+      : assignmentType === "center"
+        ? String(unit.center ?? "") === centerId
+        : false
+  )
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="owner_assignment_type">Owner Scope</Label>
+        <select
+          id="owner_assignment_type"
+          value={assignmentType}
+          onChange={(event) =>
+            onAssignmentTypeChange(
+              event.target.value as AccountForm["assignment_type"]
+            )
+          }
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        >
+          <option value="">Use configured default</option>
+          <option value="school">School</option>
+          <option value="center">Center</option>
+        </select>
+      </div>
+      {assignmentType === "school" ? (
+        <div className="space-y-2">
+          <Label htmlFor="owner_school_id">Owner School</Label>
+          <select
+            id="owner_school_id"
+            value={schoolId}
+            onChange={(event) => onSchoolChange(event.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">Select school</option>
+            {schools.map((school) => (
+              <option key={school.id} value={school.id}>
+                {school.code} - {school.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      {assignmentType === "center" ? (
+        <div className="space-y-2">
+          <Label htmlFor="owner_center_id">Owner Center</Label>
+          <select
+            id="owner_center_id"
+            value={centerId}
+            onChange={(event) => onCenterChange(event.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">Select center</option>
+            {centers.map((center) => (
+              <option key={center.id} value={center.id}>
+                {center.code} - {center.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      {assignmentType ? (
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="owner_unit_id">Owner Unit</Label>
+          <select
+            id="owner_unit_id"
+            value={unitId}
+            onChange={(event) => onUnitChange(event.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">No specific unit</option>
+            {scopedUnits.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.code} - {unit.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      {role === "technician" ? (
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="department_id">Service Department</Label>
+          <select
+            id="department_id"
+            value={departmentId}
+            onChange={(event) => onDepartmentChange(event.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">Use owner unit or configured default</option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.code} - {department.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 export function AdminCreateAccountPage({
   accountRole,
 }: {
@@ -445,6 +627,7 @@ export function AdminCreateAccountPage({
   const [schools, setSchools] = useState<AcademicUnit[]>([])
   const [centers, setCenters] = useState<AcademicUnit[]>([])
   const [units, setUnits] = useState<AcademicUnit[]>([])
+  const [departments, setDepartments] = useState<AcademicUnit[]>([])
   const [programs, setPrograms] = useState<ProgramOption[]>([])
   const [teacherAssignments, setTeacherAssignments] = useState<
     TeacherAssignmentForm[]
@@ -517,6 +700,28 @@ export function AdminCreateAccountPage({
       }
 
       loadTeacherConfig()
+    }
+
+    if (accountRole && ownerScopedRoles.has(accountRole)) {
+      async function loadOwnerConfig() {
+        try {
+          const response = await apiFetch<ScopedAccountConfigResponse>(
+            `/admin/create-account/${accountRole}`
+          )
+          setSchools(response.schools ?? [])
+          setCenters(response.centers ?? [])
+          setUnits(response.units ?? [])
+          setDepartments(response.departments ?? [])
+        } catch (caught) {
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "Unable to load role ownership options."
+          )
+        }
+      }
+
+      loadOwnerConfig()
     }
   }, [accountRole])
 
@@ -605,9 +810,14 @@ export function AdminCreateAccountPage({
         school_id,
         center_id,
         unit_id,
+        department_id,
         program_id,
         ...accountPayload
       } = form
+      const usesScopedOwner =
+        accountRole === "executive" ||
+        accountRole === "student" ||
+        ownerScopedRoles.has(accountRole)
       const response = await apiFetch<CreateAccountResponse>(
         `/admin/create-account/${accountRole}/`,
         {
@@ -615,19 +825,21 @@ export function AdminCreateAccountPage({
           body: JSON.stringify({
             ...accountPayload,
             school_id:
-              accountRole === "executive" && assignment_type === "school"
+              usesScopedOwner && assignment_type === "school"
                 ? Number(school_id)
-                : accountRole === "student" && assignment_type === "school"
-                  ? Number(school_id)
-                  : null,
+                : null,
             center_id:
-              accountRole === "executive" && assignment_type === "center"
+              usesScopedOwner && assignment_type === "center"
                 ? Number(center_id)
-                : accountRole === "student" && assignment_type === "center"
-                  ? Number(center_id)
-                  : null,
+                : null,
             unit_id:
-              accountRole === "executive" && unit_id ? Number(unit_id) : null,
+              (accountRole === "executive" || ownerScopedRoles.has(accountRole)) && unit_id
+                ? Number(unit_id)
+                : null,
+            department_id:
+              accountRole === "technician" && department_id
+                ? Number(department_id)
+                : null,
             program_id:
               accountRole === "student" && program_id
                 ? Number(program_id)
@@ -1140,6 +1352,64 @@ export function AdminCreateAccountPage({
                           </select>
                         </div>
                       ) : null}
+                    </>
+                  ) : null}
+                  {accountRole && ownerScopedRoles.has(accountRole) ? (
+                    <>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="designation">Designation</Label>
+                        <Input
+                          id="designation"
+                          value={form.designation}
+                          placeholder="Role title or position"
+                          onChange={(event) =>
+                            updateField("designation", event.target.value)
+                          }
+                        />
+                      </div>
+                      <SpecialOwnerFields
+                        role={accountRole}
+                        assignmentType={form.assignment_type}
+                        schoolId={form.school_id}
+                        centerId={form.center_id}
+                        unitId={form.unit_id}
+                        departmentId={form.department_id}
+                        schools={schools}
+                        centers={centers}
+                        units={units}
+                        departments={departments}
+                        onAssignmentTypeChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            assignment_type: value,
+                            school_id:
+                              value === "school" ? current.school_id : "",
+                            center_id:
+                              value === "center" ? current.center_id : "",
+                            unit_id: "",
+                          }))
+                        }
+                        onSchoolChange={(schoolId) =>
+                          setForm((current) => ({
+                            ...current,
+                            school_id: schoolId,
+                            unit_id: "",
+                          }))
+                        }
+                        onCenterChange={(centerId) =>
+                          setForm((current) => ({
+                            ...current,
+                            center_id: centerId,
+                            unit_id: "",
+                          }))
+                        }
+                        onUnitChange={(unitId) =>
+                          updateField("unit_id", unitId)
+                        }
+                        onDepartmentChange={(departmentId) =>
+                          updateField("department_id", departmentId)
+                        }
+                      />
                     </>
                   ) : null}
                   <div className="space-y-2 sm:col-span-2">

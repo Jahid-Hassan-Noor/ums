@@ -63,10 +63,12 @@ type Survey = {
 }
 
 type TemplatesResponse = {
+  evaluation_label?: string
   templates: Template[]
 }
 
 type SurveysResponse = {
+  evaluation_label?: string
   offerings: Offering[]
   surveys: Survey[]
 }
@@ -94,6 +96,7 @@ export default function ExecutiveEvaluationsPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [offerings, setOfferings] = useState<Offering[]>([])
   const [surveys, setSurveys] = useState<Survey[]>([])
+  const [evaluationLabel, setEvaluationLabel] = useState("Course Evaluation")
   const [selectedTemplateId, setSelectedTemplateId] = useState("")
   const [templateName, setTemplateName] = useState("")
   const [templateDescription, setTemplateDescription] = useState("")
@@ -127,6 +130,11 @@ export default function ExecutiveEvaluationsPage() {
     setTemplates(templateData.templates ?? [])
     setOfferings(surveyData.offerings ?? [])
     setSurveys(surveyData.surveys ?? [])
+    setEvaluationLabel(
+      surveyData.evaluation_label ??
+        templateData.evaluation_label ??
+        "Course Evaluation"
+    )
     const selectedTemplate =
       templateData.templates?.find(
         (template) => String(template.id) === preferredTemplateId
@@ -249,7 +257,7 @@ export default function ExecutiveEvaluationsPage() {
         {
           method: "POST",
           body: JSON.stringify({
-            name: `${templateName || "SEC-SET Template"} Copy`,
+            name: `${templateName || `${evaluationLabel} Template`} Copy`,
             description: templateDescription,
             questions: templateQuestions,
           }),
@@ -291,7 +299,7 @@ export default function ExecutiveEvaluationsPage() {
           is_required: launch.isRequired,
         }),
       })
-      setSuccess("SEC-SET activity launched for the selected course.")
+      setSuccess(`${evaluationLabel} activity launched for the selected course.`)
       const selectedTemplate = templates.find(
         (template) => String(template.id) === launch.templateId
       )
@@ -318,13 +326,13 @@ export default function ExecutiveEvaluationsPage() {
       <Header
         breadcrumbItems={[
           { href: "/executive", title: "Executive" },
-          { href: "/executive/evaluations", title: "SEC-SET Evaluations" },
+          { href: "/executive/evaluations", title: `${evaluationLabel}s` },
         ]}
       />
       <main className="flex-1 space-y-6 px-4 pt-4 pb-8 sm:px-6">
         <section className="border-b border-border/70 pb-5">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            SEC-SET Course Evaluations
+            {evaluationLabel}s
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
             Maintain reusable questionnaires, launch one evaluation for each
@@ -792,7 +800,7 @@ export default function ExecutiveEvaluationsPage() {
                       ) : (
                         <FilePlus2 className="size-4" />
                       )}{" "}
-                      Launch SEC-SET activity
+                      Launch {evaluationLabel} activity
                     </Button>
                     {!availableOfferings.length ? (
                       <p className="text-xs text-muted-foreground">

@@ -16,6 +16,7 @@ import {
   Send,
   Settings,
   Upload,
+  WandSparkles,
 } from "lucide-react"
 
 import { Header } from "@/components/layout/header"
@@ -46,11 +47,19 @@ import {
   sendSettingsTestNotification,
   uploadAdminSettingsImage,
   type SettingField,
+  type SettingsSetupChecklist,
   type SettingValue,
   type SettingsSection,
 } from "@/lib/admin-settings"
 
 type ValuesBySection = Record<string, Record<string, SettingValue>>
+
+const emptySetupChecklist: SettingsSetupChecklist = {
+  complete: false,
+  completed: 0,
+  total: 0,
+  items: [],
+}
 
 const selectClass =
   "h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -62,7 +71,7 @@ function cloneSectionValues(sections: SettingsSection[]): ValuesBySection {
 }
 
 function updatedLabel(section: SettingsSection) {
-  if (!section.updated_at) return "Using UMS defaults"
+  if (!section.updated_at) return "Using portal defaults"
   const timestamp = new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -221,6 +230,8 @@ function FieldControl({
 export function AdminSettingsPage() {
   const [sections, setSections] = useState<SettingsSection[]>([])
   const [drafts, setDrafts] = useState<ValuesBySection>({})
+  const [setupChecklist, setSetupChecklist] =
+    useState<SettingsSetupChecklist>(emptySetupChecklist)
   const [activeKey, setActiveKey] = useState("general")
   const [reason, setReason] = useState("")
   const [loading, setLoading] = useState(true)
@@ -238,6 +249,7 @@ export function AdminSettingsPage() {
     try {
       const response = await loadAdminSettings()
       setSections(response.sections)
+      setSetupChecklist(response.setup_checklist ?? emptySetupChecklist)
       setDrafts(cloneSectionValues(response.sections))
       setActiveKey((current) =>
         response.sections.some((section) => section.key === current)
@@ -248,7 +260,7 @@ export function AdminSettingsPage() {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Unable to load UMS settings."
+          : "Unable to load portal settings."
       )
     } finally {
       setLoading(false)
@@ -283,6 +295,7 @@ export function AdminSettingsPage() {
     [activeDraft, activeFields, activeSection]
   )
   const hasHighImpactChanges = changedFields.some((field) => field.high_impact)
+  const missingSetupItems = setupChecklist.items.filter((item) => !item.complete)
 
   function updateValue(field: string, value: SettingValue) {
     if (!activeSection) return
@@ -325,6 +338,7 @@ export function AdminSettingsPage() {
         ...current,
         [response.section.key]: { ...response.section.values },
       }))
+      setSetupChecklist(response.setup_checklist ?? emptySetupChecklist)
       setReason("")
       setSuccess("All settings in this section have been restored to defaults.")
     } catch (caught) {
@@ -371,13 +385,14 @@ export function AdminSettingsPage() {
         ...current,
         [response.section.key]: { ...response.section.values },
       }))
+      setSetupChecklist(response.setup_checklist ?? emptySetupChecklist)
       setReason("")
       setSuccess(response.message)
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Unable to save UMS settings."
+          : "Unable to save portal settings."
       )
     } finally {
       setSaving(false)
@@ -438,6 +453,7 @@ export function AdminSettingsPage() {
           [field.key]: response.url,
         },
       }))
+      setSetupChecklist(response.setup_checklist ?? emptySetupChecklist)
       setSuccess(response.message)
     } catch (caught) {
       setError(
@@ -462,15 +478,19 @@ export function AdminSettingsPage() {
         <section className="flex flex-col gap-3 border-b border-border/70 pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-3xl space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              UMS Settings
+              Portal Settings
             </h1>
             <p className="text-sm leading-6 text-muted-foreground">
-              Configure UMS-wide defaults and policies. Each section saves
+              Configure institution-wide defaults and policies. Each section saves
               independently, and every successful update is recorded in the
               audit log.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button render={<Link href="/admin/setup-wizard" />}>
+              <WandSparkles />
+              Setup Wizard
+            </Button>
             <Button variant="outline" render={<Link href="/admin/audit-log" />}>
               <History />
               View Audit Log
@@ -497,6 +517,51 @@ export function AdminSettingsPage() {
             <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
             {success}
           </p>
+        ) : null}
+
+        {setupChecklist.total ? (
+          <section className="rounded-lg border border-border/70 bg-card/95 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold">
+                  Institution setup
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {setupChecklist.complete
+                    ? "Required institution settings are complete."
+                    : `${setupChecklist.completed} of ${setupChecklist.total} required settings completed.`}
+                </p>
+              </div>
+              <span
+                className={`w-fit rounded-full px-3 py-1 text-xs font-medium ${
+                  setupChecklist.complete
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {setupChecklist.complete ? "Complete" : "Needs setup"}
+              </span>
+            </div>
+            {missingSetupItems.length ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {missingSetupItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setActiveKey(item.section)
+                      setReason("")
+                      setError("")
+                      setSuccess("")
+                    }}
+                    className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </section>
         ) : null}
 
         {loading ? (
@@ -662,7 +727,7 @@ export function AdminSettingsPage() {
               Confirm high-impact settings change
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This update can immediately affect UMS access or active workflows.
+              This update can immediately affect portal access or active workflows.
               The previous values, new values, administrator, timestamp, and
               reason will be recorded in the audit log.
             </AlertDialogDescription>

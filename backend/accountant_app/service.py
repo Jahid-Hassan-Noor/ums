@@ -21,6 +21,12 @@ from django.utils import timezone
 
 from accountant_app.models import FinanceGatewayConfig, PaymentAttempt, Subscription, SubscriptionPlan
 from admin_app.models import Profile
+from admin_app.settings_registry import (
+    default_currency_code,
+    format_currency_amount,
+    institution_identity,
+    payment_reference_prefix,
+)
 from core.common.money import format_money as money
 from core.common.profiles import (
     profile_display_name as display_name,
@@ -37,6 +43,21 @@ SUBSCRIPTION_ROLE_OPTIONS = [
     if role != Profile.ROLE_APPLICANT
 ]
 SUBSCRIPTION_ROLE_VALUES = [role for role, _label in SUBSCRIPTION_ROLE_OPTIONS]
+
+
+def _money_label(amount, currency):
+    return format_currency_amount(amount, currency_code=currency)
+
+
+def _provider_options_payload():
+    return [
+        {"value": value, "label": label}
+        for value, label in FinanceGatewayConfig.PROVIDER_CHOICES
+    ]
+
+
+def _is_manual_gateway(config):
+    return not config.is_active or config.provider == FinanceGatewayConfig.PROVIDER_MANUAL
 
 
 def subscription_role_options_payload():
@@ -71,6 +92,8 @@ def plan_payload(plan, profile=None):
         "name": plan.name,
         "description": plan.description,
         "price": money(plan.price),
+        "price_display": format_currency_amount(plan.price),
+        "currency": default_currency_code(),
         "duration_days": plan.duration_days,
         "is_active": plan.is_active,
         "available_to_all_roles": plan.available_to_all_roles,
@@ -96,6 +119,7 @@ def subscription_payload(subscription):
         },
         "status": subscription.status,
         "amount": money(subscription.amount),
+        "amount_display": _money_label(subscription.amount, subscription.currency),
         "currency": subscription.currency,
         "starts_at": subscription.starts_at.isoformat() if subscription.starts_at else None,
         "ends_at": subscription.ends_at.isoformat() if subscription.ends_at else None,
@@ -111,6 +135,8 @@ def subscription_payload(subscription):
 def gateway_config_payload(config):
     return {
         "provider": config.provider,
+        "provider_label": config.provider_label,
+        "provider_options": _provider_options_payload(),
         "mode": config.mode,
         "merchant_name": config.merchant_name,
         "api_base_url": config.api_base_url,
@@ -121,6 +147,8 @@ def gateway_config_payload(config):
         "callback_token_present": bool(config.callback_token),
         "callback_token_preview": config.callback_token_preview,
         "is_active": config.is_active,
+        "requires_checkout_configuration": config.uses_external_checkout,
+        "is_manual": _is_manual_gateway(config),
         "updated_at": config.updated_at.isoformat() if config.updated_at else None,
     }
 
@@ -129,6 +157,8 @@ def configured_gateway():
     config = FinanceGatewayConfig.objects.filter(pk=1, is_active=True).first()
     if not config:
         raise ValidationError("Finance payment gateway is not active. Please contact to the finance department.")
+    if config.provider == FinanceGatewayConfig.PROVIDER_MANUAL:
+        raise ValidationError("Manual/offline payment mode is active.")
     config.full_clean()
     return config
 
@@ -403,22 +433,37 @@ def initiate_subscription_payment(*, profile, plan_id, request):
     if plan.price <= 0:
         raise ValidationError("This subscription price is not configured yet.")
 
-    config = configured_gateway()
+    config = FinanceGatewayConfig.objects.get_or_create(pk=1)[0]
+    currency = default_currency_code()
     subscription = Subscription.objects.create(
         subscriber=profile,
         plan=plan,
         amount=plan.price,
-        currency="MYR",
+        currency=currency,
     )
     attempt = PaymentAttempt.objects.create(
         subscription=subscription,
         payer=profile,
         amount=plan.price,
-        currency="MYR",
-        external_reference=f"AIU-SUB-{subscription.id}-{uuid4().hex[:12]}",
+        currency=currency,
+        external_reference=f"{payment_reference_prefix()}-SUB-{subscription.id}-{uuid4().hex[:12]}",
     )
     subscription.external_reference = attempt.external_reference
     subscription.save(update_fields=["external_reference", "updated_at"])
+
+    if _is_manual_gateway(config):
+        attempt.gateway_reference = attempt.external_reference
+        attempt.request_payload = {
+            "provider": config.provider,
+            "mode": "manual",
+            "message": "Manual/offline payment request recorded.",
+        }
+        attempt.save(update_fields=["request_payload", "gateway_reference", "updated_at"])
+        subscription.gateway_bill_code = attempt.gateway_reference
+        subscription.save(update_fields=["gateway_bill_code", "updated_at"])
+        return subscription, attempt
+
+    config.full_clean()
 
     payload = _gateway_payload(
         request=request,
@@ -463,11 +508,18 @@ def build_subscription_card_pdf(subscription):
     width, height = page_size
     profile = subscription.subscriber
     plan = subscription.plan
+    identity = institution_identity()
+    institution_name = (
+        identity.get("legal_name")
+        or identity.get("university_name")
+        or "University"
+    ).upper()
+    short_name = identity.get("short_name") or "Portal"
 
     pdf.setLineWidth(1)
     pdf.roundRect(8, 8, width - 16, height - 16, 8, stroke=1, fill=0)
     pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(18, height - 26, "ALBUKHARY INTERNATIONAL UNIVERSITY")
+    pdf.drawString(18, height - 26, institution_name[:46])
     pdf.setFont("Helvetica-Bold", 15)
     pdf.drawString(18, height - 47, f"{plan.name.upper()} CARD")
     pdf.setFont("Helvetica", 8)
@@ -489,7 +541,7 @@ def build_subscription_card_pdf(subscription):
             pdf.drawString(70, y - (index * 8), line)
         y -= 13
     pdf.setFont("Helvetica-Oblique", 6.5)
-    pdf.drawRightString(width - 18, 18, "Generated by AIU Portal Finance")
+    pdf.drawRightString(width - 18, 18, f"Generated by {short_name} Portal Finance")
     pdf.showPage()
     pdf.save()
     return buffer.getvalue()
@@ -511,7 +563,7 @@ def send_subscription_receipt(subscription):
             f"Hello {display_name(profile)},",
             "",
             f"Your {subscription.plan.name} payment was successful.",
-            f"Amount: RM {money(subscription.amount)}",
+            f"Amount: {_money_label(subscription.amount, subscription.currency)}",
             f"Valid from: {timezone.localtime(subscription.starts_at).strftime('%d %B %Y')}",
             f"Valid until: {timezone.localtime(subscription.ends_at).strftime('%d %B %Y')}",
             f"Reference: {subscription.external_reference}",
@@ -523,8 +575,14 @@ def send_subscription_receipt(subscription):
     )
     if email:
         try:
+            identity = institution_identity()
+            subject_prefix = (
+                identity.get("short_name")
+                or identity.get("university_name")
+                or "University"
+            )
             email_message = EmailMessage(
-                subject=f"AIU {subscription.plan.name} subscription card",
+                subject=f"{subject_prefix} {subscription.plan.name} subscription card",
                 body=message,
                 from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
                 to=[email],

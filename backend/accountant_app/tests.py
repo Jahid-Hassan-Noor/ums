@@ -21,7 +21,8 @@ from accountant_app.models import (
     SubscriptionPlan,
 )
 from accountant_app.tasks import mark_overdue_fines_task
-from admin_app.models import Profile
+from admin_app.models import Profile, SystemSetting
+from admin_app.settings_registry import invalidate_settings_cache
 from auth_app.serializers import RegisterSerializer
 from notifications_package.models import Notification
 
@@ -35,6 +36,7 @@ User = get_user_model()
 )
 class FinanceSubscriptionTests(TestCase):
     def setUp(self):
+        invalidate_settings_cache()
         self.client = APIClient()
         self.admin_user = User.objects.create_superuser(
             username="admin",
@@ -62,6 +64,7 @@ class FinanceSubscriptionTests(TestCase):
         self.teacher = self.teacher_user.profile
         self.teacher.role = Profile.ROLE_TEACHER
         self.teacher.staff_id = "TCH-100"
+        self.teacher.is_active = True
         self.teacher.save()
 
         self.accountant_user = User.objects.create_user(
@@ -218,6 +221,68 @@ class FinanceSubscriptionTests(TestCase):
         self.assertEqual(response.status_code, 200, response.json())
         self.assertTrue(response.json()["deleted"])
         self.assertFalse(SubscriptionPlan.objects.filter(pk=plan.id).exists())
+
+    def test_manual_payment_mode_records_pending_subscription_without_checkout(self):
+        config = FinanceGatewayConfig.objects.get(pk=1)
+        config.provider = FinanceGatewayConfig.PROVIDER_MANUAL
+        config.is_active = False
+        config.save()
+
+        self.client.force_authenticate(user=self.student_user)
+        response = self.client.post(
+            "/finance/subscriptions/purchase",
+            {"plan_id": self.gym.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        self.assertEqual(response.json()["checkout_url"], "")
+        self.assertIn("Manual payment request", response.json()["message"])
+        subscription = Subscription.objects.get()
+        attempt = PaymentAttempt.objects.get(subscription=subscription)
+        self.assertEqual(subscription.status, Subscription.STATUS_PENDING)
+        self.assertEqual(attempt.status, PaymentAttempt.STATUS_PENDING)
+        self.assertEqual(attempt.gateway_reference, attempt.external_reference)
+
+    def test_new_finance_records_use_configured_currency(self):
+        self.addCleanup(invalidate_settings_cache)
+        SystemSetting.objects.update_or_create(
+            key="ums.localization",
+            defaults={"value": {"currency_code": "BDT", "currency_symbol": "Tk"}},
+        )
+        invalidate_settings_cache()
+        config = FinanceGatewayConfig.objects.get(pk=1)
+        config.provider = FinanceGatewayConfig.PROVIDER_MANUAL
+        config.is_active = False
+        config.save()
+
+        self.client.force_authenticate(user=self.student_user)
+        response = self.client.post(
+            "/finance/subscriptions/purchase",
+            {"plan_id": self.gym.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.json())
+        subscription = Subscription.objects.get()
+        attempt = PaymentAttempt.objects.get(subscription=subscription)
+        self.assertEqual(subscription.currency, "BDT")
+        self.assertEqual(attempt.currency, "BDT")
+
+        category = FeeCategory.objects.create(code="LAB", name="Lab")
+        charge = StudentCharge.objects.create(
+            student=self.student,
+            category=category,
+            description="Lab charge",
+            amount=Decimal("10.00"),
+        )
+        fine = Fine.objects.create(
+            student=self.student,
+            reason="Replacement card",
+            amount=Decimal("12.00"),
+        )
+        self.assertEqual(charge.currency, "BDT")
+        self.assertEqual(fine.currency, "BDT")
 
     def test_accountant_can_post_student_charge_and_finance_hold(self):
         self.client.force_authenticate(user=self.accountant_user)

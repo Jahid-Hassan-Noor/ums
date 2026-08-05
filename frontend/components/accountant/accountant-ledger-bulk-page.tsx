@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
 import { LedgerNav } from "@/components/accountant/ledger/ledger-nav"
 
@@ -16,6 +17,8 @@ type StudentRef = { id: number; name: string; email: string; identifier: string 
 type BulkResult = { posted_count: number; error_count: number; charges: Array<unknown>; errors: Array<{ student_id: number; error: string }> }
 
 export function AccountantLedgerBulkPage() {
+  const settings = usePublicUmsSettings()
+  const currencyCode = settings.localization.currency_code || "USD"
   const [categories, setCategories] = useState<Category[]>([])
   const [studentOptions, setStudentOptions] = useState<StudentRef[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -37,9 +40,12 @@ export function AccountantLedgerBulkPage() {
   }, [])
 
   useEffect(() => {
-    void loadData()
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    const timer = window.setTimeout(() => {
+      void loadData()
+        .catch(() => {})
+        .finally(() => setLoading(false))
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [loadData])
 
   function toggleStudent(id: number) {
@@ -139,7 +145,7 @@ export function AccountantLedgerBulkPage() {
                   </select>
                 </div>
                 <div className="space-y-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} required /></div>
-                <div className="space-y-2"><Label>Amount (RM)</Label><Input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} required /></div>
+                <div className="space-y-2"><Label>Amount ({currencyCode})</Label><Input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} required /></div>
                 <div className="space-y-2"><Label>Due Date</Label><Input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} /></div>
                 <Button type="submit" disabled={saving || selectedIds.size === 0}>
                   {saving ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}

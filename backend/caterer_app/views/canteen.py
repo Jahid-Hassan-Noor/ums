@@ -6,10 +6,13 @@ from rest_framework.views import APIView
 from auth_app.permissions import IsCatererRole
 from caterer_app.service import (
     account_payload,
+    canteen_module_enabled,
     dashboard_summary,
     deduct,
+    dining_label,
     ensure_account,
     find_student,
+    module_unavailable_message,
 )
 
 
@@ -19,20 +22,28 @@ def validation_response(error):
     return Response({"detail": "; ".join(error.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+def module_unavailable_response():
+    return Response({"detail": module_unavailable_message()}, status=status.HTTP_404_NOT_FOUND)
+
+
 class CatererUms(APIView):
     permission_classes = [IsCatererRole]
 
     def get(self, request):
-        return Response({"title": "Caterer Portal", "section": "caterer"})
+        if not canteen_module_enabled():
+            return module_unavailable_response()
+        return Response({"title": f"{dining_label()} Portal", "section": "caterer"})
 
 
 class CatererDashboard(APIView):
     permission_classes = [IsCatererRole]
 
     def get(self, request):
+        if not canteen_module_enabled():
+            return module_unavailable_response()
         return Response(
             {
-                "title": "Caterer Dashboard",
+                "title": f"{dining_label()} Dashboard",
                 "section": "caterer",
                 "summary": dashboard_summary(),
             }
@@ -43,6 +54,8 @@ class CatererStudentAccount(APIView):
     permission_classes = [IsCatererRole]
 
     def get(self, request):
+        if not canteen_module_enabled():
+            return module_unavailable_response()
         student = find_student(request.query_params.get("student_id"))
         if not student:
             return Response({"detail": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -57,6 +70,8 @@ class CatererTransactions(APIView):
     permission_classes = [IsCatererRole]
 
     def post(self, request):
+        if not canteen_module_enabled():
+            return module_unavailable_response()
         student = find_student(request.data.get("student_id"))
         if not student:
             return Response({"detail": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -71,7 +86,7 @@ class CatererTransactions(APIView):
             return validation_response(error)
         return Response(
             {
-                "message": "Canteen transaction completed successfully.",
+                "message": f"{dining_label()} transaction completed successfully.",
                 "account": account_payload(account),
             },
             status=status.HTTP_201_CREATED,
@@ -84,4 +99,3 @@ __all__ = [
     "CatererStudentAccount",
     "CatererTransactions",
 ]
-

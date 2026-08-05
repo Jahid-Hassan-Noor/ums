@@ -66,7 +66,10 @@ def required_submission_gaps(application):
             gaps.append("Scholarship personal statement is required.")
 
     uploaded_document_types = set(application.documents.values_list("document_type", flat=True))
-    document_labels = dict(models.ApplicationDocument.DOCUMENT_TYPE_CHOICES)
+    document_labels = {
+        item["value"]: item["label"]
+        for item in setup["document_types"]
+    }
     for document_type in setup["required_documents"]:
         if document_type not in uploaded_document_types:
             gaps.append(f"{document_labels.get(document_type, document_type)} must be uploaded.")

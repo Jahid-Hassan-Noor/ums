@@ -14,12 +14,17 @@ from caterer_app.service import (
     active_students,
     allocation_for_month,
     allowance_month,
+    canteen_module_enabled,
     dashboard_summary,
+    dining_label,
     ensure_account,
     find_student,
     initialize_accounts,
+    module_unavailable_message,
     normalize_month,
-    setting,
+    monthly_allowance_amount,
+    policy_payload,
+    update_monthly_allowance,
 )
 
 
@@ -39,10 +44,16 @@ def _validation_detail(error):
     return {"detail": str(error)}
 
 
+def _module_unavailable_response():
+    return Response({"detail": module_unavailable_message()}, status=status.HTTP_404_NOT_FOUND)
+
+
 class AccountantCanteen(APIView):
     permission_classes = [IsAccountantRole]
 
     def get(self, request):
+        if not canteen_module_enabled():
+            return _module_unavailable_response()
         student_id = request.query_params.get("student_id")
         if student_id:
             student = find_student(student_id)
@@ -57,13 +68,14 @@ class AccountantCanteen(APIView):
         current_month = allowance_month()
         return Response(
             {
-                "title": "Accountant Canteen Allowance",
+                "title": f"Accountant {dining_label()} Allowance",
                 "section": "accountant",
                 "current": dashboard_summary(),
                 "settings": {
-                    "monthly_allowance": str(setting().monthly_allowance),
+                    "monthly_allowance": str(monthly_allowance_amount()),
                     "current_allocation": str(allocation_for_month(current_month)),
                     "eligible_students": active_students().count(),
+                    "policy": policy_payload(),
                 },
                 "bonuses": [
                     _bonus_payload(item)
@@ -73,6 +85,8 @@ class AccountantCanteen(APIView):
         )
 
     def post(self, request):
+        if not canteen_module_enabled():
+            return _module_unavailable_response()
         student = find_student(request.data.get("student_id"))
         if not student:
             return Response({"detail": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -88,23 +102,25 @@ class AccountantCanteen(APIView):
         notify_balance_adjusted(student, adjustment, account, request.user.profile)
         return Response(
             {
-                "message": "Student canteen balance added successfully.",
+                "message": f"Student {dining_label().lower()} balance added successfully.",
                 "account": account_payload(account),
             },
             status=status.HTTP_201_CREATED,
         )
 
     def patch(self, request):
-        config = setting()
+        if not canteen_module_enabled():
+            return _module_unavailable_response()
         changes = []
         event_data = {}
         try:
             if "monthly_allowance" in request.data:
-                config.monthly_allowance = Decimal(str(request.data.get("monthly_allowance")))
-                config.updated_by = request.user.profile
-                config.save()
+                allowance = update_monthly_allowance(
+                    request.data.get("monthly_allowance"),
+                    request.user.profile,
+                )
                 changes.append("monthly allowance")
-                event_data["monthly_allowance"] = str(config.monthly_allowance)
+                event_data["monthly_allowance"] = str(allowance)
 
             if "month" in request.data:
                 month = normalize_month(request.data.get("month"))
@@ -137,7 +153,7 @@ class AccountantCanteen(APIView):
                 changes=changes,
                 data=event_data,
             )
-        return Response({"message": "Canteen allowance settings updated successfully."})
+        return Response({"message": f"{dining_label()} allowance settings updated successfully."})
 
 
 __all__ = ["AccountantCanteen"]

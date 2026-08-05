@@ -1,27 +1,27 @@
 services:
   backend:
-    image: portal-backend-dev:local
+    image: ums-backend-dev:local
     command: python manage.py runserver 0.0.0.0:8000
     environment:
       DJANGO_DEBUG: "True"
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://127.0.0.1:8080}
     volumes:
       - ./backend:/app
-      - portal_media_data:/app/media
-      - portal_static_data:/app/staticfiles
+      - ums_media_data:/app/media
+      - ums_static_data:/app/staticfiles
 
   celery_worker:
-    image: portal-backend-dev:local
+    image: ums-backend-dev:local
     volumes:
       - ./backend:/app
 
   celery_beat:
-    image: portal-backend-dev:local
+    image: ums-backend-dev:local
     volumes:
       - ./backend:/app
 
   frontend:
-    image: portal-frontend-dev:local
+    image: ums-frontend-dev:local
     build:
       target: deps
     command: npm run dev -- --hostname 0.0.0.0 --port 3000
@@ -40,4 +40,4 @@ services:
 
 volumes:
   frontend_node_modules:
-    name: portal_frontend_node_modules
+    name: ums_frontend_node_modules

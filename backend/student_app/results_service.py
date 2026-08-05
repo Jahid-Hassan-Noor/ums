@@ -9,6 +9,13 @@ from django.http import HttpResponse
 from django.utils import timezone
 
 from admin_app import models as admin_models
+from admin_app.settings_registry import (
+    institution_identity,
+    institution_name,
+    institution_short_name,
+    terminology_settings,
+)
+from core.common.academic_policy import academic_standing_label, result_policy_labels
 from gradebook_app.services import active_scale, grade_for_score as gradebook_grade_for_score
 from student_app.models import Enrollment, Exam, ExamSlip, TranscriptRecord
 from student_app.registration_service import active_semester, get_student_profile
@@ -29,6 +36,10 @@ def grade_scale_payload():
         }
         for row in active_scale().ranges.all().order_by("-min_score", "sort_order")
     ]
+
+
+def result_labels_payload():
+    return result_policy_labels()
 
 
 def _decimal(value, default=Decimal("0.00")):
@@ -234,7 +245,7 @@ def _summary(selected_rows, cumulative_rows, include_gpa=True):
         "registered_unit": _format_number(registered),
         "counted_credit": _format_number(registered),
         "cumulative_credit_earned": _format_number(cumulative),
-        "academic_status": "AS" if cgpa >= Decimal("2.00") else "AP",
+        "academic_status": academic_standing_label(cgpa),
     }
 
 
@@ -296,6 +307,7 @@ def semester_results_payload(request):
         "records": selected_rows,
         "summary": _summary(selected_rows, cumulative_rows, include_gpa=selected != "all"),
         "grade_scale": grade_scale_payload(),
+        "result_labels": result_labels_payload(),
     }
 
 
@@ -313,6 +325,7 @@ def transcript_payload(request):
         "records": annotated,
         "summary": _summary(annotated, annotated, include_gpa=False),
         "grade_scale": grade_scale_payload(),
+        "result_labels": result_labels_payload(),
     }
 
 
@@ -515,8 +528,25 @@ def exam_slip_pdf_response(request):
 
 
 def _logo_path():
-    path = Path(settings.BASE_DIR).parent / "frontend" / "public" / "images" / "aiu" / "aiu-logo.png"
+    identity = institution_identity()
+    logo_url = str(identity.get("logo_url") or "").strip()
+    if not logo_url or not logo_url.startswith("/"):
+        return None
+    path = Path(settings.BASE_DIR).parent / "frontend" / "public" / logo_url.lstrip("/")
+    if path.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
+        return None
     return path if path.exists() else None
+
+
+def _institution_address_lines():
+    identity = institution_identity()
+    raw_address = str(identity.get("address") or "").strip()
+    return [line.strip() for line in raw_address.splitlines() if line.strip()]
+
+
+def _terminology_label(name, default):
+    value = str(terminology_settings().get(name) or "").strip()
+    return value or default
 
 
 def _draw_border_text(canvas, text):
@@ -534,7 +564,7 @@ def _draw_logo(canvas, x, y, size):
         canvas.drawImage(str(path), x, y, width=size, height=size, preserveAspectRatio=True, mask="auto")
         return
     canvas.setFont("Helvetica-Bold", 12)
-    canvas.drawString(x, y + size / 2, "AIU")
+    canvas.drawCentredString(x + size / 2, y + size / 2, institution_short_name()[:16].upper())
 
 
 def _draw_wrapped(canvas, text, x, y, width, font="Helvetica", size=9, leading=11, max_lines=3):
@@ -550,14 +580,15 @@ def _draw_wrapped(canvas, text, x, y, width, font="Helvetica", size=9, leading=1
 def _draw_result_header(canvas, payload):
     from reportlab.lib.pagesizes import A4
 
-    _draw_border_text(canvas, "ALBUKHARY INTERNATIONAL UNIVERSITY (AIU) EXAMINATION RESULT")
+    configured_institution_name = institution_name().upper()
+    _draw_border_text(canvas, f"{configured_institution_name} EXAMINATION RESULT")
     width, height = A4
     _draw_logo(canvas, 32, height - 132, 44)
     canvas.setFont("Helvetica", 9)
-    canvas.drawString(82, height - 95, "ALBUKHARY INTERNATIONAL UNIVERSITY")
-    canvas.drawString(82, height - 107, "ACADEMIC MANAGEMENT DEPARTMENT")
-    canvas.drawString(82, height - 119, "05200 ALOR SETAR")
-    canvas.drawString(82, height - 131, "KEDAH DARUL AMAN")
+    canvas.drawString(82, height - 95, configured_institution_name)
+    canvas.drawString(82, height - 107, "ACADEMIC RECORDS OFFICE")
+    for index, line in enumerate(_institution_address_lines()[:2]):
+        canvas.drawString(82, height - 119 - (index * 12), line.upper())
     canvas.setFont("Helvetica", 8)
     canvas.drawString(315, height - 95, "Note:  1.  The Senate's approval dictates the outcome of the examination")
     canvas.drawString(338, height - 115, "2.  If there are any modifications to this statement, the Dean's Office must be")
@@ -571,11 +602,14 @@ def _draw_result_header(canvas, payload):
     canvas.setFont("Helvetica", 12)
     canvas.drawCentredString(width / 2, height - 200, semester_label.upper())
     student = payload["student"]
+    student_id_label = _terminology_label("student_id_label", "Student ID").upper()
+    school_label = _terminology_label("school_label", "School").upper()
+    program_label = _terminology_label("program_label", "Program").upper()
     y = height - 240
     pairs = [
-        ("NAME", student["name"], "STUDENT ID NO.", student["student_id"]),
-        ("IDENTITY\nCARD NO.", student["identity_card_no"], "SCHOOL", student["school"]),
-        ("ADDRESS", student["address"], "ACADEMIC\nPROGRAMME", student["programme"]),
+        ("NAME", student["name"], f"{student_id_label} NO.", student["student_id"]),
+        ("IDENTITY\nCARD NO.", student["identity_card_no"], school_label, student["school"]),
+        ("ADDRESS", student["address"], f"ACADEMIC\n{program_label}", student["programme"]),
         ("", "", "DATE OF RESULT", timezone.localdate().strftime("%d-%m-%Y")),
     ]
     for left_label, left_value, right_label, right_value in pairs:
@@ -652,6 +686,7 @@ def build_result_pdf(payload):
     )
     y -= 15
     summary = payload["summary"]
+    labels = payload.get("result_labels") or result_labels_payload()
     pdf.rect(28, y - 78, 553, 78, stroke=1, fill=0)
     pdf.line(335, y, 335, y - 78)
     pdf.setFont("Helvetica", 10)
@@ -661,14 +696,14 @@ def build_result_pdf(payload):
     pdf.drawString(225, y - 41, summary["cumulative_credit_earned"])
     pdf.setFont("Helvetica", 9)
     if summary["include_gpa"]:
-        pdf.drawString(360, y - 18, "GPA")
+        pdf.drawString(360, y - 18, labels["gpa"])
         pdf.drawString(415, y - 18, summary["gpa"])
         pdf.drawString(475, y - 18, summary["registered_unit"])
         pdf.drawString(540, y - 18, summary["counted_credit"])
-        pdf.drawString(360, y - 36, "CGPA")
+        pdf.drawString(360, y - 36, labels["cgpa"])
         pdf.drawString(415, y - 36, summary["cgpa"])
     else:
-        pdf.drawString(360, y - 28, "CGPA")
+        pdf.drawString(360, y - 28, labels["cgpa"])
         pdf.drawString(415, y - 28, summary["cgpa"])
     pdf.drawString(400, y - 6, "AVERAGE")
     pdf.drawString(450, y - 6, "REGISTERED")
@@ -686,11 +721,12 @@ def build_result_pdf(payload):
 def _draw_exam_slip_header(canvas, payload):
     from reportlab.lib.pagesizes import A4
 
-    _draw_border_text(canvas, "ALBUKHARY INTERNATIONAL UNIVERSITY (AIU) FINAL EXAMINATION ENTRY SLIP & SCHEDULE (FESS)")
+    configured_institution_name = institution_name().upper()
+    _draw_border_text(canvas, f"{configured_institution_name} FINAL EXAMINATION ENTRY SLIP & SCHEDULE")
     width, height = A4
     _draw_logo(canvas, width / 2 - 33, height - 130, 66)
     canvas.setFont("Times-Roman", 8)
-    canvas.drawCentredString(width / 2, height - 143, "ALBUKHARY INTERNATIONAL UNIVERSITY")
+    canvas.drawCentredString(width / 2, height - 143, configured_institution_name)
     canvas.setFont("Helvetica", 16)
     canvas.drawCentredString(width / 2, height - 164, "FINAL EXAMINATION ENTRY SLIP & SCHEDULE")
     semester = payload.get("semester") or {}
@@ -698,15 +734,17 @@ def _draw_exam_slip_header(canvas, payload):
     canvas.setFont("Helvetica", 12)
     canvas.drawCentredString(width / 2, height - 184, label.upper())
     student = payload["student"]
+    student_id_label = _terminology_label("student_id_label", "Student ID")
+    program_label = _terminology_label("program_label", "Program")
     y = height - 235
     left = [
         ("Name", student["name"]),
         ("Intake Session", student["intake_session"]),
-        ("Programme", student["programme"]),
+        (program_label, student["programme"]),
     ]
     right = [
         ("IC/Passport No.", student["identity_card_no"]),
-        ("Student ID No.", student["student_id"]),
+        (f"{student_id_label} No.", student["student_id"]),
         ("Date Printed", timezone.localtime().strftime("%d-%m-%Y %H:%M")),
     ]
     for index, (label, value) in enumerate(left):
@@ -767,9 +805,10 @@ def build_exam_slip_pdf(payload):
     pdf.drawRightString(535, 265, f"Total Credit Hours :     {payload['total_credit_hours']}")
     pdf.setFont("Helvetica", 12)
     pdf.drawString(30, 245, "EXAMINATION RULES AND REGULATIONS FOR")
+    student_id_label = _terminology_label("student_id_label", "Student ID")
     rules = [
         "1) Students must be appropriately attired according to the dress code stipulated by the Student Affairs Department. NO slippers/flip flops/caps are allowed.",
-        "2) Students should bring their AIU Student ID card and Final Examination Slip and/or Identity Card to sit for the Examination in every examination that they attend.",
+        f"2) Students should bring their {student_id_label} card and Final Examination Slip and/or Identity Card to sit for the Examination in every examination that they attend.",
         "3) Candidates are NOT allowed to bring into the Final Examination's Hall/Venue; any notes, reference books, dictionaries of any kind, booklets, diagrams or pieces of paper, or any electronic equipment and communication aids.",
         "4) Students are not allowed to receive any prohibited items from anyone while in the Final Examination session, EXCEPT those given by the invigilator(s).",
         "5) Students can bring bottled drinking water into the examination hall. However, the container must be transparent and placed under your desk.",

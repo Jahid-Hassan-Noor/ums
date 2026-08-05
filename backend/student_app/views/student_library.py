@@ -10,7 +10,6 @@ from librarian_app.models import (
     Book,
     BookAcquisitionRequest,
     BookCopy,
-    BorrowingLimit,
     BorrowRequest,
     Laptop,
     LibraryRoom,
@@ -27,20 +26,16 @@ from librarian_app.serializers import (
 )
 from librarian_app.service import (
     cancel_room_reservation,
+    enforce_library_request_limit,
     get_borrowing_limit,
+    library_asset_enabled,
+    library_policy_payload,
+    library_policy_settings,
+    library_services_payload,
     notify_librarians_of_book_acquisition_request,
     notify_librarians_of_request,
+    validate_library_request_available,
 )
-
-
-def _library_services():
-    from admin_app.settings_registry import all_settings
-    values = all_settings().get("librarian_library", {})
-    return {
-        "books_enabled": bool(values.get("books_enabled", True)),
-        "laptops_enabled": bool(values.get("laptops_enabled", True)),
-        "rooms_enabled": bool(values.get("rooms_enabled", True)),
-    }
 
 
 class StudentLibrary(APIView):
@@ -48,18 +43,23 @@ class StudentLibrary(APIView):
 
     def get(self, request):
         student = request.user.profile
+        policy = library_policy_settings()
         section = request.query_params.get("section", "").strip().lower()
         query = request.query_params.get("q", "").strip()
 
         books = Book.objects.none()
-        if section in {"", "books"} and query:
+        if (
+            library_asset_enabled(BorrowRequest.ASSET_BOOK, policy)
+            and section in {"", "books"}
+            and query
+        ):
             books = Book.objects.prefetch_related("copies").filter(
                 Q(title__icontains=query) | Q(author__icontains=query),
                 is_active=True,
             )[:50]
 
         laptops = Laptop.objects.none()
-        if section in {"", "laptops"}:
+        if library_asset_enabled(BorrowRequest.ASSET_LAPTOP, policy) and section in {"", "laptops"}:
             laptops = (
                 Laptop.objects.filter(status=Laptop.STATUS_AVAILABLE)
                 .exclude(loans__status=Loan.STATUS_ACTIVE)
@@ -67,7 +67,7 @@ class StudentLibrary(APIView):
             )
 
         rooms = LibraryRoom.objects.none()
-        if section in {"", "rooms"}:
+        if library_asset_enabled(BorrowRequest.ASSET_ROOM, policy) and section in {"", "rooms"}:
             rooms = (
                 LibraryRoom.objects.filter(status=LibraryRoom.STATUS_AVAILABLE)
                 .exclude(loans__status=Loan.STATUS_ACTIVE)
@@ -122,7 +122,8 @@ class StudentLibrary(APIView):
                 "pending_book_requests": BorrowRequest.objects.filter(student=student, asset_type=BorrowRequest.ASSET_BOOK, status=BorrowRequest.STATUS_PENDING).count(),
                 "pending_laptop_requests": BorrowRequest.objects.filter(student=student, asset_type=BorrowRequest.ASSET_LAPTOP, status=BorrowRequest.STATUS_PENDING).count(),
                 "pending_room_requests": BorrowRequest.objects.filter(student=student, asset_type=BorrowRequest.ASSET_ROOM, status=BorrowRequest.STATUS_PENDING).count(),
-                "library_services": _library_services(),
+                "library_services": library_services_payload(policy),
+                "library_policy": library_policy_payload(student=student, policy=policy),
             }
         )
 
@@ -130,33 +131,23 @@ class StudentLibrary(APIView):
         student = request.user.profile
         asset_type = request.data.get("asset_type")
         notes = str(request.data.get("notes") or "").strip()
-        services = _library_services()
-        if asset_type == BorrowRequest.ASSET_BOOK and not services["books_enabled"]:
-            return Response({"detail": "Book borrowing is temporarily unavailable. Please try again later."}, status=status.HTTP_400_BAD_REQUEST)
-        if asset_type == BorrowRequest.ASSET_LAPTOP and not services["laptops_enabled"]:
-            return Response({"detail": "Laptop borrowing is currently disabled."}, status=status.HTTP_400_BAD_REQUEST)
-        if asset_type == BorrowRequest.ASSET_ROOM and not services["rooms_enabled"]:
-            return Response({"detail": "Discussion room booking is currently disabled."}, status=status.HTTP_400_BAD_REQUEST)
+        policy = library_policy_settings()
+        try:
+            validate_library_request_available(asset_type, policy)
+        except ValidationError as exc:
+            message = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+            return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
         if asset_type == BorrowRequest.ASSET_BOOK:
             book = Book.objects.filter(pk=request.data.get("book_id"), is_active=True).first()
             if not book or not book.copies.filter(status=BookCopy.STATUS_AVAILABLE).exists():
                 return Response({"detail": "This book is not currently available."}, status=status.HTTP_400_BAD_REQUEST)
             if BorrowRequest.objects.filter(student=student, book=book, status=BorrowRequest.STATUS_PENDING).exists():
                 return Response({"detail": "You already have a pending request for this book."}, status=status.HTTP_400_BAD_REQUEST)
-            limit = get_borrowing_limit(student)
-            active_book_loans = Loan.objects.filter(student=student, status=Loan.STATUS_ACTIVE, book_copy__isnull=False).count()
-            pending_book_requests = BorrowRequest.objects.filter(student=student, asset_type=BorrowRequest.ASSET_BOOK, status=BorrowRequest.STATUS_PENDING).count()
-            held_books = active_book_loans + pending_book_requests
-            if held_books >= limit.max_keep_at_a_time:
-                return Response(
-                    {"detail": f"You already hold or have pending requests for {held_books} book(s). Return a book before requesting another (limit: {limit.max_keep_at_a_time})."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if held_books >= limit.max_borrow_at_a_time:
-                return Response(
-                    {"detail": f"You have reached the borrow limit of {limit.max_borrow_at_a_time} book(s) at a time."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            try:
+                enforce_library_request_limit(student, asset_type, policy=policy)
+            except ValidationError as exc:
+                message = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+                return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
             borrow_request = BorrowRequest.objects.create(student=student, asset_type=asset_type, book=book, notes=notes)
         elif asset_type == BorrowRequest.ASSET_LAPTOP:
             laptop = Laptop.objects.filter(pk=request.data.get("laptop_id"), status=Laptop.STATUS_AVAILABLE).first()
@@ -164,13 +155,11 @@ class StudentLibrary(APIView):
                 return Response({"detail": "This laptop is not currently available."}, status=status.HTTP_400_BAD_REQUEST)
             if BorrowRequest.objects.filter(student=student, laptop=laptop, status=BorrowRequest.STATUS_PENDING).exists():
                 return Response({"detail": "You already have a pending request for this laptop."}, status=status.HTTP_400_BAD_REQUEST)
-            active_laptop_loans = Loan.objects.filter(student=student, status=Loan.STATUS_ACTIVE, laptop__isnull=False).count()
-            pending_laptop_requests = BorrowRequest.objects.filter(student=student, asset_type=BorrowRequest.ASSET_LAPTOP, status=BorrowRequest.STATUS_PENDING).count()
-            if active_laptop_loans >= 1 or pending_laptop_requests >= 1:
-                return Response(
-                    {"detail": "You already have a laptop on loan or pending. Return it before borrowing another."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            try:
+                enforce_library_request_limit(student, asset_type, policy=policy)
+            except ValidationError as exc:
+                message = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+                return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
             borrow_request = BorrowRequest.objects.create(student=student, asset_type=asset_type, laptop=laptop, notes=notes)
         elif asset_type == BorrowRequest.ASSET_ROOM:
             with transaction.atomic():
@@ -187,13 +176,11 @@ class StudentLibrary(APIView):
                         {"detail": "This discussion room is not currently available for reservation."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                active_room_loans = Loan.objects.filter(student=student, status=Loan.STATUS_ACTIVE, room__isnull=False).count()
-                pending_room_requests = BorrowRequest.objects.filter(student=student, asset_type=BorrowRequest.ASSET_ROOM, status=BorrowRequest.STATUS_PENDING).count()
-                if active_room_loans >= 1 or pending_room_requests >= 1:
-                    return Response(
-                        {"detail": "You already have a room allocated or pending. Return it before reserving another."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                try:
+                    enforce_library_request_limit(student, asset_type, policy=policy)
+                except ValidationError as exc:
+                    message = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+                    return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
                 borrow_request = BorrowRequest.objects.create(
                     student=student,
                     asset_type=asset_type,
@@ -213,6 +200,13 @@ class StudentBookAcquisitionRequests(APIView):
     permission_classes = [IsStudentRole]
 
     def post(self, request):
+        policy = library_policy_settings()
+        try:
+            validate_library_request_available(BorrowRequest.ASSET_BOOK, policy)
+        except ValidationError as exc:
+            message = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+            return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = BookAcquisitionRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         title = serializer.validated_data["title"].strip()

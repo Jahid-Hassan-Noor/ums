@@ -38,7 +38,6 @@ import { ConfigurableLoader } from "@/components/ui/configurable-loader"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -277,72 +276,6 @@ function FieldControl({
   )
 }
 
-function getCssVariable(key: string): string {
-  const map: Record<string, string> = {
-    brand_name: "--ums-brand-name",
-    sidebar_label: "--ums-sidebar-label",
-    logo_url: "--ums-logo-url",
-    logo_alt_text: "--ums-logo-alt",
-    default_avatar_url: "--ums-default-avatar",
-    accent_color: "--ums-accent",
-    card_density: "--ums-card-density",
-    show_scope_badge: "--ums-show-scope-badge",
-    show_link_descriptions: "--ums-show-link-desc",
-    primary_text_color: "--ums-text-primary",
-    secondary_text_color: "--ums-text-secondary",
-    background_color: "--ums-bg",
-    font_family: "--ums-font-family",
-    font_size_base: "--ums-font-size-base",
-    dashboard_background_image_url: "--ums-dash-bg-image",
-    button_color: "--ums-btn-bg",
-    button_text_color: "--ums-btn-text",
-    secondary_button_color: "--ums-secondary-btn-bg",
-    secondary_button_text_color: "--ums-secondary-btn-text",
-    button_border_radius: "--ums-btn-radius",
-    icon_color: "--ums-icon-color",
-    dark_primary_text_color: "--ums-dark-text-primary",
-    dark_secondary_text_color: "--ums-dark-text-secondary",
-    dark_background_color: "--ums-dark-bg",
-    dark_button_color: "--ums-dark-btn-bg",
-    dark_button_text_color: "--ums-dark-btn-text",
-    dark_secondary_button_color: "--ums-dark-secondary-btn-bg",
-    dark_secondary_button_text_color: "--ums-dark-secondary-btn-text",
-    dark_accent_color: "--ums-dark-accent",
-    dark_icon_color: "--ums-dark-icon",
-    sidebar_font_size: "--ums-sidebar-font-size",
-    sidebar_font_weight: "--ums-sidebar-font-weight",
-    sidebar_icon_size: "--ums-sidebar-icon-size",
-    sidebar_width: "--ums-sidebar-width",
-    sidebar_collapsed_by_default: "--ums-sidebar-collapsed",
-    sticky_header: "--ums-sticky-header",
-    show_breadcrumbs: "--ums-show-breadcrumbs",
-    show_footer: "--ums-show-footer",
-    card_border_radius: "--ums-card-radius",
-    card_shadow: "--ums-card-shadow",
-    card_background_color: "--ums-card-bg",
-    avatar_shape: "--ums-avatar-shape",
-    avatar_size: "--ums-avatar-size",
-    table_stripe_color: "--ums-table-stripe",
-    modal_overlay_opacity: "--ums-modal-opacity",
-  }
-  return map[key] ?? ""
-}
-
-function valueToCss(key: string, value: SettingValue): string {
-  const cssVar = getCssVariable(key)
-  if (!cssVar) return ""
-  if (typeof value === "boolean") return `${cssVar}: ${value ? "1" : "0"};`
-  if (value === "" || value === undefined || value === null) return ""
-  return `${cssVar}: ${value};`
-}
-
-function buildCssVars(values: ValueMap): string {
-  return Object.entries(values)
-    .map(([key, value]) => valueToCss(key, value))
-    .filter(Boolean)
-    .join("\n")
-}
-
 function shadowValue(val: string): string {
   if (val === "none") return "none"
   if (val === "light") return "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)"
@@ -378,9 +311,6 @@ function LivePreview({
   const textSecondary = darkPreview
     ? String(values.dark_secondary_text_color || "#a1a1aa")
     : String(values.secondary_text_color || "#666666")
-  const accent = darkPreview
-    ? String(values.dark_accent_color || "#fafafa")
-    : String(values.primary_text_color || "#09090b")
   const btnBg = darkPreview
     ? String(values.dark_button_color || "#fafafa")
     : String(values.button_color || "#18181b")

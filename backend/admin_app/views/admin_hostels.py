@@ -13,6 +13,11 @@ from auth_app.permissions import IsAdminRole
 from admin_app.serializers import HostelRoomSerializer, HostelSerializer
 from core.common.errors import first_error as _first_error
 from core.common.profiles import profile_display_name
+from admin_app.settings_registry import (
+    hostel_policy_payload,
+    hostel_residence_type_label,
+    hostel_room_code,
+)
 from student_app.models import Student
 
 
@@ -62,7 +67,7 @@ def _export_rows():
         base = {
             "hostel_code": hostel.code,
             "hostel_name": hostel.name,
-            "hostel_type": hostel.get_hostel_type_display(),
+            "hostel_type": hostel_residence_type_label(hostel.hostel_type),
             "warden_name": hostel.warden_name,
             "warden_phone": hostel.warden_phone,
             "warden_email": hostel.warden_email,
@@ -101,7 +106,7 @@ def _export_rows():
             {
                 "hostel_code": hostel.code,
                 "hostel_name": hostel.name,
-                "hostel_type": hostel.get_hostel_type_display(),
+                "hostel_type": hostel_residence_type_label(hostel.hostel_type),
                 "warden_name": hostel.warden_name,
                 "warden_phone": hostel.warden_phone,
                 "warden_email": hostel.warden_email,
@@ -133,6 +138,7 @@ class AdminHostels(APIView):
                 "section": "admin",
                 "hostels": HostelSerializer(hostels, many=True).data,
                 "rooms": HostelRoomSerializer(rooms, many=True).data,
+                "policy": hostel_policy_payload(),
                 "student_life": hostel_student_life_payload(),
             },
             status=status.HTTP_200_OK,
@@ -203,7 +209,12 @@ class AdminHostelDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        old_hostel_code = hostel.code
         old_room_codes = {room.id: room.code for room in hostel.rooms.all()}
+        old_generated_codes = {
+            room.id: hostel_room_code(old_hostel_code, room.floor, room.number)
+            for room in hostel.rooms.all()
+        }
         serializer = HostelSerializer(hostel, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(
@@ -212,8 +223,13 @@ class AdminHostelDetailView(APIView):
             )
         hostel = serializer.save()
         for room in hostel.rooms.all():
-            room.save(update_fields=["code", "updated_at"])
-            _replace_student_room_prefix(old_room_codes.get(room.id), room.code)
+            old_code = old_room_codes.get(room.id)
+            if old_code != old_generated_codes.get(room.id):
+                continue
+            room.code = hostel_room_code(hostel.code, room.floor, room.number)
+            if room.code != old_code:
+                room.save(update_fields=["code", "updated_at"])
+                _replace_student_room_prefix(old_code, room.code)
         return Response(
             {
                 "message": "Hostel updated successfully.",

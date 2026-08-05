@@ -6,6 +6,11 @@ from django.utils import timezone
 
 from admin_app.models import ClassMeeting, Profile
 from admin_app.settings_registry import setting_value
+from core.common.academic_policy import (
+    leave_approval_requires_sequence,
+    leave_dean_approver_identifiers,
+    leave_required_roles,
+)
 from core.common.profiles import profile_display_name
 from core.media_access import protected_media_url
 from notifications_package.service import notify_profile
@@ -63,6 +68,10 @@ def affected_class_meetings(student, start_date, end_date):
 
 
 def dean_approvers_for_student(student):
+    identifiers = leave_dean_approver_identifiers()
+    if not identifiers:
+        return Profile.objects.none()
+
     scope_filter = Q()
     if student.school_id:
         scope_filter |= (
@@ -76,7 +85,14 @@ def dean_approvers_for_student(student):
         )
     if not scope_filter:
         return Profile.objects.none()
-    dean_filter = Q(teacher_detail__designation__icontains="dean")
+
+    identifier_filter = Q()
+    for identifier in identifiers:
+        identifier_filter |= (
+            Q(user__username__iexact=identifier)
+            | Q(user__email__iexact=identifier)
+            | Q(teacher_detail__teacher_id__iexact=identifier)
+        )
     return (
         Profile.objects.select_related(
             "user", "teacher_detail"
@@ -84,7 +100,7 @@ def dean_approvers_for_student(student):
         .filter(is_active=True)
         .filter(role=Profile.ROLE_TEACHER)
         .filter(scope_filter)
-        .filter(dean_filter)
+        .filter(identifier_filter)
         .distinct()
         .order_by("user__first_name", "user__last_name")
     )
@@ -211,35 +227,37 @@ def submit_leave_request(student, *, start_date, end_date, reason, attachment=No
 
     approvals = []
     seen = set()
-    for meeting in affected_class_meetings(student, start_date, end_date):
-        teacher = teacher_for_meeting(meeting)
-        if not teacher:
-            continue
-        key = (teacher.id, meeting.id, LeaveApproval.ROLE_TEACHER)
-        if key in seen:
-            continue
-        seen.add(key)
-        approvals.append(
-            LeaveApproval(
-                leave_request=leave_request,
-                approver=teacher,
-                approval_role=LeaveApproval.ROLE_TEACHER,
-                class_meeting=meeting,
-            )
-        )
-
-    for dean in dean_approvers_for_student(student):
-        key = (dean.id, None, LeaveApproval.ROLE_DEAN)
-        if key in seen:
-            continue
-        seen.add(key)
-        approvals.append(
-            LeaveApproval(
-                leave_request=leave_request,
-                approver=dean,
-                approval_role=LeaveApproval.ROLE_DEAN,
-            )
-        )
+    for role in leave_required_roles():
+        if role == LeaveApproval.ROLE_TEACHER:
+            for meeting in affected_class_meetings(student, start_date, end_date):
+                teacher = teacher_for_meeting(meeting)
+                if not teacher:
+                    continue
+                key = (teacher.id, meeting.id, LeaveApproval.ROLE_TEACHER)
+                if key in seen:
+                    continue
+                seen.add(key)
+                approvals.append(
+                    LeaveApproval(
+                        leave_request=leave_request,
+                        approver=teacher,
+                        approval_role=LeaveApproval.ROLE_TEACHER,
+                        class_meeting=meeting,
+                    )
+                )
+        elif role == LeaveApproval.ROLE_DEAN:
+            for dean in dean_approvers_for_student(student):
+                key = (dean.id, None, LeaveApproval.ROLE_DEAN)
+                if key in seen:
+                    continue
+                seen.add(key)
+                approvals.append(
+                    LeaveApproval(
+                        leave_request=leave_request,
+                        approver=dean,
+                        approval_role=LeaveApproval.ROLE_DEAN,
+                    )
+                )
 
     LeaveApproval.objects.bulk_create(approvals)
     for approval in leave_request.approvals.select_related("approver"):
@@ -280,12 +298,19 @@ def decide_leave_approval(approval, *, decision, note=""):
     if decision not in {LeaveApproval.STATUS_APPROVED, LeaveApproval.STATUS_REJECTED}:
         return "Decision must be approved or rejected."
 
+    leave_request = approval.leave_request
+    if decision == LeaveApproval.STATUS_APPROVED and leave_approval_requires_sequence():
+        for prior in leave_request.approvals.all().order_by("created_at", "id"):
+            if prior.pk == approval.pk:
+                break
+            if prior.status != LeaveApproval.STATUS_APPROVED:
+                return "Previous approval steps must be completed before this leave request can move forward."
+
     approval.status = decision
     approval.note = note
     approval.decided_at = timezone.now()
     approval.save(update_fields=["status", "note", "decided_at", "updated_at"])
 
-    leave_request = approval.leave_request
     approvals = leave_request.approvals.all()
     if approvals.filter(status=LeaveApproval.STATUS_REJECTED).exists():
         leave_request.status = LeaveRequest.STATUS_REJECTED

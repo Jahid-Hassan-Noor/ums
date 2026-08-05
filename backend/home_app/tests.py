@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -44,6 +46,41 @@ class PublicContentApiTests(TestCase):
         self.assertEqual(public_response.status_code, 200)
         self.assertEqual(public_response.data["page"]["title"], "About From Database")
         self.assertEqual(public_response.data["page"]["route_path"], "/about")
+
+    def test_public_page_navigation_lists_only_current_published_pages(self):
+        visible = models.PublicPage.objects.create(
+            title="Visible About",
+            slug="visible-about",
+            route_path="/about",
+            section=models.PublicPage.SECTION_ABOUT,
+            metadata={"navigation": {"label": "About", "show": True}},
+            status=models.PublicPage.STATUS_PUBLISHED,
+            sort_order=2,
+            published_at=timezone.now(),
+        )
+        models.PublicPage.objects.create(
+            title="Draft Admissions",
+            slug="draft-admissions",
+            route_path="/admissions",
+            section=models.PublicPage.SECTION_ADMISSIONS,
+            status=models.PublicPage.STATUS_DRAFT,
+            sort_order=1,
+        )
+        models.PublicPage.objects.create(
+            title="Future News",
+            slug="future-news",
+            route_path="/news",
+            section=models.PublicPage.SECTION_HOME,
+            status=models.PublicPage.STATUS_PUBLISHED,
+            published_at=timezone.now() + timedelta(days=1),
+        )
+
+        response = self.client.get("/pages/navigation")
+
+        self.assertEqual(response.status_code, 200)
+        titles = [page["title"] for page in response.data["pages"]]
+        self.assertEqual(titles, [visible.title])
+        self.assertEqual(response.data["pages"][0]["metadata"]["navigation"]["label"], "About")
 
     def test_public_news_only_returns_published_records_and_detail(self):
         draft = models.PublicNews.objects.create(

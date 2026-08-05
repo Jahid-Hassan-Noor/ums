@@ -210,8 +210,9 @@ class AdmissionApplication(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.application_number:
-            prefix = timezone.now().strftime("AIU-%Y%m")
-            self.application_number = f"{prefix}-{uuid.uuid4().hex[:8].upper()}"
+            from applicant_app.admissions_setup import generate_application_number
+
+            self.application_number = generate_application_number()
         if self.statement_accepted and not self.statement_accepted_at:
             self.statement_accepted_at = timezone.now()
         super().save(*args, **kwargs)

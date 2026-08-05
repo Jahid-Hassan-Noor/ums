@@ -3,6 +3,11 @@ from copy import deepcopy
 from django.db.models import Q
 from django.utils import timezone
 
+from core.common.academic_policy import (
+    evaluation_activity_label,
+    evaluation_registration_gate_enabled,
+    evaluation_template_defaults,
+)
 from executive_app.course_schedule import offerings_for_scope, profile_display_name
 from executive_app.models import (
     CourseEvaluationResponse,
@@ -309,12 +314,10 @@ def ensure_starter_template(profile):
     )
     if template:
         return template
+    defaults = evaluation_template_defaults()
     return EvaluationTemplate.objects.create(
-        name="AIU SEC-SET Standard Template",
-        description=(
-            "Standard course-content and teaching evaluation based on the university's "
-            "existing SEC-SET Google Form."
-        ),
+        name=defaults["name"],
+        description=defaults["description"],
         questions=default_questions(),
         created_by=profile,
     )
@@ -388,6 +391,7 @@ def serialize_survey(survey, include_questions=False):
     payload = {
         "id": survey.id,
         "title": survey.title,
+        "evaluation_label": evaluation_activity_label(),
         "instructions": survey.instructions,
         "offering": {
             "id": offering.id,
@@ -590,12 +594,21 @@ def outstanding_required_surveys(student, target_semester=None):
 
 
 def registration_evaluation_gate(student, target_semester=None):
+    if not evaluation_registration_gate_enabled():
+        return {
+            "blocked": False,
+            "pending_count": 0,
+            "message": "",
+            "surveys": [],
+        }
+
     pending = list(outstanding_required_surveys(student, target_semester=target_semester))
+    label = evaluation_activity_label()
     return {
         "blocked": bool(pending),
         "pending_count": len(pending),
         "message": (
-            "Complete all required SEC-SET course evaluations before registering for the next semester."
+            f"Complete all required {label.lower()} activities before registering for the next semester."
             if pending
             else ""
         ),

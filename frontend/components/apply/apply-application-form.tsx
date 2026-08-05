@@ -531,7 +531,9 @@ export function ApplyApplicationForm() {
                   }
                 />
                 <div>
-                  <Label htmlFor="scholarship_requested">Apply for scholarship review</Label>
+                  <Label htmlFor="scholarship_requested">
+                    Apply for {options?.admissions_setup.scholarship_label || "scholarship review"}
+                  </Label>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Scholarship details are reviewed with the admission application.
                   </p>

@@ -17,7 +17,14 @@ from rest_framework.views import APIView
 
 from auth_app.permissions import IsAdminRole
 from admin_app import models
-from admin_app.serializers import CenterSerializer, ProgramSerializer, SchoolSerializer, UnitSerializer
+from admin_app.serializers import (
+    CenterSerializer,
+    DepartmentSerializer,
+    ProgramSerializer,
+    SchoolSerializer,
+    UnitSerializer,
+)
+from admin_app.settings_registry import portal_name
 from auth_app.serializers import RegisterSerializer, UserSerializer
 from core.common.errors import first_error as _first_error
 
@@ -94,11 +101,12 @@ def _build_account_email(*, full_name, username, email, role_label, temporary_pa
     frontend_base_url = getattr(settings, "FRONTEND_BASE_URL", "").rstrip("/")
     login_url = f"{frontend_base_url}/login" if frontend_base_url else ""
     reset_url = f"{frontend_base_url}/forgot-password" if frontend_base_url else ""
+    configured_portal_name = portal_name()
 
     message_lines = [
         f"Hello {full_name},",
         "",
-        f"An AIU Portal {role_label.lower()} account has been created for you.",
+        f"A {configured_portal_name} {role_label.lower()} account has been created for you.",
         "",
         f"Full name: {full_name}",
         f"Username: {username}",
@@ -118,7 +126,7 @@ def _build_account_email(*, full_name, username, email, role_label, temporary_pa
     )
 
     send_mail(
-        subject="Your AIU Portal account credentials",
+        subject=f"Your {configured_portal_name} account credentials",
         message="\n".join(message_lines),
         from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
         recipient_list=[email],
@@ -162,6 +170,14 @@ HEADER_ALIASES = {
     "centre_code": "center_code",
     "programme_id": "program_id",
     "programme_code": "program_code",
+    "centre_owner_id": "center_id",
+    "centre_owner_code": "center_code",
+    "center_owner_id": "center_id",
+    "center_owner_code": "center_code",
+    "unit_owner_id": "unit_id",
+    "unit_owner_code": "unit_code",
+    "department_owner_id": "department_id",
+    "department_owner_code": "department_code",
 }
 
 
@@ -479,6 +495,46 @@ def _sheet_row_payload(data, role):
         if unit_id:
             payload["unit_id"] = unit_id
 
+    if role in {"librarian", "caterer", "technician"}:
+        school_id = _scope_id_from_row(
+            data,
+            id_key="school_id",
+            code_key="school_code",
+            model=models.School,
+            label="school",
+        )
+        center_id = _scope_id_from_row(
+            data,
+            id_key="center_id",
+            code_key="center_code",
+            model=models.Center,
+            label="centre",
+        )
+        unit_id = _scope_id_from_row(
+            data,
+            id_key="unit_id",
+            code_key="unit_code",
+            model=models.Unit,
+            label="unit",
+        )
+        department_id = _scope_id_from_row(
+            data,
+            id_key="department_id",
+            code_key="department_code",
+            model=models.Department,
+            label="department",
+        )
+        if school_id:
+            payload["school_id"] = school_id
+        if center_id:
+            payload["center_id"] = center_id
+        if unit_id:
+            payload["unit_id"] = unit_id
+        if department_id:
+            payload["department_id"] = department_id
+        if "designation" in data:
+            payload["designation"] = data["designation"]
+
     return payload
 
 
@@ -565,6 +621,18 @@ class AdminCreateAccountRole(APIView):
             payload["centers"] = CenterSerializer(centers, many=True).data
             payload["units"] = UnitSerializer(
                 models.Unit.objects.filter(is_active=True).order_by("name"),
+                many=True,
+            ).data
+
+        if role in {"librarian", "caterer", "technician"}:
+            payload["schools"] = SchoolSerializer(schools, many=True).data
+            payload["centers"] = CenterSerializer(centers, many=True).data
+            payload["units"] = UnitSerializer(
+                models.Unit.objects.filter(is_active=True).order_by("name"),
+                many=True,
+            ).data
+            payload["departments"] = DepartmentSerializer(
+                models.Department.objects.filter(is_active=True).order_by("name"),
                 many=True,
             ).data
 

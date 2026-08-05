@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
 import { LedgerNav } from "@/components/accountant/ledger/ledger-nav"
+import { formatUmsMoney } from "@/lib/ums-settings"
 import {
   fetchAccountantFines,
   createFine,
@@ -27,6 +29,8 @@ type SearchStudent = {
 }
 
 export function AccountantFinesPage() {
+  const settings = usePublicUmsSettings()
+  const currencyCode = settings.localization.currency_code || "USD"
   const [fines, setFines] = useState<Fine[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -72,14 +76,19 @@ export function AccountantFinesPage() {
   }, [loadFines])
 
   useEffect(() => {
-    refresh()
+    const timer = window.setTimeout(() => {
+      refresh()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [refresh])
 
   // Search students for autocomplete
   useEffect(() => {
     if (!studentQuery.trim()) {
-      setFoundStudents([])
-      return
+      const timer = window.setTimeout(() => {
+        setFoundStudents([])
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
     const timer = setTimeout(async () => {
       setSearchingStudents(true)
@@ -270,7 +279,7 @@ export function AccountantFinesPage() {
                           )}
                         </td>
                         <td className="p-4 text-right font-semibold text-foreground">
-                          {fine.currency} {Number(fine.amount).toFixed(2)}
+                          {formatUmsMoney(fine.amount, settings, fine.currency)}
                         </td>
                         <td className="p-4 text-muted-foreground">
                           {fine.due_date ? new Date(fine.due_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "None"}
@@ -378,7 +387,7 @@ export function AccountantFinesPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="amount" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Amount (RM)</Label>
+                    <Label htmlFor="amount" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Amount ({currencyCode})</Label>
                     <Input
                       id="amount"
                       type="number"
@@ -432,13 +441,13 @@ export function AccountantFinesPage() {
                 <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                   <Wallet className="size-5 text-blue-600" /> Manual Allowance Deduction
                 </h3>
-                <p className="text-xs text-muted-foreground mt-1">Deduct fine manually from the student's physical bank allowance account.</p>
+                <p className="text-xs text-muted-foreground mt-1">Deduct fine manually from the student&apos;s physical bank allowance account.</p>
               </div>
               <div className="p-5 space-y-4">
                 <div className="text-sm space-y-1.5 bg-muted p-3 rounded-lg border border-border">
                   <div className="flex justify-between"><span className="text-muted-foreground">Student:</span> <span className="font-semibold text-foreground">{deductingFine.student.name}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Reason:</span> <span className="font-medium text-foreground">{deductingFine.reason}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Amount:</span> <span className="font-bold text-red-600">{deductingFine.currency} {Number(deductingFine.amount).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Amount:</span> <span className="font-bold text-red-600">{formatUmsMoney(deductingFine.amount, settings, deductingFine.currency)}</span></div>
                 </div>
 
                 <div className="space-y-2">

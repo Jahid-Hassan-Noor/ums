@@ -23,10 +23,17 @@ type Librarian = {
   staff_id: string
   designation: string
   phone: string
+  school_name: string
   center_name: string
   unit_name: string
+  department_name: string
   office_location: string
   is_active: boolean
+}
+
+function ownerLabel(librarian: Librarian) {
+  const scope = librarian.school_name || librarian.center_name || "No owner scope"
+  return librarian.unit_name ? `${scope} / ${librarian.unit_name}` : scope
 }
 
 export function AdminManageLibrariansPage() {
@@ -65,7 +72,7 @@ export function AdminManageLibrariansPage() {
       <main className="flex-1 space-y-6 px-4 pt-4 pb-8 sm:px-6">
         <ManagePageHeader
           title="Manage Librarians"
-          description="Maintain librarian accounts assigned to the Centre of Reference and Library Administrative Unit."
+          description="Maintain librarian accounts assigned to configured library owners."
           actions={
             <Button variant="outline" onClick={() => void loadData()}>
               <RefreshCw className="size-4" /> Refresh
@@ -92,8 +99,7 @@ export function AdminManageLibrariansPage() {
               <CardHeader>
                 <CardTitle>{librarian.name}</CardTitle>
                 <CardDescription>
-                  {librarian.email} · {librarian.center_name || "COR"} /{" "}
-                  {librarian.unit_name || "COR-ADMIN"}
+                  {librarian.email} - {ownerLabel(librarian)}
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">

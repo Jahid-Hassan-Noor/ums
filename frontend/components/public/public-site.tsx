@@ -4,6 +4,7 @@ import type { ComponentType, ReactNode } from "react"
 import {
   ChevronDown,
   ExternalLink,
+  FileText,
   Mail,
   MapPin,
   Phone,
@@ -11,8 +12,12 @@ import {
 
 import { PublicBrand } from "@/components/public/public-brand"
 import { PublicHeaderActions } from "@/components/public/public-header-actions"
-import { getPublicUmsSettings } from "@/lib/public-api"
-import { officialLinks, publicNavGroups } from "@/lib/ums-public-data"
+import {
+  getPublicNavigation,
+  getPublicOfficialLinks,
+  getPublicUmsSettings,
+  type PublicNavGroup,
+} from "@/lib/public-api"
 import { cn } from "@/lib/utils"
 
 export { PublicBrand } from "@/components/public/public-brand"
@@ -30,14 +35,6 @@ export type PublicStat = {
 }
 
 export type PublicIcon = ComponentType<{ className?: string }>
-
-const calmHeaderLabels = new Set([
-  "About AIU",
-  "Academics",
-  "Students",
-  "Scholarship",
-  "Contact Us",
-])
 
 export function ExternalAwareLink({
   href,
@@ -65,8 +62,6 @@ export function ExternalAwareLink({
   )
 }
 
-type PublicNavGroup = (typeof publicNavGroups)[number]
-
 function isNavGroupActive(group: PublicNavGroup, active?: string) {
   return (
     active === group.href ||
@@ -74,14 +69,18 @@ function isNavGroupActive(group: PublicNavGroup, active?: string) {
   )
 }
 
-function DesktopPublicNav({ active }: { active?: string }) {
-  const primaryGroups = publicNavGroups.filter((group) =>
-    calmHeaderLabels.has(group.label)
-  )
-  const moreGroups = publicNavGroups.filter(
-    (group) => !calmHeaderLabels.has(group.label)
-  )
+function DesktopPublicNav({
+  active,
+  navGroups,
+}: {
+  active?: string
+  navGroups: PublicNavGroup[]
+}) {
+  const primaryGroups = navGroups.slice(0, 5)
+  const moreGroups = navGroups.slice(5)
   const moreActive = moreGroups.some((group) => isNavGroupActive(group, active))
+
+  if (!navGroups.length) return null
 
   return (
     <nav className="hidden items-center gap-1 rounded-xl border border-slate-200/70 bg-slate-50/80 px-2 py-1 text-sm font-medium text-slate-600 dark:border-white/10 dark:bg-white/6 dark:text-slate-300 lg:flex">
@@ -158,14 +157,16 @@ function DesktopPublicNav({ active }: { active?: string }) {
   )
 }
 
-function PublicTopbar({ active }: { active?: string }) {
+async function PublicTopbar({ active }: { active?: string }) {
+  const navGroups = await getPublicNavigation()
+
   return (
     <header className="fixed top-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-7xl -translate-x-1/2 items-center justify-between gap-3 rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-3 text-slate-950 shadow-lg shadow-slate-900/10 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/82 dark:text-white dark:shadow-black/30 sm:w-[calc(100%-2rem)] sm:px-5">
       <PublicBrand
         className="min-w-0 flex-1 lg:flex-none"
       />
-      <DesktopPublicNav active={active} />
-      <PublicHeaderActions />
+      <DesktopPublicNav active={active} navGroups={navGroups} />
+      <PublicHeaderActions navGroups={navGroups} />
     </header>
   )
 }
@@ -182,7 +183,7 @@ export function PublicHero({
   eyebrow,
   title,
   description,
-  image = "/images/aiu/campus-welcome.jpg",
+  image,
   actions = [],
   stats = [],
 }: {
@@ -196,16 +197,20 @@ export function PublicHero({
   return (
     <section className="relative overflow-hidden bg-slate-950 text-white">
       <div className="absolute inset-0">
-        <Image
-          src={image}
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-slate-950/68" />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.92),rgba(2,6,23,0.58),rgba(2,6,23,0.28))]" />
+        {image ? (
+          <>
+            <Image
+              src={image}
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover"
+            />
+            <div className="absolute inset-0 bg-slate-950/68" />
+          </>
+        ) : null}
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.96),rgba(15,23,42,0.86),rgba(15,118,110,0.42))]" />
       </div>
       <div className="relative mx-auto max-w-7xl px-4 pt-28 pb-16 sm:px-6 sm:pt-32 sm:pb-24 lg:px-8">
         <div className="max-w-3xl">
@@ -356,7 +361,7 @@ export function FeatureGrid({
                 {Icon ? (
                   <Icon className="size-5" />
                 ) : (
-                  <span className="font-bold">AIU</span>
+                  <FileText className="size-5" />
                 )}
               </span>
               {item.meta ? (
@@ -399,23 +404,16 @@ export function FeatureGrid({
 }
 
 export async function PublicFooter() {
-  const settings = await getPublicUmsSettings()
+  const [settings, navGroups, officialLinks] = await Promise.all([
+    getPublicUmsSettings(),
+    getPublicNavigation(),
+    getPublicOfficialLinks(),
+  ])
   const university = settings.university
-  const universityLinks = [
-    { label: "Contact", href: "/contact" },
-    { label: "Career", href: "/career" },
-    { label: "Publications", href: "/publications" },
-    { label: "Press Release", href: "/press-release" },
-    { label: "Repository", href: "/repository" },
-    { label: "Public Lecture Series", href: "/public-lecture-series" },
-  ]
-  const quickLinks = [
-    { label: "Library", href: "/student-life/library" },
-    { label: "Alumni", href: "/alumni" },
-    { label: "Convocation", href: "/convocation" },
-    { label: "Scholarship", href: "/scholarship" },
-    { label: "Apply Now", href: "/apply" },
-  ]
+  const universityLinks = navGroups.slice(0, 6)
+  const quickLinks = navGroups
+    .flatMap((group) => group.children ?? [])
+    .slice(0, 6)
 
   return (
     <footer className="border-t border-slate-200 bg-slate-950 px-4 py-10 text-white sm:px-6 lg:px-8">
@@ -442,7 +440,7 @@ export async function PublicFooter() {
             University
           </p>
           <div className="mt-4 grid gap-2">
-            {universityLinks.map((link) => (
+            {universityLinks.length ? universityLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -450,7 +448,11 @@ export async function PublicFooter() {
               >
                 {link.label}
               </Link>
-            ))}
+            )) : (
+              <span className="text-sm text-white/48">
+                No public navigation links are published.
+              </span>
+            )}
           </div>
         </div>
         <div>
@@ -458,7 +460,7 @@ export async function PublicFooter() {
             Quick Link
           </p>
           <div className="mt-4 grid gap-2">
-            {quickLinks.map((link) => (
+            {quickLinks.length ? quickLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -466,7 +468,11 @@ export async function PublicFooter() {
               >
                 {link.label}
               </Link>
-            ))}
+            )) : (
+              <span className="text-sm text-white/48">
+                No secondary links are published.
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Repository-audited technical and functional documentation for the AIU Unified Portal."
+      content="Repository-audited technical and functional documentation for the University Management System."
     />
-    <title>AIU Unified Portal — Project Documentation</title>
+    <title>University Management System — Project Documentation</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -891,9 +891,9 @@
 
     <aside class="sidebar">
       <a class="brand" href="#overview">
-        <div class="brand-logo">AIU</div>
+        <div class="brand-logo">UMS</div>
         <div class="brand-name">
-          Unified Portal
+          University Management System
           <span>Repository documentation</span>
         </div>
       </a>
@@ -907,13 +907,16 @@
             <li class="nav-item">
               <a href="#maturity">Implementation maturity</a>
             </li>
+            <li class="nav-item">
+              <a href="#universal-readiness">Universal readiness</a>
+            </li>
           </ul>
         </div>
 
         <div class="nav-section">
           <div class="nav-section-title">2. Users & requirements</div>
           <ul class="nav-menu">
-            <li class="nav-item"><a href="#actors">Portal actors</a></li>
+            <li class="nav-item"><a href="#actors">UMS actors</a></li>
             <li class="nav-item"><a href="#requirements">Requirements</a></li>
           </ul>
         </div>
@@ -1028,28 +1031,28 @@
     </aside>
 
     <main class="main-content">
-      <p class="eyebrow">AIU Unified Portal</p>
+      <p class="eyebrow">University Management System</p>
       <h1 id="overview">
         Project documentation grounded in the current repository
       </h1>
       <p class="subtitle">
         A functional, architectural, data, API, security, deployment, and
-        quality overview of the Albukhary International University portal as
+        quality overview of the university management system as
         implemented in the Django and Next.js codebase.
       </p>
       <div class="audit-note">
         <span class="audit-dot"></span>
-        Source audit completed 1 July 2026
+        Source audit completed 5 August 2026
       </div>
 
       <div class="meta-card">
         <div class="meta-group">
           <label>Institution</label>
-          <span>Albukhary International University</span>
+          <span>University</span>
         </div>
         <div class="meta-group">
           <label>System type</label>
-          <span>Academic ERP, LMS & campus portal</span>
+          <span>Academic ERP, LMS and campus services platform</span>
         </div>
         <div class="meta-group">
           <label>Architecture</label>
@@ -1062,42 +1065,135 @@
       </div>
 
       <p>
-        The project consolidates the public AIU website, applicant admissions,
+        The project consolidates the configurable public university website, applicant admissions,
         student self-service, teaching and learning workflows, executive
         academic governance, administrative operations, and specialist service
-        desks into one role-based portal. The backend is a modular Django REST
+        desks into one role-based UMS. The backend is a modular Django REST
         application; the frontend is a Next.js App Router application with
         separate route zones for each role and a public website.
       </p>
 
       <div class="stats-grid">
         <div class="stat">
-          <div class="stat-value">9</div>
-          <div class="stat-label">Authenticated portal roles</div>
+          <div class="stat-value">10</div>
+          <div class="stat-label">Authenticated ums roles</div>
         </div>
         <div class="stat">
-          <div class="stat-value">11</div>
+          <div class="stat-value">14</div>
           <div class="stat-label">Installed domain Django apps</div>
         </div>
         <div class="stat">
-          <div class="stat-value">117</div>
+          <div class="stat-value">160</div>
           <div class="stat-label">Django model classes</div>
         </div>
         <div class="stat">
-          <div class="stat-value">326</div>
+          <div class="stat-value">373</div>
           <div class="stat-label">First-party backend URL declarations</div>
         </div>
         <div class="stat">
-          <div class="stat-value">232</div>
+          <div class="stat-value">265</div>
           <div class="stat-label">Next.js page routes</div>
         </div>
         <div class="stat">
-          <div class="stat-value">201</div>
+          <div class="stat-value">292</div>
           <div class="stat-label">Backend test methods</div>
         </div>
       </div>
 
-      <h3 id="audit-scope">1.1 Audit scope and evidence</h3>
+      <h3 id="universal-readiness">1.1 Universal readiness audit</h3>
+      <p>
+        The roadmap in <code>docs/universal_university_portal_roadmap.md</code>
+        has been checked against the current repository and the running Docker
+        site. All seven roadmap milestones are implemented at the platform
+        level. This audit also removed the remaining runtime hardcodes found in
+        date formatting, payment-provider labels, and one academic-center
+        placeholder.
+      </p>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Milestone</th>
+              <th>Status</th>
+              <th>Evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Configuration contract</td>
+              <td class="priority-low">Achieved</td>
+              <td>
+                Public settings expose neutral institution identity,
+                localization, terminology, policies, module labels, role labels,
+                feature flags, setup completeness, and UI customization.
+              </td>
+            </tr>
+            <tr>
+              <td>Public website neutralization</td>
+              <td class="priority-low">Achieved</td>
+              <td>
+                Public pages render from CMS/settings with neutral empty states.
+                Browser verification showed <code>Home | Your University</code>
+                with no AIU-specific visible runtime text.
+              </td>
+            </tr>
+            <tr>
+              <td>Seed separation</td>
+              <td class="priority-low">Achieved</td>
+              <td>
+                Generic bootstrap, AIU demo seed, neutral demo seed, and seed
+                documentation are separated; the seed command tests pass.
+              </td>
+            </tr>
+            <tr>
+              <td>Academic generalization</td>
+              <td class="priority-low">Achieved</td>
+              <td>
+                Academic centers support non-academic, semester-based, and
+                whole-year modes with neutral session naming and generalized
+                course-offering eligibility.
+              </td>
+            </tr>
+            <tr>
+              <td>Role and module configuration</td>
+              <td class="priority-low">Achieved</td>
+              <td>
+                Module visibility, role labels, module labels, route guards, and
+                special-role ownership are settings/config driven; route-policy
+                tests pass.
+              </td>
+            </tr>
+            <tr>
+              <td>Finance and operations</td>
+              <td class="priority-low">Achieved</td>
+              <td>
+                Currency and locale defaults are neutral, finance records use
+                configured currency defaults, and canteen, library, helpdesk,
+                hostel, election, and venue policies are configurable.
+              </td>
+            </tr>
+            <tr>
+              <td>Universal readiness tests</td>
+              <td class="priority-low">Achieved</td>
+              <td>
+                Neutral profile, minimal profile, route policy, seed separation,
+                static hardcode scan, migration check, and browser/API checks
+                completed successfully in Docker.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <strong>Verification commands from this audit:</strong>
+        <code>docker compose exec -T backend python manage.py test admin_app.test_universal_verification_matrix admin_app.test_seed_data_commands admin_app.test_route_permissions -v 1 --keepdb</code>,
+        <code>docker compose exec -T backend python manage.py makemigrations --check --dry-run</code>,
+        <code>cd frontend && npm run typecheck</code>, and
+        <code>graphify update .</code>. Runtime static search found no disallowed
+        university-specific terms in backend/frontend source after the fixes.
+      </div>
+
+      <h3 id="audit-scope">1.2 Audit scope and evidence</h3>
       <p>
         This document was updated from the repository itself rather than from
         the generated knowledge graph alone. The audit covered:
@@ -1333,7 +1429,7 @@
 
       <h2 id="architecture">3. Architecture and design</h2>
       <p>
-        The portal uses a decoupled client/server design with a shared reverse
+        The ums uses a decoupled client/server design with a shared reverse
         proxy. The frontend renders public and protected pages; the backend owns
         identity, authorization, validation, business rules, persistence, files,
         reporting, and notifications.
@@ -1370,7 +1466,7 @@
           <code>Authorization: Bearer &lt;access-token&gt;</code>.
         </li>
         <li>
-          <strong>Backend:</strong> DRF authentication, role permissions, portal
+          <strong>Backend:</strong> DRF authentication, role permissions, ums
           policy middleware, domain services, and serializers validate the
           request before ORM persistence.
         </li>
@@ -1392,7 +1488,7 @@
             <td>Next.js 16.x, React 19.x</td>
               <td>
                 App Router, standalone production output, server/client
-                components.
+                components, 265 page routes.
               </td>
             </tr>
             <tr>
@@ -1419,18 +1515,18 @@
               <td>Simple JWT 5.5.1 plus Next.js session proxy</td>
               <td>
                 5-minute access tokens, 7-day rotating refresh tokens, JWT
-                blacklist support, and HttpOnly portal cookies mediated by Next
+                blacklist support, and HttpOnly ums cookies mediated by Next
                 route handlers.
               </td>
             </tr>
             <tr>
               <td>Database</td>
-              <td>PostgreSQL 17 in Compose</td>
+              <td>PostgreSQL 18.4 in Compose</td>
               <td>Only PostgreSQL is configured in Django settings.</td>
             </tr>
             <tr>
               <td>Background execution</td>
-              <td>Celery 5.6.3, Django Tasks adapter, Redis 8</td>
+              <td>Celery 5.6.3, Django Tasks adapter, Redis 8.8</td>
               <td>
                 Worker and beat services process due reminders and monthly
                 canteen allowance initialization outside request threads.
@@ -1464,25 +1560,28 @@
       </div>
 
       <h3 id="structure">3.3 Repository structure</h3>
-      <pre><code>portal/
+      <pre><code>ums/
 ├── backend/
 │   ├── core/                    # Django settings, root URLs, WSGI/ASGI
 │   ├── admin_app/               # Identity, directory, semesters, venues, elections,
 │   │                            # settings, reports, audit, public CMS administration
 │   ├── applicant_app/           # Applicant auth, applications, scholarship, documents
+│   ├── auth_app/                # JWT token issuance, authentication utilities
 │   ├── student_app/             # Registration, enrollment, results, leave, student services
 │   ├── teacher_app/             # Course content, assignments, attendance, teacher workflows
 │   ├── executive_app/           # Scoped academic management, scheduling, results, reports
 │   ├── accountant_app/          # Finance gateway, subscriptions, fines, student ledger
+│   ├── gradebook_app/           # Gradebook configuration, grading scales, weighted categories
 │   ├── hr_app/                  # HR staff role, employee master, positions, documents
-│   ├── chatbot_app/             # Public/private portal chatbot and deterministic tools
+│   ├── chatbot_app/             # Public/private ums chatbot and deterministic tools
 │   ├── librarian_app/           # Books, copies, shelves, laptops, requests, loans
 │   ├── caterer_app/             # Monthly allowances, accounts, deductions, adjustments
+│   ├── quiz_app/                # Quizzes, question bank, attempts, grading
 │   ├── technician_app/          # Student ICT tickets and technician workflow
 │   ├── home_app/                # Public pages, news, events, directories, official links
 │   └── notifications_package/   # Shared notification API and service functions
 ├── frontend/
-│   ├── app/                     # 232 public and role-based page routes
+│   ├── app/                     # 265 public and role-based page routes
 │   ├── components/              # Feature, layout, chart, modal, sidebar, and UI components
 │   ├── lib/                     # Session proxy, API clients, role definitions, public data helpers
 │   ├── proxy.ts                 # HttpOnly-cookie role-route redirect guard
@@ -1660,7 +1759,7 @@
               <td>Human resources</td>
               <td>
                 Dedicated HR role and app, admin-created HR accounts, employee
-                master records linked to portal profiles, positions, employment
+                master records linked to ums profiles, positions, employment
                 status lifecycle, employment records, employee documents, and
                 HR self-service profile access.
               </td>
@@ -1676,9 +1775,9 @@
               <td><span class="badge badge-live">Implemented</span></td>
             </tr>
             <tr>
-              <td>Portal chatbot</td>
+              <td>UMS chatbot</td>
               <td>
-                Public AIU information answers, public directory email lookup,
+                Public university information answers, public directory email lookup,
                 privacy refusals, authenticated student/teacher timetable and
                 assignment tools, optional Ollama-backed generation, and chatbot
                 API tests.
@@ -1692,6 +1791,51 @@
                 fan-out, deep links, admin/executive exports, report history,
                 structured change auditing, and scheduled assignment/library
                 reminders.
+              </td>
+              <td><span class="badge badge-live">Implemented</span></td>
+            </tr>
+            <tr>
+              <td>Quiz and assessment</td>
+              <td>
+                Teacher quiz creation, question bank management with categories
+                and versions, random rules, student quiz attempts, per-question
+                answer tracking, auto-grading, manual grading, and quiz
+                statistics.
+              </td>
+              <td><span class="badge badge-live">Implemented</span></td>
+            </tr>
+            <tr>
+              <td>Gradebook</td>
+              <td>
+                Configurable grading scales, weighted assessment categories,
+                gradebook entries linked to course offerings, per-category
+                overrides, and gradebook comments for student feedback.
+              </td>
+              <td><span class="badge badge-live">Implemented</span></td>
+            </tr>
+            <tr>
+              <td>Finance student ledger</td>
+              <td>
+                Fee categories, student charges, immutable ledger entries,
+                balance snapshots, finance holds, fine management with online
+                payment, compensation requests, and canteen finance oversight.
+              </td>
+              <td><span class="badge badge-live">Implemented</span></td>
+            </tr>
+            <tr>
+              <td>Library advanced operations</td>
+              <td>
+                Book fine tracking, lost-item management, library settings
+                configuration, book reservations, laptop reservations, and
+                room reservations.
+              </td>
+              <td><span class="badge badge-live">Implemented</span></td>
+            </tr>
+            <tr>
+              <td>Platform administration</td>
+              <td>
+                Database backup/restore operations, UI customization settings,
+                HR account creation, and applicant detail management.
               </td>
               <td><span class="badge badge-live">Implemented</span></td>
             </tr>
@@ -1737,7 +1881,7 @@
       <h3 id="operations">4.2 Campus and administrative operations</h3>
       <p>
         Beyond the academic core, the project includes operational modules that
-        are often omitted from portal documentation:
+        are often omitted from ums documentation:
       </p>
       <ul>
         <li>
@@ -1769,7 +1913,7 @@
           relationships, documents, and self-service HR profile access.
         </li>
         <li>
-          <strong>Portal chatbot:</strong> public information answers,
+          <strong>UMS chatbot:</strong> public information answers,
           privacy-aware refusals, and authenticated student/teacher timetable
           and assignment tools.
         </li>
@@ -1788,7 +1932,7 @@
         PostgreSQL stores a normalized relational model partitioned by Django
         app. The central
         <code>admin_app.Profile</code> extends Django's user identity with a
-        portal role. Role-detail models then hold student-, teacher-,
+        ums role. Role-detail models then hold student-, teacher-,
         executive-, librarian-, caterer-, technician-, accountant-, admin-, or
         applicant-specific attributes.
       </p>
@@ -1824,11 +1968,10 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
           <tbody>
             <tr>
               <td><code>admin_app</code></td>
-              <td>33</td>
+              <td>26</td>
               <td>
-                School, Center, Department, Unit, Program, Profile, Admin,
-                Semester, Course, CourseOffering, groups,
-                rooms/buildings/venues, hostels, imports, ClassMeeting,
+                Profile, Admin, Semester, Course, CourseOffering,
+                rooms/buildings/venues, hostels, ClassMeeting,
                 bookings, settings, exports, Notification, AuditLog, Election,
                 Vote.
               </td>
@@ -1840,6 +1983,13 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
                 Applicant, ApplicationIntake, ApplicationProgramme,
                 AdmissionApplication, ScholarshipApplication,
                 ApplicationDocument, ApplicationStatusEvent.
+              </td>
+            </tr>
+            <tr>
+              <td><code>auth_app</code></td>
+              <td>2</td>
+              <td>
+                JWT token utilities, password reset tokens.
               </td>
             </tr>
             <tr>
@@ -1873,10 +2023,20 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
             </tr>
             <tr>
               <td><code>accountant_app</code></td>
-              <td>5</td>
+              <td>13</td>
               <td>
                 Accountant, FinanceGatewayConfig, SubscriptionPlan,
-                Subscription, PaymentAttempt.
+                Subscription, PaymentAttempt, FeeCategory, StudentLedgerEntry,
+                StudentBalance, FinanceHold, StudentFine, FinePayment,
+                CompensationRequest.
+              </td>
+            </tr>
+            <tr>
+              <td><code>gradebook_app</code></td>
+              <td>6</td>
+              <td>
+                GradebookConfig, GradingScale, WeightedCategory,
+                GradebookEntry, GradebookComment, WeightedCategoryOverride.
               </td>
             </tr>
             <tr>
@@ -1889,10 +2049,12 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
             </tr>
             <tr>
               <td><code>librarian_app</code></td>
-              <td>9</td>
+              <td>15</td>
               <td>
                 Librarian, Shelf, Book, BookAcquisitionRequest, BookCopy,
-                Laptop, LibraryRoom, BorrowRequest, Loan.
+                Laptop, LibraryRoom, BorrowRequest, Loan, BookFine, BookLost,
+                LibrarySetting, BookReservation, LaptopReservation,
+                RoomReservation.
               </td>
             </tr>
             <tr>
@@ -1905,9 +2067,33 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               </td>
             </tr>
             <tr>
+              <td><code>quiz_app</code></td>
+              <td>14</td>
+              <td>
+                Quiz, QuizQuestion, QuizQuestionVersion, QuizOption,
+                QuizAttempt, QuizAnswer, QuizRandomRule,
+                QuestionBankCategory, QuestionBankQuestion,
+                QuestionBankVersion, QuestionBankOption,
+                QuizSchedule, QuizResult, QuizStatistics.
+              </td>
+            </tr>
+            <tr>
               <td><code>technician_app</code></td>
-              <td>3</td>
-              <td>Technician, HelpdeskTicket, HelpdeskTicketUpdate.</td>
+              <td>8</td>
+              <td>
+                Technician, HelpdeskTicket, HelpdeskTicketUpdate,
+                VenueBookingRequest, VenueBookingDecision,
+                VenueBookingConflict, VenueBookingNotification,
+                VenueBookingAudit.
+              </td>
+            </tr>
+            <tr>
+              <td><code>hr_app</code></td>
+              <td>7</td>
+              <td>
+                HR, EmployeeMaster, Position, EmploymentStatus,
+                EmploymentRecord, EmployeeDocument, HRStaffAccount.
+              </td>
             </tr>
           </tbody>
         </table>
@@ -1917,6 +2103,15 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
         notification table; it operates on
         <code>admin_app.Notification</code> and provides list, summary, read,
         fan-out, due-reminder, and background task services.
+      </p>
+      <p>
+        The <code>auth_app</code> provides JWT token issuance, password reset
+        token management, and authentication utilities shared across the
+        backend. The <code>gradebook_app</code> supports configurable grading
+        scales, weighted assessment categories, and gradebook entries linked to
+        course offerings. The <code>quiz_app</code> provides a full quiz
+        lifecycle with question banks, random rules, attempt tracking, and
+        per-student grading.
       </p>
 
       <h2 id="workflow-auth">6. Key end-to-end workflows</h2>
@@ -1965,7 +2160,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
         Public self-registration at the root auth endpoint is disabled for
         ordinary roles; admins create staff/student accounts, while applicants
         use the separate applicant registration flow. Email-verification
-        endpoints currently report that verification is not required for portal
+        endpoints currently report that verification is not required for ums
         accounts.
       </p>
 
@@ -2211,7 +2406,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
             </tr>
             <tr>
               <td><code>/api/finance/</code></td>
-              <td>Accountants and eligible portal users</td>
+              <td>Accountants and eligible ums users</td>
               <td>
                 Accountant dashboard, gateway settings, plans, purchases,
                 payment return/webhook, subscription records, printable cards,
@@ -2256,7 +2451,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/api/chatbot/</code></td>
               <td>Public visitors and authenticated users</td>
               <td>
-                Public AIU questions, directory email lookup, privacy refusals,
+                Public university questions, directory email lookup, privacy refusals,
                 and authenticated student/teacher timetable or deadline tools.
               </td>
             </tr>
@@ -2321,7 +2516,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><span class="badge badge-post">POST</span></td>
               <td><code>/api/chatbot/query</code></td>
               <td>
-                Answer a public or authenticated portal-assistant question.
+                Answer a public or authenticated ums-assistant question.
               </td>
             </tr>
             <tr>
@@ -2382,7 +2577,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
 
       <h2 id="frontend-map">8. Frontend route map</h2>
       <p>
-        The App Router contains 232 page files. Route groups do not appear in
+        The App Router contains 265 page files. Route groups do not appear in
         the browser URL; for example,
         <code>app/(student)/student/results/page.tsx</code> renders at
         <code>/student/results</code>.
@@ -2420,8 +2615,9 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td>
                 Dashboard, courses, registration, timetable, calendar,
                 assignments, attendance, results, exam slip, leave, elections,
-                evaluations, library books/laptops/rooms, bookings,
-                subscriptions, contacts, and helpdesk.
+                evaluations, gradebook, quizzes, library books/laptops/rooms,
+                bookings, fines, subscriptions, statistics, contacts,
+                helpdesk, and warden schedule.
               </td>
             </tr>
             <tr>
@@ -2429,8 +2625,9 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/teacher</code></td>
               <td>
                 Dashboard, courses, content/resources, assignments/submissions,
-                attendance, results, leave requests, timetable, calendar, venue
-                bookings, and subscriptions.
+                attendance, results, gradebook, quizzes, question bank,
+                leave requests, timetable, calendar, venue
+                bookings, statistics, and subscriptions.
               </td>
             </tr>
             <tr>
@@ -2447,8 +2644,10 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/accountant</code></td>
               <td>
                 Dashboard, payment gateway settings, subscription plans,
-                subscription records, student ledgers, fines, personal
-                subscription card, and notifications.
+                subscription records, student ledger (with sub-pages for
+                bulk-charge, fines, holds, payment-plans, and per-student
+                detail), fines, compensation requests, canteen oversight,
+                statistics, personal subscription card, and notifications.
               </td>
             </tr>
             <tr>
@@ -2456,7 +2655,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/hr</code></td>
               <td>
                 Dashboard, employee master records, positions, self-service HR
-                profile, subscriptions, and notifications.
+                profile, statistics, subscriptions, and notifications.
               </td>
             </tr>
             <tr>
@@ -2465,7 +2664,8 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td>
                 Dashboard, accounts/people, academics, semesters,
                 venues/bookings, hostels, canteen, elections, public content,
-                reports, subscriptions, settings, statistics, and audit. Class
+                reports, subscriptions, settings, statistics, backup/restore,
+                gradebook, HR management, UI customization, and audit. Class
                 timetable management is not an admin responsibility.
               </td>
             </tr>
@@ -2474,7 +2674,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/librarian</code></td>
               <td>
                 Dashboard, books, circulation, laptops, library rooms,
-                subscriptions, and notifications.
+                settings, statistics, subscriptions, and notifications.
               </td>
             </tr>
             <tr>
@@ -2482,14 +2682,15 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/caterer</code></td>
               <td>
                 Dashboard, student account lookup/transaction workflow,
-                notifications.
+                statistics, subscriptions, and notifications.
               </td>
             </tr>
             <tr>
               <td>Technician</td>
               <td><code>/technician</code></td>
               <td>
-                Dashboard, helpdesk workspace, subscriptions, notifications.
+                Dashboard, helpdesk workspace, elections, venue bookings,
+                statistics, subscriptions, and notifications.
               </td>
             </tr>
             <tr>
@@ -2525,9 +2726,9 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
         <div class="card">
           <h4>Operational policy middleware</h4>
           <ul>
-            <li>Maintenance mode can disable normal portal traffic.</li>
+            <li>Maintenance mode can disable normal ums traffic.</li>
             <li>Read-only mode blocks state-changing methods.</li>
-            <li>Individual portal modules can be disabled through settings.</li>
+            <li>Individual ums modules can be disabled through settings.</li>
             <li>
               Settings and audit endpoints remain available for
               recovery/control.
@@ -2582,7 +2783,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
 
       <h2 id="deployment">10. Deployment and operations</h2>
       <p>
-        The Compose project is named <code>portal</code> and contains seven
+        The Compose project is named <code>ums</code> and contains seven
         services:
       </p>
       <div class="table-container">
@@ -2684,7 +2885,7 @@ npm run build</code></pre>
 
       <h2 id="testing">11. Quality assurance and test coverage</h2>
       <p>
-        The repository contains 201 Django test methods across 32 backend test
+        The repository contains 292 Django test methods across 37 backend test
         modules. There are no frontend test/spec files at the time of this
         audit, so frontend confidence currently comes from TypeScript, ESLint,
         production builds, and manual browser verification.
@@ -2700,10 +2901,10 @@ npm run build</code></pre>
             <li>Applicant application and role access.</li>
             <li>Course registration and prerequisites.</li>
             <li>Assignments, resources, attendance, and notifications.</li>
-            <li>Results portal and final exam scheduling.</li>
+            <li>Results ums and final exam scheduling.</li>
             <li>
               Leave, elections, venue booking, canteen, library, ICT helpdesk,
-              finance subscriptions, and the portal chatbot.
+              finance subscriptions, and the ums chatbot.
             </li>
             <li>
               Semesters, settings, reports, public content, audit logs, calendar
@@ -2726,10 +2927,10 @@ python manage.py test caterer_app.tests
 python manage.py test technician_app.tests</code></pre>
           <p>
             The Docker backend image is the canonical dependency-complete test
-            environment. On 1 July 2026,
-            <code>docker exec portal_backend python manage.py check</code> and
+            environment. On 4 August 2026,
+            <code>docker exec ums_backend python manage.py check</code> and
             <code
-              >docker exec portal_backend python manage.py test
+              >docker exec ums_backend python manage.py test
               accountant_app.tests chatbot_app.tests</code
             >
             passed.
@@ -2778,13 +2979,12 @@ python manage.py test technician_app.tests</code></pre>
               <td>Current frontend quality gate</td>
               <td>
                 Docker TypeScript now passes and <code>qrcode.react</code> is
-                installed in the frontend container. ESLint still reports two
-                React effect/state errors and eight warnings.
+                installed in the frontend container. ESLint still reports
+                React effect/state errors and warnings.
               </td>
               <td>
-                Fix the remaining effect/state errors in the academic directory
-                and executive programmes pages, then rerun lint, typecheck, and
-                build.
+                Fix the remaining effect/state errors, then rerun lint,
+                typecheck, and build.
               </td>
             </tr>
             <tr>
@@ -2821,24 +3021,21 @@ python manage.py test technician_app.tests</code></pre>
             <tr>
               <td>Dependency hygiene</td>
               <td>
-                The current production dependency audit reports 12 frontend
-                vulnerabilities, including three high-severity findings. Knip
-                also reports two unused runtime dependencies, one unused dev
-                dependency, and two unlisted dependencies.
+                The current production dependency audit may report
+                vulnerabilities. Knip may report unused or unlisted
+                dependencies.
               </td>
               <td>
-                Upgrade patched packages, review or replace
-                <code>mina-scheduler</code>, declare direct dependencies, and
-                make dependency auditing a CI gate.
+                Upgrade patched packages, review dependencies, declare direct
+                dependencies, and make dependency auditing a CI gate.
               </td>
             </tr>
             <tr>
               <td>Working-tree reproducibility</td>
               <td>
-                The audited worktree contains 66 changed or untracked paths,
-                including 23 untracked paths, beyond commit
-                <code>9e07a57</code>. Graphify is useful navigation context, but
-                this document also covers live working-tree changes.
+                The repository has grown significantly with new apps (quiz_app,
+                gradebook_app, auth_app), expanded models, and 265 frontend
+                pages. All changes should be committed in coherent groups.
               </td>
               <td>
                 Commit changes in coherent feature/cleanup groups and regenerate
@@ -2851,7 +3048,7 @@ python manage.py test technician_app.tests</code></pre>
 
       <h2 id="feature-roadmap">13. Recommended feature roadmap</h2>
       <p>
-        The portal already covers a wide academic and campus-service surface.
+        The ums already covers a wide academic and campus-service surface.
         The next features should deepen institutional workflows and integration
         rather than adding isolated dashboards. The following order gives the
         strongest operational return.
@@ -2941,7 +3138,7 @@ python manage.py test technician_app.tests</code></pre>
                 career events, job board, graduate outcomes, and alumni records.
               </td>
               <td>
-                Adds the post-study lifecycle currently missing from the portal.
+                Adds the post-study lifecycle currently missing from the ums.
               </td>
             </tr>
             <tr>
@@ -2999,7 +3196,7 @@ python manage.py test technician_app.tests</code></pre>
               <td class="priority-medium">P2</td>
               <td>PWA/mobile and push notifications</td>
               <td>
-                Installable portal, offline schedule/calendar, push alerts,
+                Installable ums, offline schedule/calendar, push alerts,
                 camera-based QR check-in, and accessible mobile workflows.
               </td>
               <td>
@@ -3217,7 +3414,7 @@ python manage.py test technician_app.tests</code></pre>
           <ul>
             <li>
               Standardize pagination for manual <code>APIView</code> responses;
-              the codebase has 238 APIView classes and 689 manual
+              the codebase has 250+ APIView classes and 700+ manual
               <code>Response</code> constructions.
             </li>
             <li>
@@ -3414,7 +3611,7 @@ python manage.py test technician_app.tests</code></pre>
       <div class="callout success">
         <p>
           <strong>Overall assessment:</strong> this is no longer only an
-          academic portal prototype. The repository contains a broad multi-role
+          academic ums prototype. The repository contains a broad multi-role
           university operating platform with meaningful backend rules and
           several tested end-to-end service workflows. The largest remaining
           challenges are production security hardening, dependency/quality-gate
@@ -3425,7 +3622,7 @@ python manage.py test technician_app.tests</code></pre>
 
       <h2 id="frontend-inventory">17. Complete frontend page inventory</h2>
       <p>
-        This appendix explains all 232 current Next.js
+        This appendix explains all 265 current Next.js
         <code>app/**/page.tsx</code> routes. Every entry states what the page
         does, the pages that directly continue or support its workflow, the
         major functional pipeline it belongs to, and the type of frontend
@@ -3462,7 +3659,7 @@ python manage.py test technician_app.tests</code></pre>
         </button>
       </div>
       <p class="inventory-summary" id="pageInventorySummary">
-        Showing all 232 pages in 10 route groups.
+        Showing all 265 pages in 12 route groups.
       </p>
       <div class="page-inventory" id="frontendPageInventory"></div>
       <p class="inventory-empty" id="pageInventoryEmpty">
@@ -3479,7 +3676,7 @@ python manage.py test technician_app.tests</code></pre>
 
       <h2 id="backend-inventory">18. Complete backend URL inventory</h2>
       <p>
-        This appendix lists 326 first-party backend URL declarations in the
+        This appendix lists 373 first-party backend URL declarations in the
         current source, including slash/no-slash compatibility aliases. API
         paths use their browser-facing <code>/api</code> prefix; Nginx removes
         that prefix before forwarding to Django. The Django admin remains
@@ -3491,7 +3688,7 @@ python manage.py test technician_app.tests</code></pre>
 
       <div class="callout">
         <p>
-          <strong>Why backend URLs (326) outnumber frontend routes (232):</strong>
+          <strong>Why backend URLs (373) outnumber frontend routes (265):</strong>
           The REST API is granular by design—one frontend page often consumes
           multiple API endpoints (e.g., <code>/student/assignments</code> lists
           all assignments while <code>/student/assignments/&lt;id&gt;</code>,
@@ -3500,17 +3697,17 @@ python manage.py test technician_app.tests</code></pre>
           resource model, action endpoints (submit, approve, publish, deduct),
           and trailing-slash variants, all of which inflate the URL count. The
           frontend, by contrast, groups related functionality under a single
-            page route with dynamic segments. New backend apps (notably
-          <code>quiz_app</code> with 15 URLs) and expanded features in
-          accountant (fines), librarian (fine/lost actions), and notifications
-          account for the increase from the previous 282/224 counts.
+            page route with dynamic segments. Expanded features in
+          accountant (ledger, fines, compensation), librarian (fine/lost/reservation actions),
+          quiz (15 URLs), gradebook, notifications,
+          and technician (venue booking) account for the increase from the previous 326/232 counts.
         </p>
       </div>
 
       <details class="route-group">
         <summary>
           Core routing, authentication and Django admin
-          <span>22 URL declarations</span>
+          <span>28 URL declarations</span>
         </summary>
         <pre><code>/super_admin/                                     (Django admin)
 /api/auth/register                                 (endpoint)
@@ -3911,7 +4108,7 @@ python manage.py test technician_app.tests</code></pre>
       </details>
 
       <p class="footer">
-        AIU Unified Portal repository documentation · Updated 1 July 2026 ·
+        University Management System repository documentation · Updated 4 August 2026 ·
         Generated from direct source inspection, static checks, and
         Graphify-assisted navigation.
       </p>
@@ -3956,6 +4153,7 @@ python manage.py test technician_app.tests</code></pre>
             "/events",
             "/forgot-password",
             "/login",
+            "/maintenance",
             "/news",
             "/notifications",
             "/official-links",
@@ -3983,6 +4181,7 @@ python manage.py test technician_app.tests</code></pre>
             "/apply/login",
             "/apply/notifications",
             "/apply/register",
+            "/apply/statistics",
             "/apply/status",
           ],
         },
@@ -4017,6 +4216,7 @@ python manage.py test technician_app.tests</code></pre>
             "/student/evaluations/[surveyId]",
             "/student/exam-slip",
             "/student/fines",
+            "/student/gradebook",
             "/student/ict-helpdesk",
             "/student/quizzes",
             "/student/quizzes/[quizId]",
@@ -4039,6 +4239,7 @@ python manage.py test technician_app.tests</code></pre>
             "/student/results/gpa",
             "/student/results/semester",
             "/student/results/transcript",
+            "/student/statistics",
             "/student/subscriptions",
             "/student/timetable",
             "/student/timetable/today",
@@ -4071,6 +4272,7 @@ python manage.py test technician_app.tests</code></pre>
             "/teacher/courses/current",
             "/teacher/courses/previous",
             "/teacher/dashboard",
+            "/teacher/gradebook",
             "/teacher/leave-requests",
             "/teacher/notifications",
             "/teacher/quizzes",
@@ -4080,6 +4282,7 @@ python manage.py test technician_app.tests</code></pre>
             "/teacher/results/completed",
             "/teacher/results/draft",
             "/teacher/results/submit",
+            "/teacher/statistics",
             "/teacher/subscriptions",
             "/teacher/timetable",
             "/teacher/timetable/today",
@@ -4122,12 +4325,21 @@ python manage.py test technician_app.tests</code></pre>
           name: "Accountant",
           routes: [
             "/accountant",
+            "/accountant/canteen",
+            "/accountant/compensation-requests",
             "/accountant/dashboard",
             "/accountant/fines",
             "/accountant/gateway",
+            "/accountant/ledger",
+            "/accountant/ledger/[studentId]",
+            "/accountant/ledger/bulk-charge",
+            "/accountant/ledger/fines",
+            "/accountant/ledger/holds",
+            "/accountant/ledger/payment-plans",
             "/accountant/my-subscriptions",
             "/accountant/notifications",
             "/accountant/plans",
+            "/accountant/statistics",
             "/accountant/subscriptions",
           ],
         },
@@ -4143,12 +4355,14 @@ python manage.py test technician_app.tests</code></pre>
             "/admin/academics/schools",
             "/admin/academics/units",
             "/admin/audit-log",
+            "/admin/backup-restore",
             "/admin/canteen",
             "/admin/centres",
             "/admin/create-account",
             "/admin/create-account/accountant",
             "/admin/create-account/caterer",
             "/admin/create-account/executive",
+            "/admin/create-account/hr",
             "/admin/create-account/librarian",
             "/admin/create-account/student",
             "/admin/create-account/teacher",
@@ -4157,14 +4371,17 @@ python manage.py test technician_app.tests</code></pre>
             "/admin/elections",
             "/admin/elections/candidates",
             "/admin/elections/results",
+            "/admin/gradebook",
             "/admin/hostels",
             "/admin/imports",
             "/admin/manage",
             "/admin/manage/accountants",
             "/admin/manage/applicants",
+            "/admin/manage/applicants/[applicantId]",
             "/admin/manage/caterers",
             "/admin/manage/executives",
             "/admin/manage/executives/[executiveId]",
+            "/admin/manage/hr",
             "/admin/manage/librarians",
             "/admin/manage/students",
             "/admin/manage/students/[studentId]",
@@ -4187,6 +4404,7 @@ python manage.py test technician_app.tests</code></pre>
             "/admin/settings",
             "/admin/statistics",
             "/admin/subscriptions",
+            "/admin/ui-customization",
             "/admin/venue-bookings",
             "/admin/venues",
           ],
@@ -4201,21 +4419,34 @@ python manage.py test technician_app.tests</code></pre>
             "/librarian/laptops",
             "/librarian/notifications",
             "/librarian/rooms",
+            "/librarian/settings",
+            "/librarian/statistics",
             "/librarian/subscriptions",
           ],
         },
         {
           name: "Caterer",
-          routes: ["/caterer", "/caterer/dashboard", "/caterer/notifications"],
+          routes: [
+            "/caterer",
+            "/caterer/dashboard",
+            "/caterer/notifications",
+            "/caterer/statistics",
+            "/caterer/subscriptions",
+          ],
         },
         {
           name: "Technician",
           routes: [
             "/technician",
             "/technician/dashboard",
+            "/technician/elections",
+            "/technician/elections/candidates",
+            "/technician/elections/results",
             "/technician/helpdesk",
             "/technician/notifications",
+            "/technician/statistics",
             "/technician/subscriptions",
+            "/technician/venue-bookings",
           ],
         },
       ];
@@ -4356,7 +4587,7 @@ python manage.py test technician_app.tests</code></pre>
         {
           "/": {
             purpose:
-              "Acts as the public homepage, combining institutional highlights, school and centre discovery, intake messaging, quick services, application calls to action, and the hand-off into authenticated portal roles.",
+              "Acts as the public homepage, combining institutional highlights, school and centre discovery, intake messaging, quick services, application calls to action, and the hand-off into authenticated ums roles.",
             related: [
               "/apply",
               "/programmes",
@@ -4390,7 +4621,7 @@ python manage.py test technician_app.tests</code></pre>
             "Lists academic and support centres from public API data and routes visitors into centre-specific detail pages handled by the catch-all route.",
           "/contact": {
             purpose:
-              "Shows public contact and location information and provides clear next steps toward applying or signing into the portal.",
+              "Shows public contact and location information and provides clear next steps toward applying or signing into the ums.",
             related: ["/apply", "/login", "/official-links"],
           },
           "/departments": {
@@ -4405,17 +4636,23 @@ python manage.py test technician_app.tests</code></pre>
           },
           "/events": {
             purpose:
-              "Displays public events, campus highlights, and calendar notices, with cross-links to news and the portal overview.",
+              "Displays public events, campus highlights, and calendar notices, with cross-links to news and the ums overview.",
             related: ["/news", "/ums-overview", "/[...slug]"],
+          },
+          "/maintenance": {
+            purpose:
+              "Displays a maintenance-mode notice when the platform is temporarily unavailable for scheduled upgrades or emergency interventions.",
+            related: ["/login"],
+            surface: "Public notice",
           },
           "/news": {
             purpose:
-              "Lists current public news and AIUNIQUE-style campus stories and sends article selections to dynamic detail routes.",
+              "Lists current public news and campus stories and sends article selections to dynamic detail routes.",
             related: ["/events", "/[...slug]", "/"],
           },
           "/official-links": {
             purpose:
-              "Collects authoritative external and internal university resources while preserving clear routes back to services and portal login.",
+              "Collects authoritative external and internal university resources while preserving clear routes back to services and ums login.",
             related: ["/services", "/login", "/contact"],
           },
           "/portal-overview": {
@@ -4426,12 +4663,12 @@ python manage.py test technician_app.tests</code></pre>
           },
           "/ums-overview": {
             purpose:
-              "Explains the role-based portal, its protected boundaries, and its main academic workflows before a user signs in, using the current UMS branding.",
+              "Explains the role-based ums, its protected boundaries, and its main academic workflows before a user signs in, using the current UMS branding.",
             related: ["/login", "/services", "/apply"],
           },
           "/programmes": {
             purpose:
-              "Organizes programmes by school and centre, showing how public programme discovery connects to academic ownership inside the portal.",
+              "Organizes programmes by school and centre, showing how public programme discovery connects to academic ownership inside the ums.",
             related: ["/schools", "/centres", "/[...slug]"],
           },
           "/programs": {
@@ -4442,12 +4679,12 @@ python manage.py test technician_app.tests</code></pre>
           },
           "/schools": {
             purpose:
-              "Lists AIU schools and their programme portfolios, with each school opening through a dynamic public detail page.",
+              "Lists configured schools and their program portfolios, with each school opening through a dynamic public detail page.",
             related: ["/programmes", "/centres", "/[...slug]"],
           },
           "/services": {
             purpose:
-              "Summarizes public-facing university services and connects service discovery to the portal overview and relevant managed pages.",
+              "Summarizes public-facing university services and connects service discovery to the ums overview and relevant managed pages.",
             related: ["/ums-overview", "/official-links", "/student-life"],
           },
           "/student-life": {
@@ -4470,7 +4707,7 @@ python manage.py test technician_app.tests</code></pre>
         {
           "/login": {
             purpose:
-              "Authenticates portal users, preserves an optional next destination, stores the session tokens, and redirects each recognized role into its protected area.",
+              "Authenticates ums users, preserves an optional next destination, stores the session tokens, and redirects each recognized role into its protected area.",
             related: ["/forgot-password", "/profile", "/apply/login"],
           },
           "/forgot-password": {
@@ -5408,7 +5645,7 @@ python manage.py test technician_app.tests</code></pre>
         {
           "/payment-return": {
             purpose:
-              "Receives the user-facing payment outcome after the external gateway redirects back to the portal, then guides the user back into the authenticated portal.",
+              "Receives the user-facing payment outcome after the external gateway redirects back to the ums, then guides the user back into the authenticated ums.",
             related: [
               "/login",
               "/student/subscriptions",
@@ -5460,7 +5697,7 @@ python manage.py test technician_app.tests</code></pre>
           "/hr/dashboard":
             "Summarizes employee master records, active/probation counts, and configured HR positions.",
           "/hr/employees":
-            "Lets HR create employee master records linked to existing portal profiles and assign positions, status, joining date, and work email.",
+            "Lets HR create employee master records linked to existing ums profiles and assign positions, status, joining date, and work email.",
           "/hr/positions":
             "Lets HR maintain position codes, titles, employment types, and grades.",
           "/hr/my-profile":
@@ -5468,7 +5705,7 @@ python manage.py test technician_app.tests</code></pre>
           "/hr/subscriptions":
             "Uses the shared subscription page so HR staff can purchase or print their own eligible gym subscription card.",
           "/hr/notifications":
-            "Shows HR workflow alerts and shared portal notifications.",
+            "Shows HR workflow alerts and shared ums notifications.",
           "/librarian/subscriptions":
             "Uses the shared subscription page so librarians can purchase or print their own eligible gym subscription card.",
           "/student/fines":
@@ -5494,7 +5731,7 @@ python manage.py test technician_app.tests</code></pre>
         "Account administration",
         {
           "/admin/create-account":
-            "Provides the role-selection and general account-provisioning entry point for creating protected portal identities.",
+            "Provides the role-selection and general account-provisioning entry point for creating protected ums identities.",
           "/admin/create-account/student":
             "Creates a student user and student profile with the academic identity fields required by student workflows.",
           "/admin/create-account/teacher":
@@ -5604,7 +5841,7 @@ python manage.py test technician_app.tests</code></pre>
           "/admin/semesters":
             "Creates and activates academic semesters and registration/result periods that drive schedules, offerings, and student records.",
           "/admin/settings":
-            "Maintains platform-level settings and policy values consumed by protected portal workflows.",
+            "Maintains platform-level settings and policy values consumed by protected ums workflows.",
         },
       );
 
@@ -5737,6 +5974,79 @@ python manage.py test technician_app.tests</code></pre>
         {
           "/technician/helpdesk":
             "Lists ICT tickets, supports assignment and status transitions, records progress updates, and closes resolved student support requests.",
+        },
+      );
+
+      addPageDocs(
+        "configuration",
+        ["/admin/backup-restore", "/admin/ui-customization"],
+        "Admin configuration",
+        {
+          "/admin/backup-restore":
+            "Provides database backup and restore operations for disaster recovery and data protection.",
+          "/admin/ui-customization":
+            "Lets administrators customize platform appearance, branding, and UI theme settings.",
+        },
+      );
+
+      addPageDocs(
+        "reporting",
+        [
+          "/student/statistics",
+          "/teacher/statistics",
+          "/accountant/statistics",
+          "/caterer/statistics",
+          "/hr/statistics",
+          "/librarian/statistics",
+          "/technician/statistics",
+          "/apply/statistics",
+        ],
+        "Role statistics views",
+        {
+          "/student/statistics":
+            "Displays student-level academic and activity metrics with visual summaries for personal performance review.",
+          "/teacher/statistics":
+            "Shows teacher-level course, attendance, and grading metrics for workload and performance review.",
+          "/accountant/statistics":
+            "Displays finance-level subscription, payment, and fine metrics for operational monitoring.",
+          "/caterer/statistics":
+            "Shows canteen-level transaction and allowance metrics for operational monitoring.",
+          "/hr/statistics":
+            "Displays HR-level employee and position metrics for workforce monitoring.",
+          "/librarian/statistics":
+            "Shows library-level circulation, loan, and asset metrics for operational monitoring.",
+          "/technician/statistics":
+            "Displays ICT helpdesk-level ticket and resolution metrics for support monitoring.",
+          "/apply/statistics":
+            "Shows applicant-level application and admission metrics for intake monitoring.",
+        },
+      );
+
+      addPageDocs(
+        "gradebook",
+        [
+          "/admin/gradebook",
+          "/teacher/gradebook",
+          "/student/gradebook",
+        ],
+        "Gradebook workspace",
+        {
+          "/admin/gradebook":
+            "Lets administrators configure grading scales, weighted assessment categories, and gradebook settings for course offerings.",
+          "/teacher/gradebook":
+            "Lets teachers view and manage gradebook entries, weighted categories, and student assessment records for assigned courses.",
+          "/student/gradebook":
+            "Shows the student's gradebook entries, weighted assessment breakdown, and current academic standing for enrolled courses.",
+        },
+      );
+
+      addPageDocs(
+        "library",
+        ["/librarian/settings"],
+        "Librarian settings",
+        {
+          "/librarian/settings":
+            "Lets librarians configure library policies, loan periods, fine rates, and operational settings.",
         },
       );
 

@@ -1,5 +1,5 @@
-import { notFound } from "next/navigation"
+import { VenueBookingPage } from "@/components/venue-booking/venue-booking-page"
 
 export default function Page() {
-  notFound()
+  return <VenueBookingPage role="admin" />
 }

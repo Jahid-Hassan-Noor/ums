@@ -6,6 +6,12 @@ from django.utils import timezone
 from rest_framework import status
 
 from admin_app import models as admin_models
+from core.common.academic_policy import (
+    evaluation_activity_label,
+    registration_credit_policy,
+    registration_passed_course_retake_allowed,
+    registration_prerequisites_required,
+)
 from core.common.profiles import (
     get_student_profile,
     profile_display_name,
@@ -29,15 +35,43 @@ MINIMUM_PASSING_GRADE_POINTS = Decimal("2.00")
 MINIMUM_PASSING_SCORE = Decimal("50.00")
 
 
-def calendar_group_for_student(student):
-    center = getattr(student, "center", None)
-    if not center:
-        return admin_models.Semester.CALENDAR_UNDERGRADUATE
-    code = center.code.upper()
-    if code in {"CFGS", "CGS"}:
-        return admin_models.Semester.CALENDAR_FOUNDATION
-    if code == "LC":
+def calendar_group_for_center(center):
+    if not center or not center.is_academic_center():
         return None
+    if center.uses_semester_calendar():
+        return center.effective_semester_calendar_group()
+    return None
+
+
+def calendar_group_for_program(program):
+    if not program:
+        return None
+    center_group = calendar_group_for_center(getattr(program, "center", None))
+    if center_group or getattr(program, "center_id", None):
+        return center_group
+    if getattr(program, "school_id", None):
+        return admin_models.Semester.CALENDAR_UNDERGRADUATE
+    return None
+
+
+def calendar_group_for_student(student):
+    center_group = calendar_group_for_center(getattr(student, "center", None))
+    if center_group or getattr(student, "center_id", None):
+        return center_group
+
+    program_group = calendar_group_for_program(getattr(student, "program", None))
+    if program_group or getattr(student, "program_id", None):
+        return program_group
+
+    department = getattr(student, "department", None)
+    center_group = calendar_group_for_center(getattr(department, "center", None))
+    if center_group or getattr(department, "center_id", None):
+        return center_group
+    if getattr(department, "school_id", None):
+        return admin_models.Semester.CALENDAR_UNDERGRADUATE
+
+    if getattr(student, "school_id", None):
+        return admin_models.Semester.CALENDAR_UNDERGRADUATE
     return admin_models.Semester.CALENDAR_UNDERGRADUATE
 
 
@@ -93,6 +127,7 @@ def student_offerings(student, semester=None):
         .prefetch_related(
             "course__prerequisites",
             "eligible_schools",
+            "eligible_centers",
             "tutorial_groups__lab_groups",
         )
         .filter(is_active=True)
@@ -104,14 +139,20 @@ def student_offerings(student, semester=None):
     scope = Q()
     if student.program_id:
         scope |= Q(course__program=student.program)
-    if student.school_id:
+    student_school = getattr(student, "school", None) or getattr(getattr(student, "program", None), "school", None)
+    student_center = getattr(student, "center", None) or getattr(getattr(student, "program", None), "center", None)
+    if student_school:
         scope |= (
-            Q(course__school=student.school)
-            | Q(course__program__school=student.school)
-            | Q(eligible_schools=student.school)
+            Q(course__school=student_school)
+            | Q(course__program__school=student_school)
+            | Q(eligible_schools=student_school)
         )
-    if student.center_id:
-        scope |= Q(course__center=student.center) | Q(course__program__center=student.center)
+    if student_center:
+        scope |= (
+            Q(course__center=student_center)
+            | Q(course__program__center=student_center)
+            | Q(eligible_centers=student_center)
+        )
     if not scope:
         return qs.none()
     return qs.filter(scope).distinct()
@@ -203,8 +244,9 @@ def serialize_group_options(offering):
     return groups
 
 
-def serialize_offering_for_registration(offering):
+def serialize_offering_for_registration(offering, student=None):
     seats = offering_seats(offering)
+    credit_policy = registration_credit_policy(student=student, semester=offering.semester)
     return {
         "id": offering.id,
         "course": {
@@ -228,6 +270,7 @@ def serialize_offering_for_registration(offering):
             "semester_type": offering.semester.semester_type,
             "max_credit_hours": offering.semester.max_credit_hours,
         },
+        "registration_policy": credit_policy,
         "section": offering.section,
         "capacity": offering.capacity,
         "used": seats["used"],
@@ -436,10 +479,11 @@ def register_student(
             course_codes = ", ".join(
                 survey["course_code"] for survey in evaluation_gate["surveys"]
             )
+            label = evaluation_activity_label().lower()
             return (
                 None,
                 (
-                    "Complete all required SEC-SET course evaluations before registering "
+                    f"Complete all required {label} activities before registering "
                     f"for the next semester. Pending: {course_codes}."
                 ),
                 status.HTTP_403_FORBIDDEN,
@@ -447,7 +491,7 @@ def register_student(
         if not student_offerings(student, semester).filter(pk=offering.pk).exists():
             return (
                 None,
-                "This course offering is not available to students from your school or programme.",
+                "This course offering is not available to students from your school, centre, or programme.",
                 status.HTTP_403_FORBIDDEN,
             )
 
@@ -477,7 +521,7 @@ def register_student(
         )
 
     passed_record = passed_course_record(student, offering.course, semester)
-    if passed_record:
+    if passed_record and not registration_passed_course_retake_allowed():
         return (
             None,
             (
@@ -487,7 +531,7 @@ def register_student(
             status.HTTP_409_CONFLICT,
         )
 
-    missing = missing_prerequisites(student, offering.course)
+    missing = missing_prerequisites(student, offering.course) if registration_prerequisites_required() else []
     if missing:
         courses = ", ".join(f"{course.code} ({course.title})" for course in missing)
         return None, f"Complete the following prerequisite courses before registering: {courses}.", status.HTTP_400_BAD_REQUEST
@@ -524,10 +568,11 @@ def register_student(
             return None, capacity_error, status.HTTP_409_CONFLICT
 
     total_credits = current_credit_hours(student, semester, exclude_offering=offering) + offering.course.credits
-    if not allow_credit_override and total_credits > semester.max_credit_hours:
+    credit_policy = registration_credit_policy(student=student, semester=semester)
+    if not allow_credit_override and total_credits > credit_policy["maximum"]:
         return (
             None,
-            f"Registration would exceed the maximum {semester.max_credit_hours} credit hours for this semester.",
+            f"Registration would exceed the maximum {credit_policy['maximum']} credit hours for this semester.",
             status.HTTP_400_BAD_REQUEST,
         )
 

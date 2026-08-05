@@ -36,7 +36,7 @@ function titleFromPath(pathname: string | null) {
     librarian: "Librarian",
     caterer: "Caterer",
     technician: "Technician",
-    "ict-helpdesk": "ICT Helpdesk",
+    "ict-helpdesk": "Service Desk",
     "schools-centers": "Schools & Centers",
     profile: "Profile",
     notifications: "Notifications",

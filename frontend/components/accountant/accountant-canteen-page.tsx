@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
+import { formatUmsMoney } from "@/lib/ums-settings"
 
 type Bonus = {
   month: string
@@ -52,11 +54,11 @@ type StudentAccount = {
   }>
 }
 
-function money(value: string) {
-  return `RM ${Number(value || 0).toFixed(2)}`
-}
-
 export function AccountantCanteenPage() {
+  const settings = usePublicUmsSettings()
+  const diningLabel = settings.module_labels.canteen || settings.policies.dining.label || "Dining"
+  const diningLabelLower = diningLabel.toLowerCase()
+  const currencyCode = settings.localization.currency_code || "USD"
   const [data, setData] = useState<ResponseData | null>(null)
   const [monthlyAllowance, setMonthlyAllowance] = useState("50.00")
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
@@ -78,10 +80,10 @@ export function AccountantCanteenPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void loadData().catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load canteen settings."))
+      void loadData().catch((caught) => setError(caught instanceof Error ? caught.message : `Unable to load ${diningLabelLower} settings.`))
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [diningLabelLower])
 
   async function save(payload: Record<string, string>) {
     setSaving(true)
@@ -89,10 +91,10 @@ export function AccountantCanteenPage() {
     setSuccess("")
     try {
       await apiFetch("/finance/canteen", { method: "PATCH", body: JSON.stringify(payload) })
-      setSuccess("Canteen allowance settings updated successfully.")
+      setSuccess(`${diningLabel} allowance settings updated successfully.`)
       await loadData()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to update canteen settings.")
+      setError(caught instanceof Error ? caught.message : `Unable to update ${diningLabelLower} settings.`)
     } finally {
       setSaving(false)
     }
@@ -138,10 +140,10 @@ export function AccountantCanteenPage() {
 
   return (
     <div className="flex min-h-svh flex-col bg-muted/25">
-      <Header breadcrumbItems={[{ href: "/accountant", title: "Accountant" }, { href: "/accountant/canteen", title: "Canteen Allowance" }]} />
+      <Header breadcrumbItems={[{ href: "/accountant", title: "Accountant" }, { href: "/accountant/canteen", title: `${diningLabel} Allowance` }]} />
       <main className="flex-1 space-y-6 px-4 pb-8 pt-4 sm:px-6">
         <section className="border-b border-border/70 pb-5">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Canteen Allowance</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{diningLabel} Allowance</h1>
           <p className="mt-2 text-sm text-muted-foreground">Manage monthly student allowance, monthly extras, and audited manual balance additions.</p>
         </section>
         {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
@@ -151,9 +153,9 @@ export function AccountantCanteenPage() {
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 ["Eligible Students", String(data.current.eligible_students)],
-                ["Current Allocation", money(data.settings.current_allocation)],
-                ["Current Month Spent", money(data.current.spent)],
-                ["Manual Additions", money(data.current.manual_additions)],
+                ["Current Allocation", formatUmsMoney(data.settings.current_allocation, settings)],
+                ["Current Month Spent", formatUmsMoney(data.current.spent, settings)],
+                ["Manual Additions", formatUmsMoney(data.current.manual_additions, settings)],
               ].map(([label, value]) => (
                 <Card key={label}>
                   <CardHeader>
@@ -171,7 +173,7 @@ export function AccountantCanteenPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="monthly_allowance">Amount (RM)</Label>
+                    <Label htmlFor="monthly_allowance">Amount ({currencyCode})</Label>
                     <Input id="monthly_allowance" type="number" min="0" step="0.01" value={monthlyAllowance} onChange={(event) => setMonthlyAllowance(event.target.value)} />
                   </div>
                   <Button disabled={saving} onClick={() => void save({ monthly_allowance: monthlyAllowance })}><Save className="size-4" /> Save Monthly Amount</Button>
@@ -185,7 +187,7 @@ export function AccountantCanteenPage() {
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2"><Label htmlFor="month">Month</Label><Input id="month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></div>
-                    <div className="space-y-2"><Label htmlFor="extra">Extra amount (RM)</Label><Input id="extra" type="number" min="0" step="0.01" value={extraAmount} onChange={(event) => setExtraAmount(event.target.value)} /></div>
+                    <div className="space-y-2"><Label htmlFor="extra">Extra amount ({currencyCode})</Label><Input id="extra" type="number" min="0" step="0.01" value={extraAmount} onChange={(event) => setExtraAmount(event.target.value)} /></div>
                   </div>
                   <div className="space-y-2"><Label htmlFor="occasion">Occasion</Label><Input id="occasion" placeholder="Eid allowance" value={occasion} onChange={(event) => setOccasion(event.target.value)} /></div>
                   <Button disabled={saving} onClick={() => void save({ month: `${month}-01`, extra_amount: extraAmount, occasion })}><Save className="size-4" /> Save Monthly Extra</Button>
@@ -206,13 +208,13 @@ export function AccountantCanteenPage() {
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="space-y-3 rounded-lg border p-4">
                       <div><p className="font-semibold">{studentAccount.student.name}</p><p className="text-sm text-muted-foreground">{studentAccount.student.student_id} - {studentAccount.student.enrollment_status || "Active"}</p></div>
-                      <div className="flex justify-between text-sm"><span>Monthly allocation</span><strong>{money(studentAccount.allowance_amount)}</strong></div>
-                      <div className="flex justify-between text-sm"><span>Accountant additions</span><strong>{money(studentAccount.adjustment_amount)}</strong></div>
-                      <div className="flex justify-between text-sm"><span>Spent</span><strong>{money(studentAccount.spent_amount)}</strong></div>
-                      <div className="flex justify-between border-t pt-3"><span>Current balance</span><strong>{money(studentAccount.balance)}</strong></div>
+                      <div className="flex justify-between text-sm"><span>Monthly allocation</span><strong>{formatUmsMoney(studentAccount.allowance_amount, settings)}</strong></div>
+                      <div className="flex justify-between text-sm"><span>Accountant additions</span><strong>{formatUmsMoney(studentAccount.adjustment_amount, settings)}</strong></div>
+                      <div className="flex justify-between text-sm"><span>Spent</span><strong>{formatUmsMoney(studentAccount.spent_amount, settings)}</strong></div>
+                      <div className="flex justify-between border-t pt-3"><span>Current balance</span><strong>{formatUmsMoney(studentAccount.balance, settings)}</strong></div>
                     </div>
                     <form className="space-y-3 rounded-lg border p-4" onSubmit={addStudentBalance}>
-                      <div className="space-y-2"><Label htmlFor="manual_amount">Amount to add (RM)</Label><Input id="manual_amount" type="number" min="0.01" step="0.01" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} required /></div>
+                      <div className="space-y-2"><Label htmlFor="manual_amount">Amount to add ({currencyCode})</Label><Input id="manual_amount" type="number" min="0.01" step="0.01" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} required /></div>
                       <div className="space-y-2"><Label htmlFor="manual_reason">Reason</Label><Input id="manual_reason" placeholder="Emergency meal support" value={manualReason} onChange={(event) => setManualReason(event.target.value)} required /></div>
                       <Button type="submit" disabled={saving}><Save className="size-4" /> Add Student Balance</Button>
                     </form>
@@ -224,7 +226,7 @@ export function AccountantCanteenPage() {
                     {studentAccount.adjustments.map((adjustment) => (
                       <div key={adjustment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
                         <span>{adjustment.reason} - {adjustment.added_by_name} - {new Date(adjustment.created_at).toLocaleString()}</span>
-                        <strong>{money(adjustment.amount)}</strong>
+                        <strong>{formatUmsMoney(adjustment.amount, settings)}</strong>
                       </div>
                     ))}
                   </div>
@@ -237,7 +239,7 @@ export function AccountantCanteenPage() {
                 {data.bonuses.length ? data.bonuses.map((bonus) => (
                   <div key={bonus.month} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
                     <span className="font-medium">{bonus.month.slice(0, 7)} - {bonus.occasion || "Monthly extra"}</span>
-                    <span>{money(bonus.extra_amount)}</span>
+                    <span>{formatUmsMoney(bonus.extra_amount, settings)}</span>
                   </div>
                 )) : <p className="text-sm text-muted-foreground">No monthly extras configured.</p>}
               </CardContent>

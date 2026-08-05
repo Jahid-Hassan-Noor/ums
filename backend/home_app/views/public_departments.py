@@ -15,7 +15,6 @@ class PublicDepartments(APIView):
         )
         support_centres = (
             models.Center.objects.filter(is_active=True)
-            .exclude(code__in=["ADMIN", "CDAE", "CFGS", "CGS", "LC"])
             .exclude(slug__isnull=True)
             .exclude(slug="")
             .order_by("name")

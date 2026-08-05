@@ -102,11 +102,14 @@ export function ExecutiveProgramsPage() {
   }
 
   useEffect(() => {
-    loadData()
-      .catch((caught) => {
-        setError(caught instanceof Error ? caught.message : "Unable to load programmes.")
-      })
-      .finally(() => setIsLoading(false))
+    const timer = window.setTimeout(() => {
+      void loadData()
+        .catch((caught) => {
+          setError(caught instanceof Error ? caught.message : "Unable to load programmes.")
+        })
+        .finally(() => setIsLoading(false))
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const filteredProgrammes = useMemo(() => {

@@ -28,6 +28,7 @@ type StudentSurvey = {
 }
 
 type EvaluationsResponse = {
+  evaluation_label?: string
   summary: { total: number; pending: number; submitted: number }
   surveys: StudentSurvey[]
 }
@@ -42,6 +43,7 @@ export default function StudentEvaluationsPage() {
   const [data, setData] = useState<EvaluationsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const evaluationLabel = data?.evaluation_label ?? "Course Evaluation"
 
   useEffect(() => {
     let active = true
@@ -65,14 +67,14 @@ export default function StudentEvaluationsPage() {
       <Header
         breadcrumbItems={[
           { href: "/student", title: "Student" },
-          { href: "/student/evaluations", title: "Course Evaluations" },
+          { href: "/student/evaluations", title: `${evaluationLabel}s` },
         ]}
       />
       <main className="flex-1 space-y-6 px-4 pb-8 pt-4 sm:px-6">
         <section className="border-b border-border/70 pb-5">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Course Content and Teaching Evaluations</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{evaluationLabel}s</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Complete SEC-SET feedback for the courses you are taking. Required evaluations must be
+            Complete feedback for the courses you are taking. Required evaluations must be
             submitted before you can register courses for the next semester.
           </p>
         </section>
@@ -100,7 +102,7 @@ export default function StudentEvaluationsPage() {
             ) : (
               <div className="flex gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                 <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
-                <div><p className="font-semibold">All assigned evaluations are complete</p><p className="mt-1">There is no SEC-SET hold on your next-semester registration.</p></div>
+                <div><p className="font-semibold">All assigned evaluations are complete</p><p className="mt-1">There is no {evaluationLabel.toLowerCase()} hold on your next-semester registration.</p></div>
               </div>
             )}
 

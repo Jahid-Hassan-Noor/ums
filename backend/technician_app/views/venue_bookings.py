@@ -6,7 +6,10 @@ from admin_app.models import VenueBookingRequest
 from auth_app.permissions import IsTechnicianRole
 from technician_app.venue_booking_service import (
     BookingConflictError,
+    BookingPolicyError,
+    booking_policy_payload,
     bookings_queryset,
+    can_review_venue_bookings,
     decide_booking,
     serialize_booking,
     venues_payload,
@@ -17,9 +20,15 @@ class TechnicianVenueBookings(APIView):
     permission_classes = [IsTechnicianRole]
 
     def get(self, request):
+        if not can_review_venue_bookings(request.user.profile):
+            return Response(
+                {"detail": "Venue booking requests are not assigned to technicians."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         return Response(
             {
                 "role": "technician",
+                "policy": booking_policy_payload(),
                 "venues": venues_payload(),
                 "requests": [serialize_booking(booking) for booking in bookings_queryset()],
             }
@@ -44,6 +53,8 @@ class TechnicianVenueBookingDecision(APIView):
             booking = decide_booking(pk, request.user.profile, decision, rejection_reason)
         except BookingConflictError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except BookingPolicyError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 

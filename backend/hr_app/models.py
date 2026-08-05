@@ -100,7 +100,7 @@ class Employee(models.Model):
     reporting_manager = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="direct_reports")
     joining_date = models.DateField(default=timezone.localdate)
     work_email = models.EmailField(blank=True)
-    salary_currency = models.CharField(max_length=3, default="MYR")
+    salary_currency = models.CharField(max_length=3, default="USD")
     base_salary = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     current_salary = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     current_bonus = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))

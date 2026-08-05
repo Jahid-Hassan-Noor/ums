@@ -35,6 +35,12 @@ type School = {
   name: string
 }
 
+type Center = {
+  id: number
+  code: string
+  name: string
+}
+
 type Semester = {
   id: number
   name: string
@@ -98,6 +104,8 @@ type Offering = {
   section: string
   capacity: number
   is_active: boolean
+  eligible_schools?: School[]
+  eligible_centers?: Center[]
   meetings: ClassMeeting[]
 }
 
@@ -106,6 +114,7 @@ type OfferResponse = {
   section: string
   courses: Course[]
   schools: School[]
+  centers: Center[]
   semesters: Semester[]
   teachers: Teacher[]
   venues: Venue[]
@@ -131,6 +140,7 @@ function timeToMinutes(value: string): number {
 export default function ExecutiveOfferCoursesPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [schools, setSchools] = useState<School[]>([])
+  const [centers, setCenters] = useState<Center[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [venues, setVenues] = useState<Venue[]>([])
@@ -149,6 +159,7 @@ export default function ExecutiveOfferCoursesPage() {
   const [section, setSection] = useState("A")
   const [capacity, setCapacity] = useState("40")
   const [eligibleSchoolIds, setEligibleSchoolIds] = useState<number[]>([])
+  const [eligibleCenterIds, setEligibleCenterIds] = useState<number[]>([])
   const [meetings, setMeetings] = useState<Array<{
     day_of_week: number
     start_time: string
@@ -174,6 +185,7 @@ export default function ExecutiveOfferCoursesPage() {
       const data = await apiFetch<OfferResponse>("/executive/courses/offer")
       setCourses(data.courses || [])
       setSchools(data.schools || [])
+      setCenters(data.centers || [])
       setSemesters(data.semesters || [])
       setTeachers(data.teachers || [])
       setVenues(data.venues || [])
@@ -280,6 +292,7 @@ export default function ExecutiveOfferCoursesPage() {
         section,
         capacity: parseInt(capacity),
         eligible_school_ids: eligibleSchoolIds,
+        eligible_center_ids: eligibleCenterIds,
         meetings,
       }
 
@@ -295,6 +308,7 @@ export default function ExecutiveOfferCoursesPage() {
       setSection("A")
       setCapacity("40")
       setEligibleSchoolIds([])
+      setEligibleCenterIds([])
       setMeetings([])
       loadData()
     } catch (err) {
@@ -459,8 +473,8 @@ export default function ExecutiveOfferCoursesPage() {
                   <div className="grid gap-2">
                     <Label>Other Eligible Schools</Label>
                     <p className="text-xs leading-5 text-muted-foreground">
-                      Students from this course&apos;s own school are eligible automatically. Select any
-                      additional schools whose students may register.
+                      Students from this course&apos;s own academic owner are eligible automatically.
+                      Select additional schools whose students may register.
                     </p>
                     {schools.length ? (
                       <div className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-2">
@@ -487,6 +501,40 @@ export default function ExecutiveOfferCoursesPage() {
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground">No other active schools are available.</p>
+                    )}
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Other Eligible Academic Centers</Label>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      Use this for semester-based academic centers that share a course offering across
+                      center-owned programs.
+                    </p>
+                    {centers.length ? (
+                      <div className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-2">
+                        {centers.map((center) => (
+                          <label key={center.id} className="flex items-start gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={eligibleCenterIds.includes(center.id)}
+                              onChange={(event) =>
+                                setEligibleCenterIds((current) =>
+                                  event.target.checked
+                                    ? [...current, center.id]
+                                    : current.filter((id) => id !== center.id)
+                                )
+                              }
+                              className="mt-1"
+                            />
+                            <span>
+                              <span className="font-medium">{center.code}</span>
+                              <span className="block text-xs text-muted-foreground">{center.name}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No other semester-based academic centers are available.</p>
                     )}
                   </div>
 
@@ -707,6 +755,21 @@ export default function ExecutiveOfferCoursesPage() {
                           Cancel
                         </Button>
                       </div>
+
+                      {(off.eligible_schools?.length || off.eligible_centers?.length) ? (
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {off.eligible_schools?.map((school) => (
+                            <span key={`school-${school.id}`} className="rounded border border-border bg-muted/30 px-2 py-1">
+                              {school.code} students eligible
+                            </span>
+                          ))}
+                          {off.eligible_centers?.map((center) => (
+                            <span key={`center-${center.id}`} className="rounded border border-border bg-muted/30 px-2 py-1">
+                              {center.code} students eligible
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
 
                       {/* Scheduled meetings */}
                       <div className="space-y-2">

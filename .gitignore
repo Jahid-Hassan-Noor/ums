@@ -10,4 +10,5 @@ backups/
 graphify-out/
 .codex
 .codex-screenshots
-
+.agents
+.tools

@@ -23,10 +23,17 @@ type Caterer = {
   staff_id: string
   designation: string
   phone: string
+  school_name: string
   center_name: string
   unit_name: string
+  department_name: string
   canteen_location: string
   is_active: boolean
+}
+
+function ownerLabel(caterer: Caterer) {
+  const scope = caterer.school_name || caterer.center_name || "No owner scope"
+  return caterer.unit_name ? `${scope} / ${caterer.unit_name}` : scope
 }
 
 export function AdminManageCaterersPage() {
@@ -65,7 +72,7 @@ export function AdminManageCaterersPage() {
       <main className="flex-1 space-y-6 px-4 pt-4 pb-8 sm:px-6">
         <ManagePageHeader
           title="Manage Caterers"
-          description="Maintain canteen worker accounts under the Centre for Student Affairs and Alumni."
+          description="Maintain dining or canteen worker accounts assigned to configured owners."
           actions={
             <Button variant="outline" onClick={() => void loadData()}>
               <RefreshCw className="size-4" /> Refresh
@@ -92,8 +99,7 @@ export function AdminManageCaterersPage() {
               <CardHeader>
                 <CardTitle>{caterer.name}</CardTitle>
                 <CardDescription>
-                  {caterer.email} · {caterer.center_name || "CSAA"} /{" "}
-                  {caterer.unit_name || "CTN-ADMIN"}
+                  {caterer.email} - {ownerLabel(caterer)}
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">

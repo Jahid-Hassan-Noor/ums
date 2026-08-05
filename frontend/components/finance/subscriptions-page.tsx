@@ -6,7 +6,9 @@ import { CheckCircle2, Download, Loader2, RefreshCw, WalletCards } from "lucide-
 import { Header } from "@/components/layout/header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
+import { formatUmsMoney } from "@/lib/ums-settings"
 
 type Plan = {
   id: number
@@ -14,6 +16,7 @@ type Plan = {
   name: string
   description: string
   price: string
+  currency?: string
   duration_days: number
   can_purchase: boolean
 }
@@ -23,16 +26,13 @@ type Subscription = {
   plan: Plan
   status: string
   amount: string
+  currency?: string
   starts_at: string | null
   ends_at: string | null
   is_current: boolean
   card_url: string
   checkout_url: string
   created_at: string
-}
-
-function money(value: string) {
-  return `RM ${Number(value || 0).toFixed(2)}`
 }
 
 function formatDate(value: string | null) {
@@ -50,6 +50,7 @@ export function SubscriptionsPage({
   roleBasePath: string
   roleLabel: string
 }) {
+  const settings = usePublicUmsSettings()
   const [plans, setPlans] = useState<Plan[]>([])
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [busyPlan, setBusyPlan] = useState<number | null>(null)
@@ -129,7 +130,7 @@ export function SubscriptionsPage({
                   <p className="text-sm leading-6 text-muted-foreground">{plan.description || "Subscription option managed by the finance department."}</p>
                   <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
                     <span className="text-sm text-muted-foreground">Price</span>
-                    <strong className="text-lg">{money(plan.price)}</strong>
+                    <strong className="text-lg">{formatUmsMoney(plan.price, settings, plan.currency)}</strong>
                   </div>
                   <Button className="w-full" disabled={!plan.can_purchase || busyPlan === plan.id} onClick={() => void purchase(plan)}>
                     {busyPlan === plan.id ? <Loader2 className="size-4 animate-spin" /> : <WalletCards className="size-4" />}
@@ -155,7 +156,7 @@ export function SubscriptionsPage({
                     <div>
                       <p className="font-medium">{subscription.plan.name}</p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {subscription.status} · {formatDate(subscription.starts_at)} to {formatDate(subscription.ends_at)} · {money(subscription.amount)}
+                        {subscription.status} · {formatDate(subscription.starts_at)} to {formatDate(subscription.ends_at)} · {formatUmsMoney(subscription.amount, settings, subscription.currency)}
                       </p>
                     </div>
                     {subscription.status === "active" ? (

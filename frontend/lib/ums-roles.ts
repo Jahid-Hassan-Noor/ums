@@ -215,7 +215,7 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         title: "Course Evaluations",
         url: "/student/evaluations",
         icon: "records",
-        description: "Complete required SEC-SET feedback for current courses.",
+        description: "Complete required course evaluation feedback for current courses.",
       },
       {
         title: "Schedule",
@@ -248,10 +248,10 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         description: "Request a university venue for an event or personal use.",
       },
       {
-        title: "ICT Helpdesk",
+        title: "Service Desk",
         url: "/student/ict-helpdesk",
         icon: "records",
-        description: "Submit ICT issues and track their progress.",
+        description: "Submit support issues and track their progress.",
       },
       {
         title: "Attendance",
@@ -813,7 +813,7 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         title: "Course Evaluations",
         url: "/executive/evaluations",
         icon: "records",
-        description: "Launch SEC-SET surveys, monitor completion, and analyze responses.",
+        description: "Launch course evaluation surveys, monitor completion, and analyze responses.",
       },
       {
         title: "Calendar",
@@ -844,8 +844,8 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
     dashboardPath: "/librarian/dashboard",
     headline: "Librarian Dashboard",
     description:
-      "A Centre of Reference workspace for library inventory, room reservations, borrowing requests, and timed allocations.",
-    scope: "Centre of Reference library inventory and circulation.",
+      "A library operations workspace for inventory, room reservations, borrowing requests, and timed allocations.",
+    scope: "Configured library inventory and circulation ownership.",
     metrics: [
       {
         title: "Available Books",
@@ -949,7 +949,7 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
       },
       {
         title: "Monthly Allocation",
-        value: "RM 0.00",
+        value: "0.00",
         subtitle: "Configured monthly allowance including extras.",
         icon: "records",
       },
@@ -1001,30 +1001,30 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
     dashboardPath: "/technician/dashboard",
     headline: "Technician Dashboard",
     description:
-      "A focused operations workspace for ICT support, venue decisions, and election management.",
+      "A focused operations workspace for service desk support, venue decisions, and election management.",
     scope: "Technician-owned operational workflows and student election maintenance.",
     metrics: [
       {
         title: "Submitted",
         value: "0",
-        subtitle: "New student ICT issues awaiting attention.",
+        subtitle: "New student service issues awaiting attention.",
         icon: "records",
       },
       {
         title: "In Progress",
         value: "0",
-        subtitle: "Issues currently being handled by ICT.",
+        subtitle: "Issues currently being handled by the service team.",
         icon: "statistics",
       },
       {
         title: "Solved",
         value: "0",
-        subtitle: "Issues completed by the ICT Helpdesk.",
+        subtitle: "Issues completed by the service desk.",
         icon: "notifications",
       },
     ],
     priorities: [
-      "Review newly submitted student ICT issues.",
+      "Review newly submitted student service issues.",
       "Record addressed and in-progress updates for students.",
       "Mark resolved tickets as solved with a clear resolution note.",
       "Create elections, maintain candidates, and publish election outcomes.",
@@ -1034,13 +1034,13 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         title: "Dashboard",
         url: "/technician/dashboard",
         icon: "dashboard",
-        description: "ICT Helpdesk ticket summary and work queue.",
+        description: "Service desk ticket summary and work queue.",
       },
       {
         title: "Statistics",
         url: "/technician/statistics",
         icon: "statistics",
-        description: "ICT ticket status, category demand, and open workload analytics.",
+        description: "Ticket status, category demand, and open workload analytics.",
       },
       {
         title: "Venue Booking Requests",
@@ -1081,7 +1081,7 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         title: "Helpdesk",
         url: "/technician/helpdesk",
         icon: "records",
-        description: "Review and update all student ICT tickets.",
+        description: "Review and update all student service desk tickets.",
       },
       {
         title: "Notifications",
@@ -1100,7 +1100,7 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
     dashboardPath: "/accountant/dashboard",
     headline: "Finance Dashboard",
     description:
-      "A finance operations workspace for subscription plans, DuitNow merchant settings, payment records, and subscription cards.",
+      "A finance operations workspace for subscription plans, payment gateway settings, payment records, and subscription cards.",
     scope: "Finance department subscription and payment operations.",
     metrics: [
       {
@@ -1118,12 +1118,12 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
       {
         title: "Gateway",
         value: "Setup",
-        subtitle: "DuitNow merchant API details are managed here.",
+        subtitle: "Payment gateway and manual payment settings are managed here.",
         icon: "settings",
       },
     ],
     priorities: [
-      "Maintain DuitNow merchant API details without hard-coding credentials in the backend.",
+      "Maintain payment gateway details without hard-coding credentials in the backend.",
       "Create and maintain subscription options, prices, durations, and role availability.",
       "Monitor successful payments and subscription card issuance.",
     ],
@@ -1156,7 +1156,7 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         title: "Gateway Settings",
         url: "/accountant/gateway",
         icon: "settings",
-        description: "Maintain DuitNow merchant API endpoint and credentials.",
+        description: "Maintain payment gateway endpoint, mode, and credentials.",
       },
       {
         title: "Manage Subscriptions",
@@ -1287,7 +1287,7 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
     dashboardPath: "/admin/dashboard",
     headline: "Admin Dashboard",
     description:
-      "A global administration workspace for accounts, schools, centres, semesters, and system-wide statistics.",
+      "A global administration workspace for accounts, academic structure, semesters, and system-wide statistics.",
     scope: "System-wide configuration and reporting.",
     metrics: [
       {
@@ -1305,7 +1305,7 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
       {
         title: "Centres",
         value: "0",
-        subtitle: "Academic and support centres across AIU.",
+        subtitle: "Academic and support centres across the institution.",
         icon: "academic",
       },
     ],
@@ -1351,17 +1351,17 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
           {
             title: "Create Librarian",
             url: "/admin/create-account/librarian",
-            description: "Create a librarian account assigned to the Centre of Reference.",
+            description: "Create a librarian account assigned to a configured library owner.",
           },
           {
             title: "Create Caterer",
             url: "/admin/create-account/caterer",
-            description: "Create a canteen worker account assigned to CSAA.",
+            description: "Create a dining or canteen worker account assigned to a configured owner.",
           },
           {
             title: "Create Technician",
             url: "/admin/create-account/technician",
-            description: "Create an ICT Helpdesk technician account.",
+            description: "Create a service desk technician account.",
           },
           {
             title: "Create Accountant",
@@ -1403,17 +1403,17 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
           {
             title: "Manage Librarians",
             url: "/admin/manage/librarians",
-            description: "Maintain librarian accounts under the Centre of Reference.",
+            description: "Maintain librarian accounts assigned to configured library owners.",
           },
           {
             title: "Manage Caterers",
             url: "/admin/manage/caterers",
-            description: "Maintain canteen worker accounts under CSAA.",
+            description: "Maintain dining or canteen worker accounts assigned to configured owners.",
           },
           {
             title: "Manage Technicians",
             url: "/admin/manage/technicians",
-            description: "Maintain technician accounts under the standalone ICT department.",
+            description: "Maintain service desk technician accounts assigned to configured owners.",
           },
           {
             title: "Manage Accountants",
@@ -1470,13 +1470,19 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         title: "Gradebook Criteria",
         url: "/admin/gradebook",
         icon: "results",
-        description: "Manage UMS grade scales and grade-point criteria.",
+        description: "Manage institution grade scales and grade-point criteria.",
       },
       {
         title: "Venues",
         url: "/admin/venues",
         icon: "academic",
         description: "Create and manage campus buildings and venues.",
+      },
+      {
+        title: "Venue Requests",
+        url: "/admin/venue-bookings",
+        icon: "calendar",
+        description: "Review venue booking requests when admin approval is configured.",
       },
       {
         title: "Hostels",
@@ -1550,7 +1556,13 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         title: "UI Customization",
         url: "/admin/ui-customization",
         icon: "palette",
-        description: "Customize the UMS portal appearance in real time.",
+        description: "Customize the portal appearance in real time.",
+      },
+      {
+        title: "Setup Wizard",
+        url: "/admin/setup-wizard",
+        icon: "settings",
+        description: "Complete the guided universal setup checklist for a new institution.",
       },
       {
         title: "Settings",

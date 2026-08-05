@@ -12,12 +12,13 @@ import { apiFetch } from "@/lib/auth"
 type RecordPaymentModalProps = {
   studentId: number
   studentName: string
+  currencyCode?: string
   open: boolean
   onClose: () => void
   onSuccess: () => void
 }
 
-export function RecordPaymentModal({ studentId, studentName, open, onClose, onSuccess }: RecordPaymentModalProps) {
+export function RecordPaymentModal({ studentId, studentName, currencyCode = "USD", open, onClose, onSuccess }: RecordPaymentModalProps) {
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
   const [saving, setSaving] = useState(false)
@@ -62,7 +63,7 @@ export function RecordPaymentModal({ studentId, studentName, open, onClose, onSu
           {error ? <p className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="pay_amount">Amount (RM)</Label>
+              <Label htmlFor="pay_amount">Amount ({currencyCode})</Label>
               <Input
                 id="pay_amount"
                 type="number"

@@ -11,11 +11,6 @@ import {
   SectionHeading,
 } from "@/components/public/public-site"
 import {
-  getPublicDetailPage,
-  publicDetailPages,
-  type PublicDetailPage,
-} from "@/lib/ums-public-data"
-import {
   getPublicCentre,
   getPublicCentres,
   getPublicEvent,
@@ -23,69 +18,49 @@ import {
   getPublicPageByPath,
   getPublicSchool,
   getPublicSchools,
+  getPublicUmsSettings,
 } from "@/lib/public-api"
 import { managedPageToDetailPage } from "@/lib/public-page-rendering"
+import type { PublicDetailPage } from "@/lib/ums-public-data"
 
 type PageProps = {
   params: Promise<{ slug: string[] }>
 }
 
 export function generateStaticParams() {
-  return publicDetailPages
-    .filter((page) => {
-      if (page.path.startsWith("/schools/")) return false
-      if (page.path.startsWith("/centres/")) return false
-      if (page.path.startsWith("/centers/")) return false
-      if (page.path === "/academics") return false
-      if (page.path === "/academic-programmes") return false
-      return true
-    })
-    .map((page) => ({
-      slug: page.path.replace(/^\/+/, "").split("/"),
-    }))
+  return []
 }
 
-const fallbackHeroImage = "/images/aiu/campus-welcome.jpg"
+function detailTitle(brand: string, title: string) {
+  return `${title} | ${brand}`
+}
 
 function buildSchoolDetailPage(school: Awaited<ReturnType<typeof getPublicSchool>>) {
   if (!school) return null
-
-  const missionItems = school.mission ?? []
-  const visionBody = [
-    ...(school.vision ? [school.vision] : []),
-    ...missionItems,
-  ]
 
   return {
     path: `/schools/${school.slug ?? ""}`,
     active: "/schools",
     eyebrow: school.code,
     title: school.name,
-    description: school.about || school.description,
-    image: school.image_url || fallbackHeroImage,
+    description: school.about || school.description || "Published school record.",
+    image: school.image_url || undefined,
     stats: [
       { value: school.code, label: "School code" },
       { value: String(school.programmes?.length ?? 0), label: "Programmes" },
-      { value: "5A", label: "Core values" },
-      { value: "AIU", label: "Academic school" },
     ],
     sections: [
       {
         eyebrow: "About",
-        title: "Academic identity",
+        title: "School overview",
         body: [school.about || school.description || ""].filter(Boolean),
       },
       {
-        eyebrow: "Vision",
-        title: school.vision || "Vision & Mission",
-        body: visionBody,
-      },
-      {
-        eyebrow: "Programmes Offered",
+        eyebrow: "Programmes",
         title: "Programmes under this school",
         items: (school.programmes ?? []).map((programme) => ({
           title: programme,
-          summary: "Programme listed under the current AIU academic structure.",
+          summary: "Published programme record.",
           href: "/programmes",
         })),
       },
@@ -103,13 +78,11 @@ function buildCentreDetailPage(
     active: "/centres",
     eyebrow: centre.code,
     title: centre.name,
-    description: centre.about || centre.description,
-    image: centre.image_url || fallbackHeroImage,
+    description: centre.about || centre.description || "Published centre record.",
+    image: centre.image_url || undefined,
     stats: [
       { value: centre.code, label: "Centre code" },
-      { value: String(centre.offerings?.length ?? 0), label: "Key services" },
-      { value: "AIU", label: "Academic support" },
-      { value: "5A", label: "Core values" },
+      { value: String(centre.offerings?.length ?? 0), label: "Offerings" },
     ],
     sections: [
       {
@@ -118,12 +91,11 @@ function buildCentreDetailPage(
         body: [centre.about || centre.description || ""].filter(Boolean),
       },
       {
-        eyebrow: "Programmes and Services",
-        title: "What this centre supports",
+        eyebrow: "Offerings",
+        title: "Programmes and services",
         items: (centre.offerings ?? []).map((offering) => ({
           title: offering,
-          summary:
-            "Service, programme, or learning support area listed for this AIU centre.",
+          summary: "Published centre offering.",
         })),
       },
       {
@@ -149,12 +121,10 @@ function buildNewsDetailPage(
     eyebrow: news.category || "News",
     title: news.title,
     description: news.summary,
-    image: news.image_url || "/images/aiu/campus-3zeros.jpg",
+    image: news.image_url || undefined,
     stats: [
-      { value: "AIU", label: "News" },
       { value: news.date || "Published", label: "Date" },
       { value: "Public", label: "Audience" },
-      { value: "Admin", label: "Managed by" },
     ],
     sections: [
       {
@@ -181,17 +151,14 @@ function buildEventDetailPage(
     eyebrow: "Event",
     title: event.title,
     description: event.summary,
-    image: "/images/aiu/campus-3zeros.jpg",
     stats: [
       { value: event.date || "Scheduled", label: "Date" },
-      { value: event.location || "AIU", label: "Location" },
-      { value: "Public", label: "Audience" },
-      { value: "Admin", label: "Managed by" },
+      { value: event.location || "Public", label: "Location" },
     ],
     sections: [
       {
         eyebrow: event.date || "Event details",
-        title: event.location || "Campus event",
+        title: event.location || "Event details",
         body: [event.description].filter(Boolean),
         links: [
           { label: "All Events", href: "/events" },
@@ -210,10 +177,9 @@ function buildAcademicsPage(
     path: "/academics",
     active: "/programmes",
     eyebrow: "Academics",
-    title: "Schools and academic centres across AIU.",
+    title: "Schools and academic centres",
     description:
-      "AIU's academic structure is organised around schools and specialist centres for foundation, graduate studies, academic excellence, and language learning.",
-    image: "/images/aiu/campus-social-business.jpg",
+      "Academic records are loaded from active school and centre records.",
     sections: [
       {
         eyebrow: "Schools",
@@ -222,7 +188,7 @@ function buildAcademicsPage(
           title: school.name,
           summary: school.description,
           meta: school.code,
-          href: `/schools/${school.slug}`,
+          href: school.slug ? `/schools/${school.slug}` : undefined,
         })),
       },
       {
@@ -232,7 +198,7 @@ function buildAcademicsPage(
           title: centre.name,
           summary: centre.description,
           meta: centre.code,
-          href: `/centres/${centre.slug}`,
+          href: centre.slug ? `/centres/${centre.slug}` : undefined,
         })),
       },
     ],
@@ -249,7 +215,7 @@ function buildAcademicProgrammesPage(
         title: programme,
         summary: school.name,
         meta: school.code,
-        href: `/schools/${school.slug}`,
+        href: school.slug ? `/schools/${school.slug}` : undefined,
       }))
     ),
     ...centres.flatMap((centre) =>
@@ -257,7 +223,7 @@ function buildAcademicProgrammesPage(
         title: offering,
         summary: centre.name,
         meta: centre.code,
-        href: `/centres/${centre.slug}`,
+        href: centre.slug ? `/centres/${centre.slug}` : undefined,
       }))
     ),
   ]
@@ -266,23 +232,14 @@ function buildAcademicProgrammesPage(
     path: "/academic-programmes",
     active: "/programmes",
     eyebrow: "Academic Programmes",
-    title: "Lists of programmes and academic calendars.",
+    title: "Programmes and academic pathways",
     description:
-      "The programme directory follows AIU's current public structure for schools, foundation studies, and academic calendar references.",
-    image: "/images/aiu/campus-welcome.jpg",
+      "Programme information is loaded from active school and centre records.",
     sections: [
       {
         eyebrow: "Programmes",
         title: "Programmes by school and centre",
         items: programmeItems,
-      },
-      {
-        eyebrow: "Academic Calendar",
-        title: "Session 2025/2026 references",
-        body: [
-          "Foundation Studies Programme calendar: Centre for Foundation and General Studies.",
-          "Undergraduate Programmes calendar: School of Business and Social Sciences, School of Education and Human Sciences, and School of Computing and Informatics.",
-        ],
       },
     ],
   } satisfies PublicDetailPage
@@ -332,23 +289,27 @@ async function resolvePublicPage(
     return managedPageToDetailPage(managedPage)
   }
 
-  return getPublicDetailPage(slug) ?? null
+  return null
 }
 
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const { slug } = await params
+  const [{ slug }, settings] = await Promise.all([
+    params,
+    getPublicUmsSettings(),
+  ])
   const page = await resolvePublicPage(slug)
+  const brand = settings.university.name || settings.uiCustomization.brand_name
 
   if (!page) {
     return {
-      title: "Page Not Found | Albukhary International University",
+      title: detailTitle(brand, "Page Not Found"),
     }
   }
 
   return {
-    title: `${page.title} | Albukhary International University`,
+    title: detailTitle(brand, page.title),
     description: page.description,
   }
 }
@@ -385,7 +346,7 @@ export default async function PublicDetailRoute({ params }: PageProps) {
               title={section.title}
               description={
                 section.body?.[0] ??
-                "Public information from the AIU site structure, prepared for local content management."
+                "Public information managed from the admin portal."
               }
             />
             <div className="space-y-5">

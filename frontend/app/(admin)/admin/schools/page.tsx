@@ -371,7 +371,7 @@ export default function AdminSchoolsPage() {
                   <Label htmlFor="school-code">School Code</Label>
                   <Input
                     id="school-code"
-                    placeholder="e.g. SBSS"
+                    placeholder="e.g. BUS"
                     required
                     value={schoolForm.code}
                     onChange={(event) =>
@@ -479,7 +479,7 @@ export default function AdminSchoolsPage() {
                   <Label htmlFor="school-image">Hero Image URL</Label>
                   <Input
                     id="school-image"
-                    placeholder="https://aiu.edu.my/wp-content/uploads/..."
+                    placeholder="https://example.edu/images/school.jpg"
                     value={schoolForm.image_url}
                     onChange={(event) =>
                       setSchoolForm({

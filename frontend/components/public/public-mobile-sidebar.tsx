@@ -24,14 +24,16 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { publicNavGroups } from "@/lib/ums-public-data"
 import { cn } from "@/lib/utils"
 import { defaultRouteForRole, ensureValidSession } from "@/lib/auth"
 import type { AuthSession } from "@/lib/auth"
+import type { PublicNavGroup } from "@/lib/public-api"
 
 export function MobileSidebar({
+  navGroups,
   tone = "default",
 }: {
+  navGroups: PublicNavGroup[]
   tone?: "default" | "inverse"
 }) {
   const [open, setOpen] = useState(false)
@@ -72,11 +74,11 @@ export function MobileSidebar({
         className="w-[min(88vw,22rem)] max-w-[calc(100vw-1.5rem)] gap-0 border-r border-slate-200/70 bg-white/95 p-0 backdrop-blur dark:border-white/10 dark:bg-slate-950/95"
       >
         <SheetHeader className="border-b border-slate-200/70 p-5 pr-12 text-left dark:border-white/10">
-          <SheetTitle className="sr-only">AIU navigation</SheetTitle>
+          <SheetTitle className="sr-only">Public navigation</SheetTitle>
           <PublicBrand size="md" className="max-w-full gap-3" />
         </SheetHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-5">
-          {publicNavGroups.map((group, index) => {
+          {navGroups.map((group, index) => {
             const hasChildren = Boolean(group.children?.length)
             if (hasChildren) {
               return (
@@ -117,13 +119,11 @@ export function MobileSidebar({
             )
           })}
 
-          <Link
-            href="/ums-overview"
-            onClick={() => setOpen(false)}
-            className="block rounded-xl px-3 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
-          >
-            Portal
-          </Link>
+          {navGroups.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+              No public navigation links are published.
+            </p>
+          ) : null}
 
           <div className="mt-auto grid gap-2 border-t border-slate-200/70 pt-5 dark:border-white/10">
             {session ? (

@@ -3,7 +3,7 @@ import logging
 from django.conf import settings
 from django.core.mail import send_mail
 
-from admin_app.settings_registry import setting_value
+from admin_app.settings_registry import notification_sender_name, setting_value
 from auth_app.models import Profile
 from notifications_package.models import Notification
 
@@ -53,7 +53,7 @@ def _send_notification_email(*, recipient, subject, message, url=None):
         message,
     ]
     if ums_url:
-        body.extend(["", f"Open in AIU Portal: {ums_url}"])
+        body.extend(["", f"Open in {notification_sender_name()}: {ums_url}"])
 
     try:
         send_mail(

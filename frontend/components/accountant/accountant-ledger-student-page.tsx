@@ -13,18 +13,19 @@ import { apiFetch } from "@/lib/auth"
 import { LedgerEntryBadge, ChargeStatusBadge, HoldStatusBadge } from "@/components/accountant/ledger/ledger-badges"
 import { ExportMenu } from "@/components/accountant/ledger/export-menu"
 import { RecordPaymentModal } from "@/components/accountant/ledger/record-payment-modal"
+import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
+import { formatUmsMoney } from "@/lib/ums-settings"
 
 type StudentRef = { id: number; name: string; email: string; identifier: string }
 type Category = { id: number; code: string; name: string; description: string; is_active: boolean }
-type Charge = { id: number; category: Category; description: string; amount: string; due_date: string | null; status: string; created_at: string }
-type LedgerEntry = { id: number; entry_type: string; amount: string; description: string; balance_after: string; posted_at: string; posted_by: string }
+type Charge = { id: number; category: Category; description: string; amount: string; currency?: string; due_date: string | null; status: string; created_at: string }
+type LedgerEntry = { id: number; entry_type: string; amount: string; currency?: string; description: string; balance_after: string; posted_at: string; posted_by: string }
 type Hold = { id: number; reason: string; notes: string; is_active: boolean; placed_at: string; released_at: string | null }
 type StudentSummary = { student: StudentRef; balance: string; currency: string; active_holds: Hold[]; charges: Charge[]; ledger_entries: LedgerEntry[] }
 
 type PaginatedEntries = { entries: LedgerEntry[]; total: number; page: number; page_size: number; total_pages: number }
 type PaginatedCharges = { charges: Charge[]; total: number; page: number; page_size: number; total_pages: number }
 
-function money(value: string) { return `RM ${Number(value || 0).toFixed(2)}` }
 function formatDate(value: string | null) { return value ? new Date(value).toLocaleDateString() : "—" }
 function label(value: string) { return value.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) }
 
@@ -33,6 +34,8 @@ type Tab = "charges" | "entries" | "holds"
 export function AccountantLedgerStudentPage() {
   const params = useParams()
   const router = useRouter()
+  const settings = usePublicUmsSettings()
+  const currencyCode = settings.localization.currency_code || "USD"
   const studentId = params.studentId as string
 
   const [summary, setSummary] = useState<StudentSummary | null>(null)
@@ -88,7 +91,12 @@ export function AccountantLedgerStudentPage() {
     }
   }, [loadSummary, loadEntries, loadCharges])
 
-  useEffect(() => { void loadAll() }, [loadAll])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadAll()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadAll])
 
   const loadEntriesFiltered = useCallback(async () => {
     if (loading) return
@@ -106,8 +114,19 @@ export function AccountantLedgerStudentPage() {
     setChargesData(data)
   }, [studentId, chargesPage, chargeFilter, loading])
 
-  useEffect(() => { void loadEntriesFiltered() }, [loadEntriesFiltered])
-  useEffect(() => { void loadChargesFiltered() }, [loadChargesFiltered])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadEntriesFiltered()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadEntriesFiltered])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadChargesFiltered()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadChargesFiltered])
 
   async function saveCharge(e: React.FormEvent) {
     e.preventDefault()
@@ -200,7 +219,7 @@ export function AccountantLedgerStudentPage() {
         {summary ? (
           <>
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Card><CardHeader className="pb-2"><CardDescription>Current Balance</CardDescription><CardTitle className="text-2xl">{money(summary.balance)}</CardTitle></CardHeader></Card>
+              <Card><CardHeader className="pb-2"><CardDescription>Current Balance</CardDescription><CardTitle className="text-2xl">{formatUmsMoney(summary.balance, settings, summary.currency)}</CardTitle></CardHeader></Card>
               <Card><CardHeader className="pb-2"><CardDescription>Active Holds</CardDescription><CardTitle className="text-2xl">{summary.active_holds.length}</CardTitle></CardHeader></Card>
               <Card><CardHeader className="pb-2"><CardDescription>Total Charges</CardDescription><CardTitle className="text-2xl">{summary.charges.length}</CardTitle></CardHeader></Card>
               <Card><CardHeader className="pb-2"><CardDescription>Ledger Entries</CardDescription><CardTitle className="text-2xl">{summary.ledger_entries.length}</CardTitle></CardHeader></Card>
@@ -244,7 +263,7 @@ export function AccountantLedgerStudentPage() {
                           <ChargeStatusBadge status={charge.status} />
                         </div>
                         <p className="mt-1 text-muted-foreground">
-                          {charge.category.code} · {money(charge.amount)} · Due: {formatDate(charge.due_date)}
+                          {charge.category.code} · {formatUmsMoney(charge.amount, settings, charge.currency ?? summary.currency)} · Due: {formatDate(charge.due_date)}
                         </p>
                       </div>
                     ))}
@@ -271,7 +290,7 @@ export function AccountantLedgerStudentPage() {
                         </select>
                       </div>
                       <div className="space-y-2"><Label>Description</Label><Input value={chargeForm.description} onChange={(e) => setChargeForm((c) => ({ ...c, description: e.target.value }))} required /></div>
-                      <div className="space-y-2"><Label>Amount (RM)</Label><Input type="number" min="0" step="0.01" value={chargeForm.amount} onChange={(e) => setChargeForm((c) => ({ ...c, amount: e.target.value }))} required /></div>
+                      <div className="space-y-2"><Label>Amount ({currencyCode})</Label><Input type="number" min="0" step="0.01" value={chargeForm.amount} onChange={(e) => setChargeForm((c) => ({ ...c, amount: e.target.value }))} required /></div>
                       <div className="space-y-2"><Label>Due Date</Label><Input type="date" value={chargeForm.due_date} onChange={(e) => setChargeForm((c) => ({ ...c, due_date: e.target.value }))} /></div>
                       <Button type="submit" disabled={saving} size="sm">{saving ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />} Post</Button>
                     </div>
@@ -303,12 +322,12 @@ export function AccountantLedgerStudentPage() {
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2">
                           <LedgerEntryBadge type={entry.entry_type} />
-                          <span className="font-medium">{money(entry.amount)}</span>
+                          <span className="font-medium">{formatUmsMoney(entry.amount, settings, entry.currency ?? summary.currency)}</span>
                         </div>
                         <span className="text-xs text-muted-foreground">{formatDate(entry.posted_at)}</span>
                       </div>
                       <p className="mt-1 text-muted-foreground">{entry.description}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Balance after: {money(entry.balance_after)} · Posted by: {entry.posted_by || "—"}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Balance after: {formatUmsMoney(entry.balance_after, settings, entry.currency ?? summary.currency)} · Posted by: {entry.posted_by || "—"}</p>
                     </div>
                   ))}
                   {(!entriesData || entriesData.entries.length === 0) ? <p className="py-4 text-center text-sm text-muted-foreground">No entries found.</p> : null}
@@ -367,6 +386,7 @@ export function AccountantLedgerStudentPage() {
         <RecordPaymentModal
           studentId={Number(studentId)}
           studentName={summary.student.name}
+          currencyCode={currencyCode}
           open={showPayment}
           onClose={() => setShowPayment(false)}
           onSuccess={() => { void loadSummary(); void loadEntries() }}

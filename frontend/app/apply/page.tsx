@@ -4,10 +4,16 @@ import Link from "next/link"
 import { ArrowRight, FileCheck2, GraduationCap, ShieldCheck, Upload } from "lucide-react"
 
 import { PublicBrand } from "@/components/public/public-site"
+import { getPublicUmsSettings } from "@/lib/public-api"
 
-export const metadata: Metadata = {
-  title: "Apply | AIU Portal",
-  description: "Applicant account, admission application, scholarship application, and document upload.",
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getPublicUmsSettings()
+  const university = settings.university
+  return {
+    title: `Apply | ${university.name}`,
+    description:
+      "Applicant account, admission application, scholarship application, and document upload.",
+  }
 }
 
 const steps = [
@@ -33,18 +39,25 @@ const steps = [
   },
 ]
 
-export default function ApplyLandingPage() {
+export default async function ApplyLandingPage() {
+  const settings = await getPublicUmsSettings()
+  const heroImage =
+    settings.university.login_image_url ||
+    settings.university.public_hero_image_url
+
   return (
     <main className="min-h-svh bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
       <section className="relative overflow-hidden bg-slate-950 text-white">
-        <Image
-          src="/images/aiu/campus-welcome.jpg"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover"
-        />
+        {heroImage ? (
+          <Image
+            src={heroImage}
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+        ) : null}
         <div className="absolute inset-0 bg-slate-950/72" />
         <div className="relative mx-auto flex min-h-[88svh] max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4">
@@ -68,14 +81,14 @@ export default function ApplyLandingPage() {
           <div className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[minmax(0,0.95fr)_minmax(26rem,0.75fr)]">
             <div className="max-w-3xl">
               <p className="text-xs font-bold tracking-[0.18em] text-teal-200 uppercase">
-                AIU Apply
+                Apply
               </p>
               <h1 className="mt-4 font-display text-4xl leading-tight font-semibold sm:text-5xl lg:text-6xl">
                 Admission and scholarship applications in one place.
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-white/78">
                 Students from around the world can create an applicant account,
-                complete the AIU application form, upload documents, and track
+                complete the application form, upload documents, and track
                 admission or scholarship review.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">

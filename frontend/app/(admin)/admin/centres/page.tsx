@@ -32,6 +32,14 @@ type Centre = {
   code: string
   slug: string | null
   name: string
+  center_type: string
+  center_type_label?: string
+  academic_calendar_mode: string
+  academic_calendar_mode_label?: string
+  semester_calendar_group: string
+  semester_calendar_group_effective?: string
+  annual_session_limit: number
+  academic_workflows?: boolean
   description: string
   about: string
   offerings: string[]
@@ -39,10 +47,17 @@ type Centre = {
   is_active: boolean
 }
 
+type Choice = {
+  value: string
+  label: string
+}
+
 type CentresResponse = {
   title: string
   section: string
   centres: Centre[]
+  center_types: Choice[]
+  academic_calendar_modes: Choice[]
 }
 
 export default function AdminCentresPage() {
@@ -54,10 +69,16 @@ export default function AdminCentresPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCentre, setEditingCentre] = useState<Centre | null>(null)
+  const [centerTypes, setCenterTypes] = useState<Choice[]>([])
+  const [calendarModes, setCalendarModes] = useState<Choice[]>([])
   const [centreForm, setCentreForm] = useState({
     code: "",
     slug: "",
     name: "",
+    center_type: "academic",
+    academic_calendar_mode: "semester",
+    semester_calendar_group: "",
+    annual_session_limit: "0",
     description: "",
     about: "",
     offerings: "",
@@ -76,6 +97,8 @@ export default function AdminCentresPage() {
       setIsLoading(true)
       const data = await apiFetch<CentresResponse>("/admin/centres")
       setCentres(data.centres || [])
+      setCenterTypes(data.center_types || [])
+      setCalendarModes(data.academic_calendar_modes || [])
       setError("")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load centres.")
@@ -98,6 +121,10 @@ export default function AdminCentresPage() {
       code: "",
       slug: "",
       name: "",
+      center_type: "academic",
+      academic_calendar_mode: "semester",
+      semester_calendar_group: "",
+      annual_session_limit: "0",
       description: "",
       about: "",
       offerings: "",
@@ -113,6 +140,13 @@ export default function AdminCentresPage() {
       code: centre.code,
       slug: centre.slug ?? "",
       name: centre.name,
+      center_type: centre.center_type,
+      academic_calendar_mode: centre.academic_calendar_mode,
+      semester_calendar_group:
+        centre.semester_calendar_group ||
+        centre.semester_calendar_group_effective ||
+        "",
+      annual_session_limit: String(centre.annual_session_limit ?? 0),
       description: centre.description,
       about: centre.about ?? "",
       offerings: (centre.offerings ?? []).join("\n"),
@@ -128,6 +162,7 @@ export default function AdminCentresPage() {
     setSuccess("")
     const payload = {
       ...centreForm,
+      annual_session_limit: Number(centreForm.annual_session_limit) || 0,
       offerings: splitLines(centreForm.offerings),
     }
     try {
@@ -173,6 +208,21 @@ export default function AdminCentresPage() {
 
   const activeCount = centres.filter((centre) => centre.is_active).length
   const inactiveCount = centres.length - activeCount
+  const academicCount = centres.filter((centre) => centre.center_type === "academic").length
+  const centerTypeChoices = centerTypes.length
+    ? centerTypes
+    : [
+        { value: "academic", label: "Academic" },
+        { value: "non_academic", label: "Non-academic" },
+      ]
+  const calendarModeChoices = calendarModes.length
+    ? calendarModes
+    : [
+        { value: "semester", label: "Semester based" },
+        { value: "whole_year", label: "Whole year" },
+      ]
+  const isAcademicCentre = centreForm.center_type === "academic"
+  const isSemesterBased = centreForm.academic_calendar_mode === "semester"
 
   return (
     <div className="flex min-h-svh flex-col bg-muted/25">
@@ -219,7 +269,7 @@ export default function AdminCentresPage() {
           </div>
         )}
 
-        <section className="grid gap-4 sm:grid-cols-3">
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Card className="border-border/70 bg-card/95 shadow-sm">
             <CardHeader className="pb-2">
               <CardDescription className="text-sm font-medium">
@@ -244,6 +294,19 @@ export default function AdminCentresPage() {
                 <CheckCircle2 className="size-5" />
               </span>
               <p className="text-2xl font-bold tracking-tight">{activeCount}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 bg-card/95 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardDescription className="text-sm font-medium">
+                Academic Centres
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center gap-3">
+              <span className="rounded-lg border border-border bg-blue-50 p-2 text-blue-600">
+                <Building2 className="size-5" />
+              </span>
+              <p className="text-2xl font-bold tracking-tight">{academicCount}</p>
             </CardContent>
           </Card>
           <Card className="border-border/70 bg-card/95 shadow-sm">
@@ -302,12 +365,41 @@ export default function AdminCentresPage() {
                           <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">
                             {centre.code}
                           </span>
+                          <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                            {centre.center_type_label ??
+                              (centre.center_type === "academic"
+                                ? "Academic"
+                                : "Non-academic")}
+                          </span>
+                          {centre.center_type === "academic" && (
+                            <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                              {centre.academic_calendar_mode_label ??
+                                (centre.academic_calendar_mode === "whole_year"
+                                  ? "Whole year"
+                                  : "Semester based")}
+                            </span>
+                          )}
                           {!centre.is_active && (
                             <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
                               Inactive
                             </span>
                           )}
                         </div>
+                        {centre.center_type === "academic" &&
+                          centre.academic_calendar_mode === "semester" && (
+                            <p className="text-xs text-muted-foreground">
+                              Calendar group:{" "}
+                              {centre.semester_calendar_group_effective ||
+                                centre.semester_calendar_group}
+                            </p>
+                          )}
+                        {centre.center_type === "academic" &&
+                          centre.academic_calendar_mode === "whole_year" && (
+                            <p className="text-xs text-muted-foreground">
+                              Annual session limit:{" "}
+                              {centre.annual_session_limit || "Unlimited"}
+                            </p>
+                          )}
                         {centre.description && (
                           <p className="text-xs text-muted-foreground">
                             {centre.description}
@@ -343,7 +435,7 @@ export default function AdminCentresPage() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-md border-border bg-card shadow-lg animate-in fade-in zoom-in-95 duration-150">
+          <Card className="max-h-[92vh] w-full max-w-2xl overflow-y-auto border-border bg-card shadow-lg animate-in fade-in zoom-in-95 duration-150">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle>
                 {editingCentre ? "Edit Centre" : "Add Centre"}
@@ -363,7 +455,7 @@ export default function AdminCentresPage() {
                   <Label htmlFor="centre-code">Centre Code</Label>
                   <Input
                     id="centre-code"
-                    placeholder="e.g. CDAE"
+                    placeholder="e.g. ACAD"
                     required
                     value={centreForm.code}
                     onChange={(event) =>
@@ -395,6 +487,89 @@ export default function AdminCentresPage() {
                     }
                   />
                 </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="centre-type">Centre Type</Label>
+                    <select
+                      id="centre-type"
+                      value={centreForm.center_type}
+                      onChange={(event) =>
+                        setCentreForm({
+                          ...centreForm,
+                          center_type: event.target.value,
+                        })
+                      }
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {centerTypeChoices.map((choice) => (
+                        <option key={choice.value} value={choice.value}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="centre-calendar-mode">
+                      Academic Calendar
+                    </Label>
+                    <select
+                      id="centre-calendar-mode"
+                      value={centreForm.academic_calendar_mode}
+                      disabled={!isAcademicCentre}
+                      onChange={(event) =>
+                        setCentreForm({
+                          ...centreForm,
+                          academic_calendar_mode: event.target.value,
+                        })
+                      }
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-55"
+                    >
+                      {calendarModeChoices.map((choice) => (
+                        <option key={choice.value} value={choice.value}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {isAcademicCentre && isSemesterBased ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor="centre-calendar-group">
+                      Semester Calendar Group
+                    </Label>
+                    <Input
+                      id="centre-calendar-group"
+                      placeholder="e.g. center:language or foundation"
+                      value={centreForm.semester_calendar_group}
+                      onChange={(event) =>
+                        setCentreForm({
+                          ...centreForm,
+                          semester_calendar_group: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                ) : null}
+                {isAcademicCentre && !isSemesterBased ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor="centre-session-limit">
+                      Annual Session Limit
+                    </Label>
+                    <Input
+                      id="centre-session-limit"
+                      type="number"
+                      min="0"
+                      placeholder="0 for unlimited"
+                      value={centreForm.annual_session_limit}
+                      onChange={(event) =>
+                        setCentreForm({
+                          ...centreForm,
+                          annual_session_limit: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                ) : null}
                 <div className="grid gap-2">
                   <Label htmlFor="centre-summary">Summary</Label>
                   <Textarea
@@ -443,7 +618,7 @@ export default function AdminCentresPage() {
                   <Label htmlFor="centre-image">Hero Image URL</Label>
                   <Input
                     id="centre-image"
-                    placeholder="https://aiu.edu.my/wp-content/uploads/..."
+                    placeholder="https://example.edu/images/center.jpg"
                     value={centreForm.image_url}
                     onChange={(event) =>
                       setCentreForm({
