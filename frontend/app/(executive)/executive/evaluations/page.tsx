@@ -793,6 +793,7 @@ export default function ExecutiveEvaluationsPage() {
                     </label>
                     <Button
                       className="w-full"
+                      type="submit"
                       disabled={busy === "launch" || !availableOfferings.length}
                     >
                       {busy === "launch" ? (

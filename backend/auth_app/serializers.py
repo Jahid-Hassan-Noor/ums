@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import serializers
 
 from admin_app import models
@@ -294,6 +295,27 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"school_id": "Student accounts must be assigned to exactly one school or centre."}
             )
+
+        if role == models.Profile.ROLE_STUDENT:
+            room_code = attrs.get("room", "").strip().upper()
+            attrs["room"] = room_code
+            if room_code:
+                parts = room_code.split("-")
+                prefixes = ["-".join(parts[:index]) for index in range(1, len(parts) + 1)]
+                managed_room = max(
+                    models.HostelRoom.objects.filter(code__in=prefixes),
+                    key=lambda room: len(room.code),
+                    default=None,
+                )
+                if managed_room:
+                    occupied = Student.objects.filter(
+                        Q(room=managed_room.code)
+                        | Q(room__startswith=f"{managed_room.code}-")
+                    ).count()
+                    if occupied >= managed_room.capacity:
+                        raise serializers.ValidationError(
+                            {"room": f"Hostel room {managed_room.code} is full."}
+                        )
 
         if role == models.Profile.ROLE_TEACHER:
             if not teacher_assignments and bool(school) != bool(center):

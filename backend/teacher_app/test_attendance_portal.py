@@ -5,7 +5,8 @@ from rest_framework.test import APIClient
 
 from admin_app.models import ClassMeeting, Course, CourseOffering, Profile, School, Semester, TimetableSlot
 from student_app.models import AttendanceRecord, Enrollment
-from teacher_app.attendance_service import start_attendance_session
+from teacher_app.attendance_service import serialize_session, start_attendance_session, student_attendance_summary
+from teacher_app.models import AttendanceSession
 
 
 User = get_user_model()
@@ -80,6 +81,23 @@ class TeacherAttendancePortalTests(TestCase):
         self.assertTrue(session.qr_token.isalnum())
         self.assertGreaterEqual((session.qr_expires_at - before).total_seconds(), 59)
         self.assertLessEqual((session.qr_expires_at - before).total_seconds(), 61)
+
+    def test_session_history_keeps_original_time_after_meeting_changes(self):
+        session = start_attendance_session(
+            self.teacher,
+            self.meeting,
+            session_date=timezone.localdate(),
+        )
+        self.meeting.start_time = "11:00"
+        self.meeting.end_time = "12:00"
+        self.meeting.save(update_fields=["start_time", "end_time"])
+        session = AttendanceSession.objects.select_related("class_meeting").get(pk=session.pk)
+
+        self.assertEqual(serialize_session(session)["start_time"], "09:00")
+        self.assertEqual(serialize_session(session)["end_time"], "10:00")
+        record = student_attendance_summary(self.student)[0]["records"][0]
+        self.assertEqual(record["start_time"], "09:00")
+        self.assertEqual(record["end_time"], "10:00")
 
     def test_teacher_can_regenerate_open_qr_and_load_it_from_sessions(self):
         session = start_attendance_session(

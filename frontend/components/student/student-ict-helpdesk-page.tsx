@@ -174,7 +174,7 @@ export function StudentICTHelpdeskPage() {
                       />
                     </Field>
                   </FieldGroup>
-                  <Button className="w-full" disabled={busy || !category}>
+                  <Button type="submit" className="w-full" disabled={busy || !category}>
                     {busy ? (
                       <Loader2 data-icon="inline-start" className="animate-spin" />
                     ) : (

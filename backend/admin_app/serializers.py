@@ -403,6 +403,13 @@ class HostelRoomSerializer(serializers.ModelSerializer):
             duplicate = duplicate.exclude(pk=self.instance.pk)
         if duplicate.exists():
             raise serializers.ValidationError({"code": "A hostel room with this code already exists."})
+        if self.instance:
+            occupied = Student.objects.filter(_student_room_filter(self.instance.code)).count()
+            capacity = attrs.get("capacity", self.instance.capacity)
+            if capacity < occupied:
+                raise serializers.ValidationError(
+                    {"capacity": f"Room capacity cannot be below its {occupied} current residents."}
+                )
         return attrs
 
     def get_residents(self, room):

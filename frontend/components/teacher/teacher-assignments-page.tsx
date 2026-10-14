@@ -341,7 +341,8 @@ export function TeacherAssignmentCreatePage({ offeringId = "" }: { offeringId?: 
     setError("")
     setSuccess("")
     try {
-      const form = new FormData(event.currentTarget)
+      const formElement = event.currentTarget
+      const form = new FormData(formElement)
       const response = await apiFetch<{ message: string; assignment: Assignment }>("/teacher/assignments/create", {
         method: "POST",
         body: JSON.stringify({
@@ -353,7 +354,7 @@ export function TeacherAssignmentCreatePage({ offeringId = "" }: { offeringId?: 
           require_same_tutorial_group: form.get("require_same_tutorial_group") === "on",
           require_same_lab_group: form.get("require_same_lab_group") === "on",
           min_distinct_countries: collaborationMode === "group" ? Number(form.get("min_distinct_countries") || 0) : 0,
-          group_rules: form.get("group_rules"),
+          group_rules: form.get("group_rules") || "",
           title: form.get("title"),
           description: form.get("description"),
           instructions: form.get("instructions"),
@@ -375,7 +376,7 @@ export function TeacherAssignmentCreatePage({ offeringId = "" }: { offeringId?: 
       })
       setCreatedId(response.assignment.id)
       setSuccess(response.message)
-      event.currentTarget.reset()
+      formElement.reset()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to create assignment.")
     } finally {

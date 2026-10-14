@@ -3,6 +3,7 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   Archive,
   BarChart3,
@@ -104,7 +105,8 @@ export function AppSidebar({
   role: UserRole
   user: AuthUser
 }) {
-  const { setOpen } = useSidebar()
+  const { setOpen, setOpenMobile } = useSidebar()
+  const pathname = usePathname()
   const [publicSettings, setPublicSettings] = React.useState(
     DEFAULT_UMS_PUBLIC_SETTINGS
   )
@@ -127,6 +129,10 @@ export function AppSidebar({
       setOpen(false)
     }
   }, [publicSettings.uiCustomization.sidebar_collapsed_by_default, setOpen])
+
+  React.useEffect(() => {
+    setOpenMobile(false)
+  }, [pathname, setOpenMobile])
 
   const navMain = React.useMemo(
     () => {

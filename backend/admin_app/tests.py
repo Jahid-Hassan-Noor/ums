@@ -20,6 +20,8 @@ from admin_app.models import (
     Admin,
     AcademicSession,
     Center,
+    Hostel,
+    HostelRoom,
     IELTSSession,
     School,
     Semester,
@@ -728,6 +730,58 @@ class AdminCreateAccountEmailTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("20 characters or fewer", str(response.json()))
         self.assertFalse(User.objects.filter(username="new_student").exists())
+
+    def test_full_hostel_room_rejects_new_student_and_capacity_reduction(self):
+        hostel = Hostel.objects.create(
+            code="QA-HOSTEL",
+            name="QA Hostel",
+            hostel_type=Hostel.TYPE_MALE,
+        )
+        room = HostelRoom.objects.create(hostel=hostel, floor=1, number="01", capacity=2)
+
+        first = self.client.post(
+            "/admin/create-account/student",
+            self.student_payload(password="Abcdefg1", room=room.code),
+            format="json",
+        )
+        second = self.client.post(
+            "/admin/create-account/student",
+            self.student_payload(
+                username="second_student",
+                email="second-student@example.com",
+                ums_id="S-EMAIL-101",
+                password="Abcdefg1",
+                room=f"{room.code}-A",
+            ),
+            format="json",
+        )
+        self.assertEqual(first.status_code, 201, first.json())
+        self.assertEqual(second.status_code, 201, second.json())
+
+        over_capacity = self.client.post(
+            "/admin/create-account/student",
+            self.student_payload(
+                username="third_student",
+                email="third-student@example.com",
+                ums_id="S-EMAIL-102",
+                password="Abcdefg1",
+                room=f"{room.code}-B",
+            ),
+            format="json",
+        )
+        self.assertEqual(over_capacity.status_code, 400, over_capacity.json())
+        self.assertIn("full", str(over_capacity.json()).lower())
+        self.assertFalse(User.objects.filter(username="third_student").exists())
+        self.assertEqual(len(mail.outbox), 2)
+
+        reduced_capacity = self.client.put(
+            f"/admin/hostels/rooms/{room.id}",
+            {"capacity": 1},
+            format="json",
+        )
+        self.assertEqual(reduced_capacity.status_code, 400, reduced_capacity.json())
+        room.refresh_from_db()
+        self.assertEqual(room.capacity, 2)
 
     @patch(
         "admin_app.views.admin_create_account._generate_temporary_password",

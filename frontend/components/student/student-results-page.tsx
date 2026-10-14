@@ -533,10 +533,10 @@ function SemesterResultsView() {
       {data && !loading ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="flex items-center gap-2 text-sm font-medium">
+            <label className="flex w-full min-w-0 flex-col gap-2 text-sm font-medium sm:w-auto sm:flex-row sm:items-center">
               Semester
               <select
-                className="h-10 min-w-60 rounded-lg border border-input bg-background px-3 text-sm"
+                className="h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm sm:min-w-60"
                 value={selectedSemester}
                 onChange={(event) => setSelectedSemester(event.target.value)}
               >

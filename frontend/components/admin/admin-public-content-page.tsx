@@ -138,7 +138,7 @@ const config = {
 } as const
 
 function defaultDateTime() {
-  return new Date().toISOString().slice(0, 16)
+  return toDateTimeLocal(new Date().toISOString())
 }
 
 function emptyForm(kind: PublicContentKind): FormState {
@@ -173,7 +173,12 @@ function toDateTimeLocal(value?: string | null) {
   if (!value) return ""
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ""
-  return date.toISOString().slice(0, 16)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
+}
+
+function localDateTimeToIso(value: string) {
+  return value.trim() ? new Date(value).toISOString() : null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -249,10 +254,6 @@ function statusLabel(kind: PublicContentKind, record: PublicContentRecord) {
     return record.is_active ? "Active" : "Inactive"
   }
   return record.status ?? "draft"
-}
-
-function maybeNull(value: string) {
-  return value.trim() ? value : null
 }
 
 function numberValue(value: string) {
@@ -372,7 +373,7 @@ export function AdminPublicContentPage({ kind }: { kind: PublicContentKind }) {
         body: form.body,
         metadata: normalizedMetadata,
         status: form.status,
-        published_at: maybeNull(form.published_at),
+        published_at: localDateTimeToIso(form.published_at),
         sort_order: numberValue(form.sort_order),
       }
     }
@@ -384,7 +385,7 @@ export function AdminPublicContentPage({ kind }: { kind: PublicContentKind }) {
         summary: form.summary,
         body: form.body,
         status: form.status,
-        published_at: maybeNull(form.published_at),
+        published_at: localDateTimeToIso(form.published_at),
       }
     }
 
@@ -393,8 +394,8 @@ export function AdminPublicContentPage({ kind }: { kind: PublicContentKind }) {
         title: form.title.trim(),
         slug: form.slug.trim(),
         description: form.description,
-        starts_at: form.starts_at,
-        ends_at: maybeNull(form.ends_at),
+        starts_at: localDateTimeToIso(form.starts_at),
+        ends_at: localDateTimeToIso(form.ends_at),
         location: form.location,
         status: form.status,
       }
@@ -405,8 +406,8 @@ export function AdminPublicContentPage({ kind }: { kind: PublicContentKind }) {
         title: form.title.trim(),
         body: form.body,
         audience: form.audience,
-        starts_at: maybeNull(form.starts_at),
-        ends_at: maybeNull(form.ends_at),
+        starts_at: localDateTimeToIso(form.starts_at),
+        ends_at: localDateTimeToIso(form.ends_at),
         is_pinned: form.is_pinned,
         is_published: form.is_published,
       }

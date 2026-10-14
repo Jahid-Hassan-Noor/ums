@@ -82,6 +82,8 @@ type SessionPreview = {
   course_code: string
   course_title: string
   status: string
+  start_time: string | null
+  end_time: string | null
   class_meeting: {
     start_time: string
     end_time: string
@@ -290,8 +292,8 @@ function AttendanceCodeWorkspace({ initialCode = "" }: { initialCode?: string })
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {formatDate(lookup.session.session_date)}
-                      {lookup.session.class_meeting?.start_time
-                        ? ` · ${lookup.session.class_meeting.start_time}–${lookup.session.class_meeting.end_time}`
+                      {lookup.session.start_time
+                        ? ` · ${lookup.session.start_time}–${lookup.session.end_time}`
                         : ""}
                     </p>
                   </div>

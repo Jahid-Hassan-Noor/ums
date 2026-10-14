@@ -169,7 +169,7 @@ export default function StudentEvaluationFormPage() {
                     </CardContent>
                   </Card>
                 ))}
-                <div className="flex justify-end"><Button size="lg" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Submit evaluation</Button></div>
+                <div className="flex justify-end"><Button type="submit" size="lg" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Submit evaluation</Button></div>
               </form>
             )}
           </>

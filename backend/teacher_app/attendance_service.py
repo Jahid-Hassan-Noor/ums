@@ -263,8 +263,27 @@ def serialize_meeting(meeting):
     }
 
 
+def session_time_labels(session):
+    meeting = session.class_meeting
+    start_time = (
+        timezone.localtime(session.actual_starts_at)
+        if session.actual_starts_at
+        else meeting.start_time if meeting else None
+    )
+    end_time = (
+        timezone.localtime(session.actual_ends_at)
+        if session.actual_ends_at
+        else meeting.end_time if meeting else None
+    )
+    return (
+        start_time.strftime("%H:%M") if start_time else None,
+        end_time.strftime("%H:%M") if end_time else None,
+    )
+
+
 def serialize_session(session, include_token=False):
     session = refresh_qr_if_needed(session) if include_token else session
+    start_time, end_time = session_time_labels(session)
     payload = {
         "id": session.id,
         "session_date": session.session_date.isoformat(),
@@ -272,6 +291,8 @@ def serialize_session(session, include_token=False):
         "course_code": session.offering.course.code,
         "course_title": session.offering.course.title,
         "class_meeting": serialize_meeting(session.class_meeting) if session.class_meeting_id else None,
+        "start_time": start_time,
+        "end_time": end_time,
         "status": session.status,
         "opens_at": session.opens_at.isoformat() if session.opens_at else None,
         "closes_at": session.closes_at.isoformat() if session.closes_at else None,
@@ -504,12 +525,7 @@ def attendance_record_payload(session, record):
         medical_certificate = ""
         marked_at = None
         record_id = None
-    meeting = session.class_meeting
-    scheduled_start = None
-    scheduled_end = None
-    if meeting:
-        scheduled_start = meeting.start_time.strftime("%H:%M")
-        scheduled_end = meeting.end_time.strftime("%H:%M")
+    scheduled_start, scheduled_end = session_time_labels(session)
     return {
         "id": record_id,
         "session_id": session.id,

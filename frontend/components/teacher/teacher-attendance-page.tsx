@@ -65,6 +65,8 @@ type Session = {
   course_code: string
   course_title: string
   class_meeting: Meeting | null
+  start_time: string | null
+  end_time: string | null
   status: "draft" | "open" | "closed" | "cancelled"
   opens_at: string | null
   closes_at: string | null
@@ -288,7 +290,7 @@ function QrSessionCard({
         </CardTitle>
         <CardDescription>
           {formatDate(session.session_date)} ·{" "}
-          {session.class_meeting?.start_time ?? "Scheduled class"}
+          {session.start_time ?? "Scheduled class"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4 p-6">
@@ -1104,7 +1106,7 @@ export function TeacherCourseAttendancePage({
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">
                       {groupLabel(session.class_meeting)} ·{" "}
-                      {session.class_meeting?.start_time ?? "Time not recorded"}
+                      {session.start_time ?? "Time not recorded"}
                     </p>
                   </div>
                 ))}
