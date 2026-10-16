@@ -2,6 +2,7 @@ from django.contrib.auth import authenticate, get_user_model
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from auth_app.permissions import IsApplicantRole
@@ -20,6 +21,8 @@ User = get_user_model()
 
 class ApplicantRegisterView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "applicant_registration"
 
     def post(self, request, *args, **kwargs):
         if not setting_value("security", "applicant_registration_enabled"):
@@ -35,6 +38,8 @@ class ApplicantRegisterView(APIView):
 
 class ApplicantLoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
 
     def post(self, request, *args, **kwargs):
         if maintenance_mode_enabled():

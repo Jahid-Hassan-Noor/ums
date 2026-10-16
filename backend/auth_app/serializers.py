@@ -17,6 +17,20 @@ User = get_user_model()
 MAX_PROFILE_PICTURE_SIZE = 5 * 1024 * 1024
 
 
+def managed_hostel_room(room_code, *, lock=False):
+    if not isinstance(room_code, str):
+        return None
+    normalized = room_code.strip().upper()
+    if not normalized:
+        return None
+    parts = normalized.split("-")
+    prefixes = ["-".join(parts[:index]) for index in range(1, len(parts) + 1)]
+    rooms = models.HostelRoom.objects.filter(code__in=prefixes).order_by("pk")
+    if lock:
+        rooms = rooms.select_for_update()
+    return max(rooms, key=lambda room: len(room.code), default=None)
+
+
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
@@ -300,13 +314,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             room_code = attrs.get("room", "").strip().upper()
             attrs["room"] = room_code
             if room_code:
-                parts = room_code.split("-")
-                prefixes = ["-".join(parts[:index]) for index in range(1, len(parts) + 1)]
-                managed_room = max(
-                    models.HostelRoom.objects.filter(code__in=prefixes),
-                    key=lambda room: len(room.code),
-                    default=None,
-                )
+                managed_room = managed_hostel_room(room_code)
                 if managed_room:
                     occupied = Student.objects.filter(
                         Q(room=managed_room.code)

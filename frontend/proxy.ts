@@ -43,6 +43,12 @@ type ResolvedIdentity = {
   refreshToken?: string
 }
 
+const PUBLIC_SETTINGS_CACHE_TTL_MS = 30_000
+
+let cachedPublicSettings: UmsPublicSettings | null = null
+let cachedPublicSettingsAt = 0
+let pendingPublicSettings: Promise<UmsPublicSettings> | null = null
+
 const securityHeaders = {
   "Content-Security-Policy": [
     "default-src 'self'",
@@ -152,7 +158,7 @@ async function identityForAccessToken(accessToken: string): Promise<UmsIdentity 
   }
 }
 
-async function loadPublicSettings(): Promise<UmsPublicSettings> {
+async function fetchPublicSettings(): Promise<UmsPublicSettings> {
   try {
     const response = await fetch(`${backendApiUrl}/settings/public`, {
       cache: "no-store",
@@ -162,6 +168,31 @@ async function loadPublicSettings(): Promise<UmsPublicSettings> {
   } catch {
     return DEFAULT_UMS_PUBLIC_SETTINGS
   }
+}
+
+async function loadPublicSettings(): Promise<UmsPublicSettings> {
+  if (
+    cachedPublicSettings &&
+    Date.now() - cachedPublicSettingsAt < PUBLIC_SETTINGS_CACHE_TTL_MS
+  ) {
+    return cachedPublicSettings
+  }
+
+  if (pendingPublicSettings) return pendingPublicSettings
+
+  pendingPublicSettings = fetchPublicSettings()
+    .then((settings) => {
+      if (settings !== DEFAULT_UMS_PUBLIC_SETTINGS) {
+        cachedPublicSettings = settings
+        cachedPublicSettingsAt = Date.now()
+      }
+      return settings
+    })
+    .finally(() => {
+      pendingPublicSettings = null
+    })
+
+  return pendingPublicSettings
 }
 
 async function resolveIdentity(request: NextRequest): Promise<ResolvedIdentity> {

@@ -33,6 +33,7 @@ from accountant_app.ledger_views import (
     FinanceStudentBalance,
     FinanceStudentCharges,
     FinanceStudentLedgerEntries,
+    FinanceStudentLedgerExport,
     FinanceStudentLedgers,
     FinanceAuditTrail,
 )
@@ -57,6 +58,7 @@ urlpatterns = [
     path("holds", FinanceHolds.as_view(), name="finance_holds"),
     path("ledger/dashboard", FinanceDashboard.as_view(), name="finance_ledger_dashboard"),
     path("ledger/audit", FinanceAuditTrail.as_view(), name="finance_ledger_audit"),
+    path("ledger/export", FinanceStudentLedgerExport.as_view(), name="finance_ledger_export"),
     path("ledger/bulk-charge", FinanceBulkCharge.as_view(), name="finance_bulk_charge"),
     path("ledger/payment-plans", FinancePaymentPlans.as_view(), name="finance_payment_plans"),
     path("ledger/payment-plans/<int:plan_id>", FinancePaymentPlanDetail.as_view(), name="finance_payment_plan_detail"),

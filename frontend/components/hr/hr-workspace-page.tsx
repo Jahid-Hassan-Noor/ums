@@ -30,6 +30,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { formatCurrency, formatDateOnly } from "@/components/utils/format"
 import { usePublicUmsSettings } from "@/hooks/use-public-ums-settings"
 import { apiFetch } from "@/lib/auth"
+import { zoneForUmsRole } from "@/lib/ums-settings"
+import { parseUmsRole } from "@/lib/ums-roles"
 
 type View = "dashboard" | "statistics" | "employees" | "positions" | "my-profile"
 
@@ -273,6 +275,13 @@ export function HrWorkspacePage({ view }: { view: View }) {
   const umsSettings = usePublicUmsSettings()
   const locale = umsSettings.localization.locale
   const defaultCurrency = umsSettings.localization.currency_code
+  const roleLabel = useCallback(
+    (value: string) => {
+      const role = parseUmsRole(value)
+      return role ? zoneForUmsRole(role, umsSettings).label : statusLabel(value)
+    },
+    [umsSettings]
+  )
   const [summary, setSummary] = useState<DashboardResponse["summary"] | null>(null)
   const [statistics, setStatistics] = useState<DashboardResponse["statistics"] | null>(null)
   const [hrStatistics, setHrStatistics] = useState<HrStatisticsResponse | null>(null)
@@ -503,7 +512,7 @@ export function HrWorkspacePage({ view }: { view: View }) {
             {statistics ? (
               <section className="grid gap-4 xl:grid-cols-2">
                 <ChartCard title="Employment Status" subtitle="Status distribution" rows={statistics.status_counts} total={summary?.employees ?? 0} />
-                <ChartCard title="Roles and Positions" subtitle="Workforce coverage" rows={[...statistics.role_counts.map((role) => ({ label: statusLabel(role.role), count: role.count })), ...statistics.position_counts.map((position) => ({ label: position.code ? `${position.title} (${position.code})` : position.title, count: position.count }))]} total={summary?.employees ?? 0} />
+                <ChartCard title="Roles and Positions" subtitle="Workforce coverage" rows={[...statistics.role_counts.map((role) => ({ label: roleLabel(role.role), count: role.count })), ...statistics.position_counts.map((position) => ({ label: position.code ? `${position.title} (${position.code})` : position.title, count: position.count }))]} total={summary?.employees ?? 0} />
                 <RecentRequests requests={statistics.recent_compensation_requests} defaultCurrency={defaultCurrency} locale={locale} />
                 <RecentSalaryAdjustments adjustments={statistics.recent_salary_adjustments} defaultCurrency={defaultCurrency} locale={locale} />
               </section>
@@ -512,7 +521,7 @@ export function HrWorkspacePage({ view }: { view: View }) {
         ) : null}
 
         {view === "statistics" ? (
-          <HrStatisticsView data={hrStatistics} defaultCurrency={defaultCurrency} locale={locale} />
+          <HrStatisticsView data={hrStatistics} defaultCurrency={defaultCurrency} locale={locale} roleLabel={roleLabel} />
         ) : null}
 
         {view === "positions" ? (
@@ -584,7 +593,7 @@ export function HrWorkspacePage({ view }: { view: View }) {
                     </select>
                     <select value={employeeFilters.role} onChange={(event) => setEmployeeFilters((current) => ({ ...current, role: event.target.value }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm">
                       <option value="">All roles</option>
-                      {roleOptions.map((role) => <option key={role} value={role}>{statusLabel(role)}</option>)}
+                      {roleOptions.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
                     </select>
                     <select value={employeeFilters.position_id} onChange={(event) => setEmployeeFilters((current) => ({ ...current, position_id: event.target.value }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm">
                       <option value="">All positions</option>
@@ -604,7 +613,7 @@ export function HrWorkspacePage({ view }: { view: View }) {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <p className="font-medium">{employee.name}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">{employee.employee_no} - {statusLabel(employee.role)} - {employee.position?.title ?? "No position"}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{employee.employee_no} - {roleLabel(employee.role)} - {employee.position?.title ?? "No position"}</p>
                         </div>
                         <span className="w-fit rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">{employee.employment_status_label || statusLabel(employee.employment_status)}</span>
                       </div>
@@ -629,6 +638,7 @@ export function HrWorkspacePage({ view }: { view: View }) {
                 onCompensationSubmit={submitCompensationRequest}
                 defaultCurrency={defaultCurrency}
                 locale={locale}
+                roleLabel={roleLabel}
               />
             </section>
           </section>
@@ -668,10 +678,12 @@ function HrStatisticsView({
   data,
   defaultCurrency,
   locale,
+  roleLabel,
 }: {
   data: HrStatisticsResponse | null
   defaultCurrency: string
   locale: string
+  roleLabel: (value: string) => string
 }) {
   if (!data) {
     return (
@@ -692,7 +704,7 @@ function HrStatisticsView({
       </section>
       <section className="grid gap-4 xl:grid-cols-2">
         <ChartCard title="Employment Status" subtitle="All employee statuses" rows={data.charts.status_counts} total={data.summary.employees} />
-        <ChartCard title="Role Distribution" subtitle="Employees by portal role" rows={data.charts.role_counts.map((row) => ({ label: statusLabel(row.role), count: row.count }))} total={data.summary.employees} />
+        <ChartCard title="Role Distribution" subtitle="Employees by portal role" rows={data.charts.role_counts.map((row) => ({ label: roleLabel(row.role), count: row.count }))} total={data.summary.employees} />
         <ChartCard title="Salary Bands" subtitle="Current salary spread" rows={data.charts.salary_bands} total={data.summary.employees} />
         <ChartCard title="Bonus Bands" subtitle="Current bonus spread" rows={data.charts.bonus_bands} total={data.summary.employees} />
         <ChartCard title="Compensation Requests" subtitle="Approval queue status" rows={data.charts.compensation_request_status} total={Math.max(data.charts.compensation_request_status.reduce((sum, row) => sum + row.count, 0), 1)} />
@@ -832,6 +844,7 @@ function EmployeeDetailPanel({
   onCompensationSubmit,
   defaultCurrency,
   locale,
+  roleLabel,
 }: {
   employee: EmployeeDetail | null
   loading: boolean
@@ -841,6 +854,7 @@ function EmployeeDetailPanel({
   onCompensationSubmit: (event: React.FormEvent<HTMLFormElement>) => void
   defaultCurrency: string
   locale: string
+  roleLabel: (value: string) => string
 }) {
   if (loading && !employee) {
     return (
@@ -868,7 +882,7 @@ function EmployeeDetailPanel({
       </CardHeader>
       <CardContent className="space-y-6">
         <section className="grid gap-3 sm:grid-cols-2">
-          <InfoItem label="Role" value={statusLabel(employee.role)} />
+          <InfoItem label="Role" value={roleLabel(employee.role)} />
           <InfoItem label="Position" value={employee.position?.title ?? "Not assigned"} />
           <InfoItem label="Current Salary" value={formatMoney(employee.current_salary, employee.salary_currency || defaultCurrency, locale)} />
           <InfoItem label="Current Bonus" value={formatMoney(employee.current_bonus, employee.salary_currency || defaultCurrency, locale)} />

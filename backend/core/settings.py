@@ -219,6 +219,8 @@ CACHES = {
     }
 }
 
+TEST_RUNNER = "core.test_runner.IsolatedCacheTestRunner"
+
 
 # Password validation
 
@@ -324,6 +326,10 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '20/minute',
         'user': '200/minute',
+        'public_read': os.getenv('PUBLIC_READ_THROTTLE_RATE', '3000/minute'),
+        'login': os.getenv('LOGIN_THROTTLE_RATE', '10/minute'),
+        'applicant_registration': os.getenv('APPLICANT_REGISTRATION_THROTTLE_RATE', '10/minute'),
+        'token_refresh': os.getenv('TOKEN_REFRESH_THROTTLE_RATE', '30/minute'),
     },
     'DEFAULT_RENDERER_CLASSES': ('rest_framework.renderers.JSONRenderer',),
     'DEFAULT_SCHEMA_CLASS': 'core.schema.PortalAutoSchema',

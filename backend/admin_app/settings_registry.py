@@ -2655,7 +2655,8 @@ def maintenance_mode_enabled():
 def features_enabled_for_path(path, role=None):
     values = all_settings()
     path_text = str(path or "").lower()
-    parts = {part for part in str(path or "").split("/") if part}
+    path_parts = [part for part in str(path or "").split("/") if part]
+    parts = set(path_parts)
     flags = feature_flags(values)
     permissions = role_module_permissions(values) if role else {}
 
@@ -2688,6 +2689,8 @@ def features_enabled_for_path(path, role=None):
 
     for path_part, feature_keys in FEATURE_PATH_SETTINGS.items():
         if path_part not in parts:
+            continue
+        if path_part == "apply" and path_parts[0] != "apply":
             continue
         enabled = any(
             allowed(feature)

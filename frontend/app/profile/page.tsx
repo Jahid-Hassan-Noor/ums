@@ -266,7 +266,7 @@ export default function ProfilePage() {
         <section className="border-b border-border/70 pb-5">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Profile</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Review your portal account details and keep your applicant information current.
+            Review your portal account details and manage your account security.
           </p>
         </section>
 

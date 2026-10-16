@@ -16,15 +16,18 @@ from accountant_app.ledger_service import (
     holds_filtered,
     hold_payload,
     installment_payload,
+    ledger_entry_payload,
     payment_plan_payload,
     place_finance_hold,
     record_plan_payment,
+    record_student_payment,
     release_finance_hold,
     student_balance_summaries_paginated,
     student_charges_filtered,
     student_finance_summary,
     student_ledger_entries,
 )
+from accountant_app.ledger_exports import student_ledger_export_response
 from accountant_app.models import FeeCategory, PaymentPlan, PaymentPlanInstallment, StudentFinanceHold
 from admin_app.models import Profile
 from auth_app.permissions import IsAccountantRole, IsActiveUmsUser
@@ -81,6 +84,15 @@ class FinanceStudentLedgers(APIView):
 
     def post(self, request):
         try:
+            if request.data.get("entry_type") == "payment":
+                entry = record_student_payment(actor=request.user.profile, data=request.data)
+                return Response(
+                    {
+                        "message": "Student payment recorded.",
+                        "entry": ledger_entry_payload(entry),
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
             charge = create_student_charge(actor=request.user.profile, data=request.data)
         except ValidationError as error:
             return validation_response(error)
@@ -155,6 +167,28 @@ class FinanceAuditTrail(APIView):
             page=page,
             page_size=page_size,
         ))
+
+
+class FinanceStudentLedgerExport(APIView):
+    permission_classes = [IsAccountantRole]
+
+    def get(self, request):
+        export_format = str(request.query_params.get("export_format") or "pdf").lower()
+        if export_format not in {"pdf", "xlsx"}:
+            return Response(
+                {"detail": "Export format must be pdf or xlsx."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        student = Profile.objects.select_related("user").filter(
+            pk=request.query_params.get("student_id"),
+            role=Profile.ROLE_STUDENT,
+        ).first()
+        if not student:
+            return Response(
+                {"detail": "Student not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return student_ledger_export_response(student, export_format)
 
 
 class FinanceBulkCharge(APIView):

@@ -1,5 +1,14 @@
 from django.urls import path
 
+from hr_app.onboarding_views import (
+    HrOnboardingBoard,
+    HrOnboardingCardEmployeeLink,
+    HrOnboardingCardHistory,
+    HrOnboardingCardMove,
+    HrOnboardingCards,
+    HrOnboardingColumnDetail,
+    HrOnboardingColumns,
+)
 from hr_app.views import (
     HrCompensationRequests,
     HrDashboard,
@@ -29,4 +38,11 @@ urlpatterns = [
     path("positions", HrPositions.as_view()),
     path("profiles", HrProfiles.as_view()),
     path("staff-accounts", HrStaffAccounts.as_view()),
+    path("onboarding-board", HrOnboardingBoard.as_view()),
+    path("onboarding-board/cards", HrOnboardingCards.as_view()),
+    path("onboarding-board/cards/<int:card_id>/move", HrOnboardingCardMove.as_view()),
+    path("onboarding-board/cards/<int:card_id>/employee-link", HrOnboardingCardEmployeeLink.as_view()),
+    path("onboarding-board/cards/<int:card_id>/history", HrOnboardingCardHistory.as_view()),
+    path("onboarding-board/columns", HrOnboardingColumns.as_view()),
+    path("onboarding-board/columns/<int:column_id>", HrOnboardingColumnDetail.as_view()),
 ]

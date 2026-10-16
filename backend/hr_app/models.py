@@ -309,3 +309,83 @@ class EmployeeDocument(models.Model):
 
     class Meta:
         ordering = ("-uploaded_at",)
+
+
+class OnboardingColumn(models.Model):
+    PHASE_APPLICANT = "applicant"
+    PHASE_ONBOARDING = "onboarding"
+    PHASE_CHOICES = [
+        (PHASE_APPLICANT, "Applicant"),
+        (PHASE_ONBOARDING, "Onboarding"),
+    ]
+
+    label = models.CharField(max_length=80)
+    phase = models.CharField(max_length=20, choices=PHASE_CHOICES)
+    position = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("phase", "position", "id")
+
+
+class OnboardingCard(models.Model):
+    name = models.CharField(max_length=160)
+    email = models.EmailField(blank=True)
+    position = models.ForeignKey(Position, on_delete=models.SET_NULL, null=True, blank=True)
+    employee = models.OneToOneField(
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="onboarding_card",
+    )
+    column = models.ForeignKey(OnboardingColumn, on_delete=models.PROTECT, related_name="cards")
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        "auth_app.Profile", on_delete=models.SET_NULL, null=True, blank=True, related_name="created_onboarding_cards"
+    )
+    updated_by = models.ForeignKey(
+        "auth_app.Profile", on_delete=models.SET_NULL, null=True, blank=True, related_name="updated_onboarding_cards"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at", "-id")
+        indexes = [models.Index(fields=("column", "updated_at"), name="hr_onboard_col_updated_idx")]
+
+
+class OnboardingStageChange(models.Model):
+    card = models.ForeignKey(OnboardingCard, on_delete=models.PROTECT, related_name="stage_changes")
+    from_column = models.ForeignKey(
+        OnboardingColumn, on_delete=models.PROTECT, null=True, blank=True, related_name="departures"
+    )
+    to_column = models.ForeignKey(OnboardingColumn, on_delete=models.PROTECT, related_name="arrivals")
+    from_label = models.CharField(max_length=80, blank=True)
+    from_phase = models.CharField(max_length=20, blank=True)
+    to_label = models.CharField(max_length=80)
+    to_phase = models.CharField(max_length=20)
+    actor = models.ForeignKey(
+        "auth_app.Profile", on_delete=models.SET_NULL, null=True, blank=True, related_name="onboarding_stage_changes"
+    )
+    actor_name = models.CharField(max_length=320)
+    reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [models.Index(fields=("card", "created_at"), name="hr_onboard_card_change_idx")]
+
+
+class OnboardingEmployeeLink(models.Model):
+    card = models.OneToOneField(OnboardingCard, on_delete=models.PROTECT, related_name="employee_link")
+    employee = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
+    employee_no = models.CharField(max_length=50)
+    employee_name = models.CharField(max_length=320)
+    actor = models.ForeignKey(
+        "auth_app.Profile", on_delete=models.SET_NULL, null=True, blank=True, related_name="onboarding_employee_links"
+    )
+    actor_name = models.CharField(max_length=320)
+    created_at = models.DateTimeField(auto_now_add=True)

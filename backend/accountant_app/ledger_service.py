@@ -241,6 +241,22 @@ def create_student_charge(*, actor, data):
     return charge
 
 
+@transaction.atomic
+def record_student_payment(*, actor, data):
+    student = _student_or_error(data.get("student_id"))
+    description = str(data.get("description") or "Manual payment recorded").strip()
+    if not description:
+        raise ValidationError({"description": "Payment description is required."})
+    return record_ledger_entry(
+        student=student,
+        entry_type=StudentLedgerEntry.ENTRY_PAYMENT,
+        amount=data.get("amount"),
+        description=description,
+        actor=actor,
+        currency=data.get("currency"),
+    )
+
+
 def ensure_charge_for_fine(fine):
     category = get_or_create_category(code="FINE", name="Student fines")
     charge, created = StudentCharge.objects.get_or_create(

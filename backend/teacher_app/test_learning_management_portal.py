@@ -182,6 +182,35 @@ class LearningManagementPortalApiTests(TestCase):
         self.assertIn("study-guide", payload["assessment"]["study_guide"])
         self.assertTrue(payload["assessment"]["study_guide"].endswith(".pdf"))
 
+    def test_teacher_course_roster_returns_scoped_students_groups_and_attendance(self):
+        tutorial_group = CourseTutorialGroup.objects.create(
+            offering=self.offering,
+            code="T01",
+            capacity=30,
+        )
+        enrollment = Enrollment.objects.get(
+            student=self.student,
+            offering=self.offering,
+        )
+        enrollment.tutorial_group = tutorial_group
+        enrollment.save(update_fields=["tutorial_group"])
+
+        self.client.force_authenticate(user=self.teacher.user)
+        response = self.client.get(f"/teacher/courses/{self.offering.id}/roster")
+
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.json()["course"]["code"], self.course.code)
+        self.assertEqual(response.json()["summary"]["students"], 1)
+        self.assertEqual(response.json()["summary"]["tutorial_groups"], 1)
+        self.assertEqual(response.json()["students"][0]["profile_id"], self.student.id)
+        self.assertEqual(response.json()["students"][0]["tutorial_group"], "T01")
+        self.assertEqual(response.json()["students"][0]["total_classes"], 0)
+
+        other_teacher = self._profile("other_lms_teacher", Profile.ROLE_TEACHER)
+        self.client.force_authenticate(user=other_teacher.user)
+        forbidden = self.client.get(f"/teacher/courses/{self.offering.id}/roster")
+        self.assertEqual(forbidden.status_code, 404)
+
     def test_teacher_clears_and_reuploads_study_guide(self):
         self.client.force_authenticate(user=self.teacher.user)
 

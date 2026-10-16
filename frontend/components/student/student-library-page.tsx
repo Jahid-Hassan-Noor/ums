@@ -393,7 +393,11 @@ export function StudentLibraryPage({
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm">
               <p className="font-semibold text-blue-800">Your Borrowing Status</p>
               <p className="mt-1 text-blue-700">
-                Books held: <span className="font-medium">{data.active_book_loans + data.pending_book_requests}</span> / {data.library_policy.limits.book.max_keep_at_a_time}
+                Books on loan: <span className="font-medium">{data.active_book_loans}</span>
+                {" · "}
+                Pending requests: <span className="font-medium">{data.pending_book_requests}</span>
+                {" · "}
+                Limit used (including pending): <span className="font-medium">{data.active_book_loans + data.pending_book_requests}</span> / {data.library_policy.limits.book.max_keep_at_a_time}
                 {" · "}
                 Can borrow: <span className="font-medium">{Math.max(0, data.library_policy.limits.book.max_borrow_at_a_time - data.active_book_loans - data.pending_book_requests)}</span> more at a time
                 {" - "}
@@ -601,7 +605,11 @@ export function StudentLibraryPage({
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm">
               <p className="font-semibold text-blue-800">Your Laptop Status</p>
               <p className="mt-1 text-blue-700">
-                Laptops on loan: <span className="font-medium">{data.active_laptop_loans + data.pending_laptop_requests}</span> / {data.library_policy.limits.laptop.max_keep_at_a_time}
+                Laptops on loan: <span className="font-medium">{data.active_laptop_loans}</span>
+                {" · "}
+                Pending requests: <span className="font-medium">{data.pending_laptop_requests}</span>
+                {" · "}
+                Limit used (including pending): <span className="font-medium">{data.active_laptop_loans + data.pending_laptop_requests}</span> / {data.library_policy.limits.laptop.max_keep_at_a_time}
                 {" - "}
                 Loan period: <span className="font-medium">{libraryDurationLabel(data.library_policy.loan_periods.laptop)}</span>
                 {data.active_laptop_loans >= 1 ? " · Return your current laptop before borrowing another." : ""}
@@ -666,7 +674,11 @@ export function StudentLibraryPage({
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm">
               <p className="font-semibold text-blue-800">Your Room Status</p>
               <p className="mt-1 text-blue-700">
-                Rooms allocated: <span className="font-medium">{data.active_room_loans + data.pending_room_requests}</span> / {data.library_policy.limits.room.max_keep_at_a_time}
+                Rooms allocated: <span className="font-medium">{data.active_room_loans}</span>
+                {" · "}
+                Pending reservations: <span className="font-medium">{data.pending_room_requests}</span>
+                {" · "}
+                Limit used (including pending): <span className="font-medium">{data.active_room_loans + data.pending_room_requests}</span> / {data.library_policy.limits.room.max_keep_at_a_time}
                 {" - "}
                 Allocation period: <span className="font-medium">{libraryDurationLabel(data.library_policy.loan_periods.room)}</span>
                 {data.active_room_loans >= 1 ? " · Return your current room before reserving another." : ""}

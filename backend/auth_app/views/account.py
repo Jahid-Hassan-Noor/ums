@@ -8,11 +8,13 @@ from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import APIException, AuthenticationFailed
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.settings import api_settings
@@ -44,6 +46,7 @@ from auth_app.serializers import (
     RegisterSerializer,
     ResetPasswordSerializer,
     UserSerializer,
+    managed_hostel_room,
 )
 
 
@@ -112,6 +115,8 @@ def _password_reset_token_expiry():
 class LoginView(generics.GenericAPIView):
     serializer_class = LoginSerializer
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -181,7 +186,10 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
+        if request.data.get("role") == Profile.ROLE_STUDENT:
+            managed_hostel_room(request.data.get("room"), lock=True)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -487,6 +495,8 @@ class UmsTokenRefreshSerializer(TokenRefreshSerializer):
 
 class UmsTokenRefreshView(TokenRefreshView):
     serializer_class = UmsTokenRefreshSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "token_refresh"
 
 
 register = RegisterView

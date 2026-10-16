@@ -1,5 +1,6 @@
 from rest_framework import status
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -277,9 +278,10 @@ class AdminHostelRoomsView(APIView):
 class AdminHostelRoomDetailView(APIView):
     permission_classes = [IsAdminRole]
 
+    @transaction.atomic
     def put(self, request, pk):
         try:
-            room = models.HostelRoom.objects.get(pk=pk)
+            room = models.HostelRoom.objects.select_for_update().get(pk=pk)
         except models.HostelRoom.DoesNotExist:
             return Response(
                 {"detail": "Hostel room not found."},

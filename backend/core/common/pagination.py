@@ -5,6 +5,8 @@ centralizes that logic and works with either a Django ``QuerySet`` (uses
 ``.count()`` for an efficient total) or a plain in-memory ``list``.
 """
 
+from django.db.models import QuerySet
+
 
 def pagination_meta(total, page, page_size):
     """Return the standard ``{total, page, page_size, total_pages}`` metadata."""
@@ -24,8 +26,7 @@ def paginate(items, page=1, page_size=20):
     or any sliceable sequence (``len()`` is used). Callers build their final
     payload dict, e.g. ``{"entries": page_items, **meta}``.
     """
-    count = getattr(items, "count", None)
-    total = count() if callable(count) else len(items)
+    total = items.count() if isinstance(items, QuerySet) else len(items)
     start = (page - 1) * page_size
     end = start + page_size
     return items[start:end], pagination_meta(total, page, page_size)

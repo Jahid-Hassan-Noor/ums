@@ -4,7 +4,6 @@ import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import InfoModal from "@/components/modals/info-modal"
 import WarningModal from "@/components/modals/warning-modal"
-import { BackendRouteConnector } from "@/components/backend-route-connector"
 import { UmsChatbot } from "@/components/chatbot/ums-chatbot"
 import { UmsFooter } from "@/components/ui/ums-footer"
 import LoadingScreen from "@/components/ui/loading-screen"
@@ -157,16 +156,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   if (rendersWithoutUmsShell) {
     if (isAuthEntryPath && isChecking) {
-      return (
-        <>
-          <BackendRouteConnector />
-          <LoadingScreen label={null} className="min-h-screen" />
-        </>
-      )
+      return <LoadingScreen label={null} className="min-h-screen" />
     }
     return (
       <>
-        <BackendRouteConnector />
         {content}
         <UmsFooter />
         <UmsChatbot />
@@ -196,7 +189,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <BackendRouteConnector />
       <InfoModal
         open={showAlreadyLoggedInModal}
         onOpenChange={setShowAlreadyLoggedInModal}

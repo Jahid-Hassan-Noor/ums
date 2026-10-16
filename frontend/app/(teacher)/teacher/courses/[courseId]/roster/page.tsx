@@ -1,12 +1,10 @@
-import { PlannedWorkflowPage } from "@/components/role-zone/planned-workflow-page"
+import { TeacherCourseRosterPage } from "@/components/teacher/teacher-course-roster-page"
 
-export default function TeacherCourseRosterPage() {
-  return (
-    <PlannedWorkflowPage
-      role="teacher"
-      title="Course Roster"
-      description="Placeholder for enrolled students, groups, attendance status, and exports."
-      path="/teacher/courses/[courseId]/roster"
-    />
-  )
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ courseId: string }>
+}) {
+  const { courseId } = await params
+  return <TeacherCourseRosterPage courseId={courseId} />
 }

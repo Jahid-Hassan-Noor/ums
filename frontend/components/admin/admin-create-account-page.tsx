@@ -819,7 +819,7 @@ export function AdminCreateAccountPage({
         accountRole === "student" ||
         ownerScopedRoles.has(accountRole)
       const response = await apiFetch<CreateAccountResponse>(
-        `/admin/create-account/${accountRole}/`,
+        `/admin/create-account/${accountRole}`,
         {
           method: "POST",
           body: JSON.stringify({

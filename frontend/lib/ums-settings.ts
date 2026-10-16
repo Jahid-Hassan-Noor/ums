@@ -1267,7 +1267,13 @@ export function normalizeUmsPublicSettings(value: unknown): UmsPublicSettings {
   }
 }
 
-export async function loadPublicUmsSettings(
+const PUBLIC_SETTINGS_CACHE_TTL_MS = 30_000
+
+let cachedPublicSettings: UmsPublicSettings | null = null
+let cachedPublicSettingsAt = 0
+let pendingPublicSettings: Promise<UmsPublicSettings> | null = null
+
+async function fetchPublicUmsSettings(
   init?: RequestInit
 ): Promise<UmsPublicSettings> {
   try {
@@ -1280,6 +1286,36 @@ export async function loadPublicUmsSettings(
   } catch {
     return DEFAULT_UMS_PUBLIC_SETTINGS
   }
+}
+
+export async function loadPublicUmsSettings(
+  init?: RequestInit
+): Promise<UmsPublicSettings> {
+  const canShareRequest = typeof window !== "undefined" && !init
+  if (!canShareRequest) return fetchPublicUmsSettings(init)
+
+  if (
+    cachedPublicSettings &&
+    Date.now() - cachedPublicSettingsAt < PUBLIC_SETTINGS_CACHE_TTL_MS
+  ) {
+    return cachedPublicSettings
+  }
+
+  if (pendingPublicSettings) return pendingPublicSettings
+
+  pendingPublicSettings = fetchPublicUmsSettings()
+    .then((settings) => {
+      if (settings !== DEFAULT_UMS_PUBLIC_SETTINGS) {
+        cachedPublicSettings = settings
+        cachedPublicSettingsAt = Date.now()
+      }
+      return settings
+    })
+    .finally(() => {
+      pendingPublicSettings = null
+    })
+
+  return pendingPublicSettings
 }
 
 export function formatUmsMoney(

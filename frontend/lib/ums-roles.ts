@@ -1253,6 +1253,12 @@ export const ROLE_ZONES: Record<UserRole, UmsZone> = {
         description: "Create and maintain unified employee master records.",
       },
       {
+        title: "Staff Onboarding",
+        url: "/hr/onboarding",
+        icon: "records",
+        description: "Track staff applications and onboarding work.",
+      },
+      {
         title: "Positions",
         url: "/hr/positions",
         icon: "records",

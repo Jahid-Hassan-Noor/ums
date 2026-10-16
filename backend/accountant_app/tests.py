@@ -20,6 +20,7 @@ from accountant_app.models import (
     Subscription,
     SubscriptionPlan,
 )
+from accountant_app.ledger_exports import XLSX_CONTENT_TYPE
 from accountant_app.tasks import mark_overdue_fines_task
 from admin_app.models import Profile, SystemSetting
 from admin_app.settings_registry import invalidate_settings_cache
@@ -127,6 +128,37 @@ class FinanceSubscriptionTests(TestCase):
         profile.accountant_detail.refresh_from_db()
         self.assertEqual(profile.phone, "0123456789")
         self.assertEqual(profile.accountant_detail.office_location, "Finance Counter")
+
+    def test_accountant_can_list_paginated_student_ledgers(self):
+        self.client.force_authenticate(user=self.accountant_user)
+
+        response = self.client.get("/finance/student-ledgers?page=1&page_size=20")
+
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.json()["total"], 1)
+        self.assertEqual(response.json()["total_pages"], 1)
+        self.assertEqual(response.json()["students"][0]["student"]["id"], self.student.id)
+
+    def test_accountant_can_export_student_ledger_as_pdf_and_xlsx(self):
+        self.client.force_authenticate(user=self.accountant_user)
+
+        pdf = self.client.get(
+            f"/finance/ledger/export?student_id={self.student.id}&export_format=pdf"
+        )
+        xlsx = self.client.get(
+            f"/finance/ledger/export?student_id={self.student.id}&export_format=xlsx"
+        )
+        invalid = self.client.get(
+            f"/finance/ledger/export?student_id={self.student.id}&export_format=csv"
+        )
+
+        self.assertEqual(pdf.status_code, 200, getattr(pdf, "data", None))
+        self.assertEqual(pdf["Content-Type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+        self.assertEqual(xlsx.status_code, 200)
+        self.assertEqual(xlsx["Content-Type"], XLSX_CONTENT_TYPE)
+        self.assertTrue(xlsx.content.startswith(b"PK"))
+        self.assertEqual(invalid.status_code, 400, invalid.json())
 
     def test_register_serializer_creates_accountant_detail(self):
         serializer = RegisterSerializer(
@@ -244,6 +276,42 @@ class FinanceSubscriptionTests(TestCase):
         self.assertEqual(attempt.status, PaymentAttempt.STATUS_PENDING)
         self.assertEqual(attempt.gateway_reference, attempt.external_reference)
 
+        plans_response = self.client.get("/finance/my-subscriptions")
+        plan = next(
+            item
+            for item in plans_response.json()["plans"]
+            if item["id"] == self.gym.id
+        )
+        self.assertFalse(plan["can_purchase"])
+
+        duplicate = self.client.post(
+            "/finance/subscriptions/purchase",
+            {"plan_id": self.gym.id},
+            format="json",
+        )
+        self.assertEqual(duplicate.status_code, 400, duplicate.json())
+        self.assertIn("already pending", duplicate.json()["detail"])
+        self.assertEqual(Subscription.objects.count(), 1)
+
+    def test_zero_price_subscription_is_visible_but_not_purchasable(self):
+        self.gym.price = Decimal("0.00")
+        self.gym.save(update_fields=["price", "updated_at"])
+
+        self.client.force_authenticate(user=self.student_user)
+        response = self.client.get("/finance/my-subscriptions")
+
+        self.assertEqual(response.status_code, 200, response.json())
+        plan = next(item for item in response.json()["plans"] if item["id"] == self.gym.id)
+        self.assertFalse(plan["can_purchase"])
+
+        purchase = self.client.post(
+            "/finance/subscriptions/purchase",
+            {"plan_id": self.gym.id},
+            format="json",
+        )
+        self.assertEqual(purchase.status_code, 400, purchase.json())
+        self.assertIn("price is not configured", purchase.json()["detail"])
+
     def test_new_finance_records_use_configured_currency(self):
         self.addCleanup(invalidate_settings_cache)
         SystemSetting.objects.update_or_create(
@@ -332,6 +400,40 @@ class FinanceSubscriptionTests(TestCase):
         self.assertEqual(response.status_code, 200, response.json())
         hold.refresh_from_db()
         self.assertFalse(hold.is_active)
+
+    def test_accountant_can_record_payment_without_creating_another_charge(self):
+        self.client.force_authenticate(user=self.accountant_user)
+        category = FeeCategory.objects.create(code="AUDIT", name="Audit Charge")
+        charge_response = self.client.post(
+            "/finance/student-ledgers",
+            {
+                "student_id": self.student.id,
+                "category_id": category.id,
+                "description": "Accountant audit charge",
+                "amount": "100.00",
+            },
+            format="json",
+        )
+        self.assertEqual(charge_response.status_code, 201, charge_response.json())
+
+        payment_response = self.client.post(
+            "/finance/student-ledgers",
+            {
+                "student_id": self.student.id,
+                "amount": "40.00",
+                "description": "Accountant audit payment",
+                "entry_type": "payment",
+            },
+            format="json",
+        )
+
+        self.assertEqual(payment_response.status_code, 201, payment_response.json())
+        self.assertEqual(payment_response.json()["entry"]["entry_type"], "payment")
+        self.assertEqual(StudentCharge.objects.filter(student=self.student).count(), 1)
+        self.assertEqual(
+            StudentBalanceSnapshot.objects.get(student=self.student).balance,
+            Decimal("60.00"),
+        )
 
     def test_fine_lifecycle_posts_and_settles_student_ledger(self):
         self.client.force_authenticate(user=self.accountant_user)

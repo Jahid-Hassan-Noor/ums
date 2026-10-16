@@ -1,5 +1,4 @@
-from datetime import date, timedelta
-from types import SimpleNamespace
+from datetime import timedelta
 
 from django.db.models import Q
 from django.utils import timezone
@@ -52,24 +51,19 @@ def serialize_schedule_semester(semester):
 
 
 def reference_semester_for_date(calendar_group, on_date=None):
-    if calendar_group != Semester.CALENDAR_UNDERGRADUATE:
+    if not calendar_group:
         return None
 
-    from admin_app.views.admin_semesters import UGP_2025_2026_REFERENCE
-
     on_date = on_date or timezone.localdate()
-    for index, reference in enumerate(UGP_2025_2026_REFERENCE, start=1):
-        start_date = date.fromisoformat(reference["start_date"])
-        end_date = date.fromisoformat(reference["end_date"])
-        if start_date <= on_date <= end_date:
-            return SimpleNamespace(
-                id=-index,
-                name=reference["name"],
-                start_date=start_date,
-                end_date=end_date,
-                starting_week=1,
-            )
-    return None
+    return (
+        Semester.objects.filter(
+            calendar_group=calendar_group,
+            start_date__lte=on_date,
+            end_date__gte=on_date,
+        )
+        .order_by("-is_active", "-start_date", "-created_at")
+        .first()
+    )
 
 
 def schedule_semester_for_role(role, user=None):

@@ -196,12 +196,10 @@ class AcademicCalendarApiTests(TestCase):
                 self.assertEqual(semester["start_date"], "2026-06-01")
                 self.assertEqual(semester["starting_week"], 1)
 
-    def test_official_reference_calendar_is_available_without_saved_semester(self):
+    def test_reference_calendar_does_not_fabricate_unsaved_semester(self):
         reference = reference_semester_for_date(
             Semester.CALENDAR_UNDERGRADUATE,
             date(2026, 4, 27),
         )
 
-        self.assertEqual(reference.name, "Semester 2, Session 2025/2026")
-        self.assertEqual(reference.start_date.isoformat(), "2026-03-23")
-        self.assertEqual(reference.starting_week, 1)
+        self.assertIsNone(reference)

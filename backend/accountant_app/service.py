@@ -101,7 +101,9 @@ def plan_payload(plan, profile=None):
         "allowed_roles": allowed_roles_for_plan(plan),
     }
     if profile:
-        payload["can_purchase"] = plan.is_active and role_can_buy(profile, plan)
+        payload["can_purchase"] = (
+            plan.is_active and plan.price > 0 and role_can_buy(profile, plan)
+        )
     return payload
 
 
@@ -285,17 +287,27 @@ def delete_plan(*, actor, plan_id):
 
 def my_subscriptions_payload(profile):
     plans = SubscriptionPlan.objects.filter(is_active=True).order_by("subscription_type")
+    pending_plan_ids = set(
+        Subscription.objects.filter(
+            subscriber=profile,
+            status=Subscription.STATUS_PENDING,
+        ).values_list("plan_id", flat=True)
+    )
     subscriptions = (
         Subscription.objects.select_related("plan", "subscriber", "subscriber__user")
         .filter(subscriber=profile)
         .order_by("-created_at")[:20]
     )
+    plan_rows = []
+    for plan in plans:
+        if not role_can_buy(profile, plan):
+            continue
+        payload = plan_payload(plan, profile)
+        if plan.id in pending_plan_ids:
+            payload["can_purchase"] = False
+        plan_rows.append(payload)
     return {
-        "plans": [
-            plan_payload(plan, profile)
-            for plan in plans
-            if role_can_buy(profile, plan)
-        ],
+        "plans": plan_rows,
         "subscriptions": [subscription_payload(subscription) for subscription in subscriptions],
     }
 
@@ -432,6 +444,12 @@ def initiate_subscription_payment(*, profile, plan_id, request):
         raise ValidationError("Your role is not eligible for this subscription.")
     if plan.price <= 0:
         raise ValidationError("This subscription price is not configured yet.")
+    if Subscription.objects.filter(
+        subscriber=profile,
+        plan=plan,
+        status=Subscription.STATUS_PENDING,
+    ).exists():
+        raise ValidationError("A payment request for this subscription is already pending.")
 
     config = FinanceGatewayConfig.objects.get_or_create(pk=1)[0]
     currency = default_currency_code()

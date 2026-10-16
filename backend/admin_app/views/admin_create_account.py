@@ -9,7 +9,7 @@ from xml.etree import ElementTree as ET
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -25,7 +25,7 @@ from admin_app.serializers import (
     UnitSerializer,
 )
 from admin_app.settings_registry import portal_name
-from auth_app.serializers import RegisterSerializer, UserSerializer
+from auth_app.serializers import RegisterSerializer, UserSerializer, managed_hostel_room
 from core.common.errors import first_error as _first_error
 
 
@@ -549,8 +549,11 @@ def _payload_with_temporary_password(payload):
     return account_payload, temporary_password
 
 
+@transaction.atomic
 def _create_account_from_payload(payload, config):
     account_payload, temporary_password = _payload_with_temporary_password(payload)
+    if account_payload.get("role") == models.Profile.ROLE_STUDENT:
+        managed_hostel_room(account_payload.get("room"), lock=True)
     serializer = RegisterSerializer(data=account_payload)
     if not serializer.is_valid():
         raise AccountValidationError(

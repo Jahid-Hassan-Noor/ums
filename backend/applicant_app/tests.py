@@ -1,4 +1,5 @@
 import io
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -6,6 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image
 from rest_framework.test import APIClient
+from rest_framework.throttling import AnonRateThrottle
 
 from admin_app.models import Profile, ensure_role_detail, prune_role_details
 from applicant_app import models
@@ -18,6 +20,20 @@ NO_THROTTLE_REST_FRAMEWORK = {
     **settings.REST_FRAMEWORK,
     "DEFAULT_THROTTLE_CLASSES": [],
     "DEFAULT_THROTTLE_RATES": {},
+}
+APPLICANT_AUTH_THROTTLE_REST_FRAMEWORK = {
+    **settings.REST_FRAMEWORK,
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "1/minute",
+        "user": "200/minute",
+        "login": "5/minute",
+        "applicant_registration": "5/minute",
+        "token_refresh": "5/minute",
+    },
 }
 
 
@@ -583,6 +599,52 @@ class ApplicantAppApiTests(TestCase):
         self.assertEqual(document_response.status_code, 200, document_response.json())
         self.assertEqual(document_response.json()["status"], models.ApplicationDocument.STATUS_ACCEPTED)
         self.assertEqual(document_response.json()["notes"], "Identity verified.")
+
+
+@override_settings(REST_FRAMEWORK=APPLICANT_AUTH_THROTTLE_REST_FRAMEWORK)
+class ApplicantAuthThrottleTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.defaults["REMOTE_ADDR"] = "10.241.250.250"
+
+    def test_anonymous_traffic_does_not_block_applicant_auth_or_token_refresh(self):
+        with patch.object(AnonRateThrottle, "get_rate", return_value="1/minute"):
+            self.assertEqual(self.client.get("/applicant/options").status_code, 200)
+            self.assertEqual(self.client.get("/applicant/options").status_code, 429)
+
+        payload = {
+            "username": "throttledapply",
+            "first_name": "Throttle",
+            "last_name": "Applicant",
+            "email": "throttled-apply@example.com",
+            "password": "StrongPass123!",
+            "confirm_password": "StrongPass123!",
+            "phone": "+60123456789",
+            "nationality": "Malaysia",
+            "country_of_residence": "Malaysia",
+            "passport_or_identity_no": "990101011235",
+        }
+        register_response = self.client.post(
+            "/applicant/auth/register",
+            payload,
+            format="json",
+        )
+        self.assertEqual(register_response.status_code, 201, register_response.json())
+
+        login_response = self.client.post(
+            "/applicant/auth/login",
+            {"email": payload["email"], "password": payload["password"]},
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, 200, login_response.json())
+
+        refresh_response = self.client.post(
+            "/auth/token/refresh",
+            {"refresh": register_response.json()["refresh"]},
+            format="json",
+        )
+        self.assertEqual(refresh_response.status_code, 200, refresh_response.json())
+        self.assertTrue(refresh_response.json().get("access"))
 
 
 class PortalRoleAccessTests(TestCase):

@@ -1,11 +1,19 @@
 from django.urls import path
 from rest_framework.permissions import AllowAny
+from rest_framework.throttling import UserRateThrottle
 
 from home_app.views import *
 
 
+class PublicReadRateThrottle(UserRateThrottle):
+    scope = "public_read"
+
+
 def public_view(view_class):
-    return view_class.as_view(permission_classes=[AllowAny])
+    return view_class.as_view(
+        permission_classes=[AllowAny],
+        throttle_classes=[PublicReadRateThrottle],
+    )
 
 
 urlpatterns = [

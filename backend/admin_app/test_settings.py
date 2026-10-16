@@ -171,6 +171,23 @@ class AdminSettingsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["user"]["username"], self.admin_user.username)
 
+    def test_public_traffic_does_not_consume_login_throttle(self):
+        auth_client = APIClient()
+        auth_client.defaults["REMOTE_ADDR"] = "10.242.1.25"
+
+        public_responses = [
+            auth_client.get("/settings/public") for _ in range(21)
+        ]
+        self.assertTrue(all(response.status_code == 200 for response in public_responses))
+
+        response = auth_client.post(
+            "/auth/login",
+            {"username": self.admin_user.username, "password": "StrongPass123!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
     def test_login_does_not_guess_when_email_matches_multiple_accounts(self):
         second_admin = User.objects.create_user(
             username="settings_admin_two",
@@ -300,6 +317,26 @@ class AdminSettingsTests(TestCase):
         self.assertTrue(payload["features"]["finance"])
         self.assertNotIn("gym_subscription", payload["features"])
         self.assertNotIn("kitchen_subscription", payload["features"])
+
+    def test_admissions_setting_does_not_block_student_leave_application(self):
+        updated = self.client.patch(
+            "/admin/settings",
+            {
+                "section": "dashboard",
+                "values": {
+                    "enable_admissions": False,
+                    "enable_leave": True,
+                },
+                "reason": "Verify independent feature routing.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(updated.status_code, 200, updated.json())
+        self.assertFalse(features_enabled_for_path("/apply/register"))
+        self.assertTrue(
+            features_enabled_for_path("/student/leave/apply", role="student")
+        )
 
     def test_role_settings_publish_labels_and_module_permissions(self):
         response = self.client.patch(

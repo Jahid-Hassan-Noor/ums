@@ -4,6 +4,7 @@ import type { Metadata } from "next"
 import { headers } from "next/headers"
 
 import { API_BASE } from "@/lib/api-base"
+import { throttledMessage } from "@/lib/fetch-utils"
 import {
   DEFAULT_UMS_PUBLIC_SETTINGS,
   normalizeUmsPublicSettings,
@@ -296,6 +297,8 @@ async function readJson<T>(response: Response): Promise<T> {
 async function throwIfNotOk(response: Response) {
   if (response.ok) return
   const data = await readJson<{ detail?: string; message?: string }>(response)
+  const throttled = throttledMessage(response, data)
+  if (throttled) throw new Error(throttled)
   const message = data?.detail || data?.message || "Request failed."
   throw new Error(message)
 }
@@ -341,12 +344,8 @@ export async function getPublicSchools(): Promise<PublicSchool[]> {
 export async function getPublicSchool(
   slug: string
 ): Promise<PublicSchool | null> {
-  try {
-    const data = await fetchJsonOrNull<PublicSchoolResponse>(`/schools/${slug}`)
-    return data?.school ?? null
-  } catch {
-    return null
-  }
+  const data = await fetchJsonOrNull<PublicSchoolResponse>(`/schools/${slug}`)
+  return data?.school ?? null
 }
 
 export async function getPublicCentres(): Promise<PublicCentre[]> {
@@ -361,12 +360,8 @@ export async function getPublicCentres(): Promise<PublicCentre[]> {
 export async function getPublicCentre(
   slug: string
 ): Promise<PublicCentre | null> {
-  try {
-    const data = await fetchJsonOrNull<PublicCentreResponse>(`/centres/${slug}`)
-    return data?.centre ?? null
-  } catch {
-    return null
-  }
+  const data = await fetchJsonOrNull<PublicCentreResponse>(`/centres/${slug}`)
+  return data?.centre ?? null
 }
 
 export async function getPublicDepartments(): Promise<PublicDepartmentsResponse> {
@@ -406,14 +401,10 @@ function encodePublicRoutePath(routePath: string) {
 export async function getPublicPageByPath(
   routePath: string
 ): Promise<PublicManagedPage | null> {
-  try {
-    const data = await fetchJsonOrNull<PublicPageResponse>(
-      encodePublicRoutePath(routePath)
-    )
-    return data?.page ?? null
-  } catch {
-    return null
-  }
+  const data = await fetchJsonOrNull<PublicPageResponse>(
+    encodePublicRoutePath(routePath)
+  )
+  return data?.page ?? null
 }
 
 export async function getPublicUmsSettings(): Promise<UmsPublicSettings> {
@@ -596,14 +587,10 @@ export async function getPublicNews(): Promise<PublicNewsItem[]> {
 export async function getPublicNewsItem(
   slug: string
 ): Promise<PublicNewsItem | null> {
-  try {
-    const data = await fetchJsonOrNull<PublicNewsDetailResponse>(
-      `/news/${slug}`
-    )
-    return data?.news ? normalizeNewsItem(data.news) : null
-  } catch {
-    return null
-  }
+  const data = await fetchJsonOrNull<PublicNewsDetailResponse>(
+    `/news/${slug}`
+  )
+  return data?.news ? normalizeNewsItem(data.news) : null
 }
 
 export async function getPublicEvents(): Promise<PublicEventItem[]> {
@@ -618,14 +605,10 @@ export async function getPublicEvents(): Promise<PublicEventItem[]> {
 export async function getPublicEvent(
   slug: string
 ): Promise<PublicEventItem | null> {
-  try {
-    const data = await fetchJsonOrNull<PublicEventDetailResponse>(
-      `/events/${slug}`
-    )
-    return data?.event ? normalizeEventItem(data.event) : null
-  } catch {
-    return null
-  }
+  const data = await fetchJsonOrNull<PublicEventDetailResponse>(
+    `/events/${slug}`
+  )
+  return data?.event ? normalizeEventItem(data.event) : null
 }
 
 export async function getPublicAnnouncements(): Promise<
