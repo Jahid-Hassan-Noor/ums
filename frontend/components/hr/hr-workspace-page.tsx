@@ -63,12 +63,12 @@ type Employee = {
   base_salary: string
   current_salary: string
   current_bonus: string
-  vacation_days_total: number
-  vacation_days_used: number
-  vacation_days_remaining: number
-  leave_days_total: number
-  leave_days_used: number
-  leave_days_remaining: number
+  vacation_days_total: number | null
+  vacation_days_used: number | null
+  vacation_days_remaining: number | null
+  leave_days_total: number | null
+  leave_days_used: number | null
+  leave_days_remaining: number | null
   position: Position | null
   reporting_manager: { id: number; name: string; employee_no: string } | null
   notes: string
@@ -172,7 +172,7 @@ type DashboardResponse = {
     total_bonus: string
     average_bonus: string
     pending_compensation_requests: number
-    vacation_days_available: number
+    vacation_days_available: number | null
   }
   statistics: {
     status_counts: ChartRow[]
@@ -197,9 +197,9 @@ type ChartRow = {
 
 type HrStatisticsResponse = {
   summary: DashboardResponse["summary"] & {
-    vacation_days_total: number
-    vacation_days_used: number
-    vacation_days_remaining: number
+    vacation_days_total: number | null
+    vacation_days_used: number | null
+    vacation_days_remaining: number | null
     leave_placeholder: boolean
   }
   charts: {
@@ -505,7 +505,7 @@ export function HrWorkspacePage({ view }: { view: View }) {
                 <StatCard label="Average Salary" value={formatMoney(summary.average_salary, defaultCurrency, locale)} icon={<BarChart3 className="size-4" />} />
                 <StatCard label="Average Bonus" value={formatMoney(summary.average_bonus, defaultCurrency, locale)} icon={<Gift className="size-4" />} />
                 <StatCard label="Active Positions" value={summary.positions} icon={<BriefcaseBusiness className="size-4" />} />
-                <StatCard label="Vacation Days Placeholder" value={summary.vacation_days_available} icon={<FileText className="size-4" />} />
+                <StatCard label="Staff leave tracking" value="Not configured" icon={<FileText className="size-4" />} />
               </section>
             ) : null}
 
@@ -621,7 +621,6 @@ export function HrWorkspacePage({ view }: { view: View }) {
                         <span>{employee.work_email || employee.email}</span>
                         <span>Salary {formatMoney(employee.current_salary, employee.salary_currency || defaultCurrency, locale)}</span>
                         <span>Bonus {formatMoney(employee.current_bonus, employee.salary_currency || defaultCurrency, locale)}</span>
-                        <span>Vacation {employee.vacation_days_remaining}/{employee.vacation_days_total} days</span>
                       </div>
                     </button>
                   ))}
@@ -658,7 +657,7 @@ export function HrWorkspacePage({ view }: { view: View }) {
                   <InfoItem label="Position" value={myEmployee.position?.title ?? "Not assigned"} />
                   <InfoItem label="Current Salary" value={formatMoney(myEmployee.current_salary, myEmployee.salary_currency || defaultCurrency, locale)} />
                   <InfoItem label="Current Bonus" value={formatMoney(myEmployee.current_bonus, myEmployee.salary_currency || defaultCurrency, locale)} />
-                  <InfoItem label="Vacation Placeholder" value={`${myEmployee.vacation_days_remaining}/${myEmployee.vacation_days_total} days`} />
+                  <InfoItem label="Leave balances" value="Not configured" />
                   <InfoItem label="Joining Date" value={formatDate(myEmployee.joining_date, locale)} />
                   <InfoItem label="Manager" value={myEmployee.reporting_manager?.name ?? "Not assigned"} />
                   <InfoItem label="Work Email" value={myEmployee.work_email || myEmployee.email || "Not recorded"} />
@@ -708,7 +707,12 @@ function HrStatisticsView({
         <ChartCard title="Salary Bands" subtitle="Current salary spread" rows={data.charts.salary_bands} total={data.summary.employees} />
         <ChartCard title="Bonus Bands" subtitle="Current bonus spread" rows={data.charts.bonus_bands} total={data.summary.employees} />
         <ChartCard title="Compensation Requests" subtitle="Approval queue status" rows={data.charts.compensation_request_status} total={Math.max(data.charts.compensation_request_status.reduce((sum, row) => sum + row.count, 0), 1)} />
-        <ChartCard title="Vacation And Leave Placeholder" subtitle="Temporary stats until leave workflow is built" rows={data.charts.leave_placeholder} total={Math.max(data.summary.vacation_days_total, 1)} />
+        <Card>
+          <CardHeader>
+            <CardTitle>Staff leave tracking</CardTitle>
+            <CardDescription>Leave policy and balances have not been configured. No accrual, usage, or remaining days are calculated.</CardDescription>
+          </CardHeader>
+        </Card>
       </section>
       <RecentRequests requests={data.recent_compensation_requests} defaultCurrency={defaultCurrency} locale={locale} />
     </section>
@@ -886,8 +890,7 @@ function EmployeeDetailPanel({
           <InfoItem label="Position" value={employee.position?.title ?? "Not assigned"} />
           <InfoItem label="Current Salary" value={formatMoney(employee.current_salary, employee.salary_currency || defaultCurrency, locale)} />
           <InfoItem label="Current Bonus" value={formatMoney(employee.current_bonus, employee.salary_currency || defaultCurrency, locale)} />
-          <InfoItem label="Vacation Placeholder" value={`${employee.vacation_days_remaining}/${employee.vacation_days_total} days`} />
-          <InfoItem label="Leave Placeholder" value={`${employee.leave_days_remaining}/${employee.leave_days_total} days`} />
+          <InfoItem label="Leave balances" value="Not configured" />
           <InfoItem label="Joining Date" value={formatDate(employee.joining_date, locale)} />
           <InfoItem label="Manager" value={employee.reporting_manager?.name ?? "Not assigned"} />
           <InfoItem label="Direct Reports" value={employee.direct_reports.length} />

@@ -14,6 +14,7 @@ import {
 import { AcademicCalendarSurface } from "@/components/role-zone/academic-calendar-surface"
 import { MinaSchedulerPanel } from "@/components/role-zone/mina-scheduler-panel"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -22,7 +23,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  buildScheduleEvents,
   getScheduleSummary,
   getTodaySchedule,
   type ScheduleEvent,
@@ -63,13 +63,12 @@ export function RoleScheduleSurface({
   config,
 }: RoleScheduleSurfaceProps) {
   const referenceDate = React.useMemo(() => new Date(), [])
-  const fallbackEvents = React.useMemo(
-    () => buildScheduleEvents(role, referenceDate),
-    [referenceDate, role]
-  )
   const [scheduleData, setScheduleData] =
     React.useState<RoleScheduleData | null>(null)
-  const events = scheduleData?.events ?? fallbackEvents
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState("")
+  const [retryKey, setRetryKey] = React.useState(0)
+  const events = React.useMemo(() => scheduleData?.events ?? [], [scheduleData])
   const semester = scheduleData?.semester ?? null
   const todayEvents = React.useMemo(
     () => getTodaySchedule(events, referenceDate),
@@ -85,15 +84,36 @@ export function RoleScheduleSurface({
         if (!isActive) return
         setScheduleData(nextSchedule)
       })
-      .catch(() => {
+      .catch((caught) => {
         if (!isActive) return
-        setScheduleData(null)
+        setError(caught instanceof Error ? caught.message : "Unable to load the schedule.")
+      })
+      .finally(() => {
+        if (isActive) setLoading(false)
       })
 
     return () => {
       isActive = false
     }
-  }, [config.kind, role])
+  }, [config.kind, role, retryKey])
+
+  if (loading) {
+    return <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground" role="status">Loading schedule…</p>
+  }
+
+  if (error) {
+    return (
+      <Card role="alert">
+        <CardHeader>
+          <CardTitle className="text-base">Schedule unavailable</CardTitle>
+          <CardDescription>{error}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={() => { setScheduleData(null); setError(""); setLoading(true); setRetryKey((value) => value + 1) }}>Try again</Button>
+        </CardContent>
+      </Card>
+    )
+  }
 
   if (config.kind === "calendar") {
     return (

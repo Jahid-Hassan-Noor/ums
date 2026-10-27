@@ -101,7 +101,8 @@ class HrAppTests(TestCase):
         self.assertEqual(response.status_code, 200, response.json())
         self.assertEqual(response.json()["employee"]["current_salary"], "5000.00")
         self.assertEqual(response.json()["employee"]["current_bonus"], "250.00")
-        self.assertEqual(response.json()["employee"]["vacation_days_remaining"], 21)
+        self.assertIsNone(response.json()["employee"]["vacation_days_remaining"])
+        self.assertTrue(response.json()["employee"]["is_placeholder"])
         self.assertEqual(len(response.json()["employee"]["employment_records"]), 1)
 
         response = self.client.post(
@@ -179,6 +180,7 @@ class HrAppTests(TestCase):
         self.assertEqual(response.json()["summary"]["employees"], 1)
         self.assertEqual(response.json()["summary"]["monthly_payroll"], "5250.00")
         self.assertEqual(response.json()["summary"]["total_bonus"], "550.00")
+        self.assertIsNone(response.json()["summary"]["vacation_days_available"])
         self.assertEqual(response.json()["statistics"]["status_counts"][1]["status"], "active")
         self.assertEqual(response.json()["statistics"]["status_counts"][1]["count"], 1)
         self.assertEqual(len(response.json()["statistics"]["recent_salary_adjustments"]), 1)
@@ -187,6 +189,8 @@ class HrAppTests(TestCase):
         self.assertEqual(response.status_code, 200, response.json())
         self.assertEqual(response.json()["summary"]["employees"], 1)
         self.assertEqual(response.json()["summary"]["leave_placeholder"], True)
+        self.assertIsNone(response.json()["summary"]["vacation_days_remaining"])
+        self.assertEqual(response.json()["charts"]["leave_placeholder"], [])
         self.assertEqual(response.json()["charts"]["salary_bands"][2]["count"], 1)
 
     def test_hr_cannot_access_transaction_audit(self):

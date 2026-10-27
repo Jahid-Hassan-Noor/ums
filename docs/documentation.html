@@ -1042,7 +1042,7 @@
       </p>
       <div class="audit-note">
         <span class="audit-dot"></span>
-        Source audit completed 5 August 2026
+        Source review updated 21 October 2026
       </div>
 
       <div class="meta-card">
@@ -1083,19 +1083,19 @@
           <div class="stat-label">Installed domain Django apps</div>
         </div>
         <div class="stat">
-          <div class="stat-value">160</div>
+          <div class="stat-value">164</div>
           <div class="stat-label">Django model classes</div>
         </div>
         <div class="stat">
-          <div class="stat-value">373</div>
+          <div class="stat-value">384</div>
           <div class="stat-label">First-party backend URL declarations</div>
         </div>
         <div class="stat">
-          <div class="stat-value">265</div>
+          <div class="stat-value">268</div>
           <div class="stat-label">Next.js page routes</div>
         </div>
         <div class="stat">
-          <div class="stat-value">292</div>
+          <div class="stat-value">348</div>
           <div class="stat-label">Backend test methods</div>
         </div>
       </div>
@@ -1103,11 +1103,12 @@
       <h3 id="universal-readiness">1.1 Universal readiness audit</h3>
       <p>
         The roadmap in <code>docs/universal_university_portal_roadmap.md</code>
-        has been checked against the current repository and the running Docker
-        site. All seven roadmap milestones are implemented at the platform
-        level. This audit also removed the remaining runtime hardcodes found in
-        date formatting, payment-provider labels, and one academic-center
-        placeholder.
+        was reviewed against the August platform changes. This October revision
+        reconciles the current models, routes, and subsequent workflow changes;
+        the live browser observations are recorded separately in
+        <code>docs/reports/live_browser_qa_2026-10-12.md</code>. The seven
+        roadmap milestones have source-level implementations, while the browser
+        report identifies flows that still need full verification.
       </p>
       <div class="table-container">
         <table>
@@ -1185,39 +1186,38 @@
         </table>
       </div>
       <div class="callout">
-        <strong>Verification commands from this audit:</strong>
-        <code>docker compose exec -T backend python manage.py test admin_app.test_universal_verification_matrix admin_app.test_seed_data_commands admin_app.test_route_permissions -v 1 --keepdb</code>,
-        <code>docker compose exec -T backend python manage.py makemigrations --check --dry-run</code>,
-        <code>cd frontend && npm run typecheck</code>, and
-        <code>graphify update .</code>. Runtime static search found no disallowed
-        university-specific terms in backend/frontend source after the fixes.
+        <strong>Evidence boundary:</strong> the August universal-readiness
+        checks and the October live browser QA are historical results. Route,
+        model, and test counts in this revision come from the current source.
+        Run the targeted Docker checks in section 11 against the deployed
+        environment before treating this as a new runtime certification.
       </div>
 
       <h3 id="audit-scope">1.2 Audit scope and evidence</h3>
       <p>
-        This document was updated from the repository itself rather than from
-        the generated knowledge graph alone. The audit covered:
+        This revision uses Graphify for navigation and checks the current
+        source directly. The review covered:
       </p>
       <ul>
         <li>
           Graphify graph/report for broad navigation and relationship hints.
         </li>
         <li>
-          All Django URL modules, installed apps, model declarations,
-          service/view inventories, and tests.
+          Django URL modules, model declarations, and the changed HR, finance,
+          teacher, authentication, media, and public-site services and tests.
         </li>
         <li>
-          All Next.js <code>page.tsx</code> routes, feature component groups,
-          API libraries, auth helpers, and role definitions.
+          All Next.js <code>page.tsx</code> route paths and the changed feature
+          components, API clients, and role settings.
         </li>
         <li>
-          Dockerfiles, Compose services, Nginx routing, environment templates,
-          Celery/Redis task infrastructure, and container entrypoints.
+          Compose service definitions, Nginx media routing, and scheduled
+          backup configuration.
         </li>
         <li>Current dependency manifests and framework versions.</li>
         <li>
-          Ruff, Knip, ESLint, TypeScript, npm audit, source-size, URL, and route
-          inventories run against the current working tree.
+          Static route, model, and test inventories. Historical QA and audit
+          findings are identified by their original dates.
         </li>
       </ul>
       <div class="callout">
@@ -1229,7 +1229,7 @@
         </p>
       </div>
 
-      <h3 id="maturity">1.2 Implementation maturity</h3>
+      <h3 id="maturity">1.3 Implementation maturity</h3>
       <div class="table-container">
         <table>
           <thead>
@@ -1259,19 +1259,21 @@
                 shared generic surfaces or some actions remain incomplete.
               </td>
               <td>
-                Role dashboards, some timetable/calendar presentation, and parts
-                of the attendance UI.
+                Navigation-first role dashboards and the executive calendar,
+                which displays scoped academic events but does not expand
+                recurring class meetings into calendar occurrences.
               </td>
             </tr>
             <tr>
               <td><span class="badge badge-scaffold">Scaffold</span></td>
               <td>
-                A route or model exists, but the repository currently exposes
-                informational or placeholder behavior.
+                A route, model, or response field exists, but the repository
+                currently exposes informational or placeholder behavior.
               </td>
               <td>
-                Several course-detail subpages explicitly describe themselves as
-                placeholders.
+                HR staff vacation and leave tracking has no policy or balance
+                ledger. Its API marks those values unavailable rather than
+                presenting invented allowances.
               </td>
             </tr>
           </tbody>
@@ -1294,7 +1296,7 @@
         Access is based on a single <code>Profile.role</code> value with a
         corresponding role-detail record. The supported roles are applicant,
         student, teacher, executive, librarian, caterer, technician, accountant,
-        and admin.
+        HR, and admin.
       </p>
 
       <div class="grid-2">
@@ -1318,8 +1320,9 @@
           <h4>Teacher</h4>
           <p>
             Manages assigned courses, resources, assignments, submissions,
-            attendance sessions and corrections, result drafts, leave decisions,
-            timetables, and venue requests.
+            attendance sessions and corrections, a searchable course roster
+            with attendance summaries and CSV export, result drafts, leave
+            decisions, timetables, and venue requests.
           </p>
         </div>
         <div class="card">
@@ -1356,15 +1359,16 @@
           <p>
             Manages finance gateway settings, subscription plans, payment
             status, subscription records, student ledgers, posted charges,
-            balances, finance holds, and finance-side notifications.
+            balances, finance holds, per-student PDF/XLSX ledger exports, and
+            finance-side notifications.
           </p>
         </div>
         <div class="card">
           <h4>Human Resources</h4>
           <p>
             Maintains the university employee master, HR staff accounts,
-            positions, employment status, reporting relationships, and
-            self-service HR profile access.
+            positions, employment status, reporting relationships, applicant
+            and employee onboarding boards, and self-service HR profile access.
           </p>
         </div>
         <div class="card">
@@ -1488,7 +1492,7 @@
             <td>Next.js 16.x, React 19.x</td>
               <td>
                 App Router, standalone production output, server/client
-                components, 265 page routes.
+                components, 268 page routes.
               </td>
             </tr>
             <tr>
@@ -1514,7 +1518,7 @@
               <td>Authentication</td>
               <td>Simple JWT 5.5.1 plus Next.js session proxy</td>
               <td>
-                5-minute access tokens, 7-day rotating refresh tokens, JWT
+                3-minute access tokens, 7-day rotating refresh tokens, JWT
                 blacklist support, and HttpOnly ums cookies mediated by Next
                 route handlers.
               </td>
@@ -1539,8 +1543,8 @@
               </td>
               <td>
                 Profile images, application documents, assignment submissions,
-                subscription-card PDFs, reports, exports, and centralized image
-                upload validation.
+                subscription-card PDFs, student-ledger PDF/XLSX exports,
+                reports, and centralized image upload validation.
               </td>
             </tr>
             <tr>
@@ -1552,7 +1556,7 @@
               <td>Edge/deployment</td>
               <td>Nginx 1.27, Docker Compose</td>
               <td>
-                Four-service stack with health checks and persistent volumes.
+                Seven-service stack with health checks and persistent volumes.
               </td>
             </tr>
           </tbody>
@@ -1563,7 +1567,7 @@
       <pre><code>ums/
 ├── backend/
 │   ├── core/                    # Django settings, root URLs, WSGI/ASGI
-│   ├── admin_app/               # Identity, directory, semesters, venues, elections,
+│   ├── admin_app/               # Directory, semesters, venues, settings,
 │   │                            # settings, reports, audit, public CMS administration
 │   ├── applicant_app/           # Applicant auth, applications, scholarship, documents
 │   ├── auth_app/                # JWT token issuance, authentication utilities
@@ -1572,7 +1576,7 @@
 │   ├── executive_app/           # Scoped academic management, scheduling, results, reports
 │   ├── accountant_app/          # Finance gateway, subscriptions, fines, student ledger
 │   ├── gradebook_app/           # Gradebook configuration, grading scales, weighted categories
-│   ├── hr_app/                  # HR staff role, employee master, positions, documents
+│   ├── hr_app/                  # HR staff, employee master, positions, onboarding
 │   ├── chatbot_app/             # Public/private ums chatbot and deterministic tools
 │   ├── librarian_app/           # Books, copies, shelves, laptops, requests, loans
 │   ├── caterer_app/             # Monthly allowances, accounts, deductions, adjustments
@@ -1581,7 +1585,7 @@
 │   ├── home_app/                # Public pages, news, events, directories, official links
 │   └── notifications_package/   # Shared notification API and service functions
 ├── frontend/
-│   ├── app/                     # 265 public and role-based page routes
+│   ├── app/                     # 268 public and role-based page routes
 │   ├── components/              # Feature, layout, chart, modal, sidebar, and UI components
 │   ├── lib/                     # Session proxy, API clients, role definitions, public data helpers
 │   ├── proxy.ts                 # HttpOnly-cookie role-route redirect guard
@@ -1674,7 +1678,8 @@
                 capacity-limited presentation slots, individual and group
                 assignments, lab activities, upload rules, group invitations,
                 leader-only final actions, rubrics, submissions, comments,
-                feedback, and activity deadlines.
+                feedback, activity deadlines, and a teacher course roster
+                with group and attendance data.
               </td>
               <td><span class="badge badge-live">Implemented</span></td>
             </tr>
@@ -1748,10 +1753,11 @@
               <td>Finance subscriptions and student ledger</td>
               <td>
                 Accountant role, ToyyibPay/DuitNow-compatible gateway settings,
-                gym and kitchen subscription plans, purchase checkout, callback
+                configurable subscription plans, purchase checkout, callback
                 activation, printable subscription cards, role-based
                 subscription access, fee categories, student charges, immutable
-                ledger entries, balance snapshots, and active finance holds.
+                ledger entries, balance snapshots, finance holds, payment
+                plans, and per-student PDF/XLSX ledger exports.
               </td>
               <td><span class="badge badge-live">Implemented</span></td>
             </tr>
@@ -1760,8 +1766,10 @@
               <td>
                 Dedicated HR role and app, admin-created HR accounts, employee
                 master records linked to ums profiles, positions, employment
-                status lifecycle, employment records, employee documents, and
-                HR self-service profile access.
+                status lifecycle, employment records, employee documents,
+                compensation requests, a configurable applicant/onboarding
+                board with movement history and employee linking, and HR
+                self-service profile access.
               </td>
               <td><span class="badge badge-live">Implemented</span></td>
             </tr>
@@ -1807,9 +1815,9 @@
             <tr>
               <td>Gradebook</td>
               <td>
-                Configurable grading scales, weighted assessment categories,
-                gradebook entries linked to course offerings, per-category
-                overrides, and gradebook comments for student feedback.
+                Configurable grade scales/ranges, assessment categories and
+                items, student grades, and grade history linked to course
+                offerings.
               </td>
               <td><span class="badge badge-live">Implemented</span></td>
             </tr>
@@ -1825,8 +1833,8 @@
             <tr>
               <td>Library advanced operations</td>
               <td>
-                Book fine tracking, lost-item management, library settings
-                configuration, book reservations, laptop reservations, and
+                Fines, waitlists, lost-item handling, borrowing limits,
+                inventory audits, acquisition budgets, laptop requests, and
                 room reservations.
               </td>
               <td><span class="badge badge-live">Implemented</span></td>
@@ -1846,10 +1854,12 @@
       <h3 id="role-experiences">4.1 Frontend role experiences</h3>
       <p>
         The frontend contains dedicated route groups and navigation definitions
-        for all nine roles. Some pages have purpose-built feature components;
+        for all ten roles. Some pages have purpose-built feature components;
         others are rendered through shared
-        <code>createRoleZonePage</code> or schedule factories. Twenty-nine page
-        routes currently use shared role-zone/schedule page construction.
+        <code>createRoleZonePage</code> or schedule factories. Twenty-five page
+        routes currently use shared role-zone/schedule page construction:
+        17 role-zone pages and eight student/teacher schedule pages. A shared
+        component alone does not indicate an unfinished workflow.
       </p>
       <div class="grid-3">
         <div class="card">
@@ -1858,24 +1868,96 @@
             Admissions, people management, academic directory, semesters,
             settings, reports, public content, venues, venue booking, canteen,
             library acquisition/circulation, helpdesk, elections, courses,
-            leave, academic calendars, and newer student results.
+            leave, academic calendars, HR onboarding, teacher rosters, finance
+            ledger exports, and student results.
           </p>
         </div>
         <div class="card">
           <h4>Shared data-driven screens</h4>
           <p>
-            Role dashboards, calendars, timetables, notification pages, and
-            several list/detail pages share layout and connector infrastructure.
+            Student and teacher calendars and timetables fetch role-specific
+            events. They show loading, empty, and request-error states; an API
+            failure no longer displays built-in sample events. Several
+            dashboards intentionally provide navigation to operational pages.
           </p>
         </div>
         <div class="card">
-          <h4>Explicit placeholders</h4>
+          <h4>Unimplemented staff leave tracking</h4>
           <p>
-            Several teacher course subpages and submission-detail pages still
-            display planned-workflow descriptions rather than complete
-            interactive tools.
+            HR employee records have no staff leave policy, accrual, request,
+            approval, or balance ledger. The API retains nullable leave fields
+            with <code>is_placeholder</code> and the UI says "Not configured".
+            Teacher course details, assignment details, submission review, and
+            the searchable roster are working API-backed screens.
           </p>
         </div>
+      </div>
+
+      <h4>Calendar and staff leave behavior</h4>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Surface</th>
+              <th>Current data and behavior</th>
+              <th>Limit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/student/calendar</code> and <code>/teacher/calendar</code></td>
+              <td>
+                Read <code>/api/student/calendar</code> and
+                <code>/api/teacher/calendar</code>. Their timeline and grid
+                display returned events, with loading and retryable error
+                states. A successful empty response remains empty.
+              </td>
+              <td>
+                Calendar entries are read-only here; users perform actions in
+                linked course, assignment, or schedule workflows.
+              </td>
+            </tr>
+            <tr>
+              <td>Student and teacher timetable pages</td>
+              <td>
+                Read the role's timetable API for dashboard, day, and week
+                views. No client-side sample timetable is substituted when
+                that request fails.
+              </td>
+              <td>
+                Timetable editing remains in the authorized executive schedule
+                workflow or a teacher's single-occurrence change workflow.
+              </td>
+            </tr>
+            <tr>
+              <td><code>/executive/calendar</code></td>
+              <td>
+                Reads <code>/api/executive/calendar</code>, which returns
+                <code>AcademicEvent</code> records tied to the executive's
+                assigned school or centre, including linked course events.
+                The endpoint rejects an unassigned or ambiguous scope.
+              </td>
+              <td>
+                This event calendar does not expand weekly class meetings.
+                Class timetable creation and changes use
+                <code>/executive/manage/schedule</code>.
+              </td>
+            </tr>
+            <tr>
+              <td>HR employee, profile, dashboard, and statistics screens</td>
+              <td>
+                Show "Not configured" for staff leave tracking. Nullable API
+                balance fields and an empty leave chart prevent fictional
+                allowance totals from appearing as employee data.
+              </td>
+              <td>
+                A real staff leave workflow requires institution-configured
+                policies, balance records, requests, decisions, and audit
+                behavior before balances can be calculated.
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <h3 id="operations">4.2 Campus and administrative operations</h3>
@@ -1905,12 +1987,15 @@
           <strong>Finance operations:</strong> accountant accounts, gateway
           settings, gym/kitchen plans, payment attempts, callback activation,
           printable subscription cards, fee categories, student charges,
-          ledger entries, balances, and finance holds.
+          ledger entries, balances, finance holds, payment plans, and
+          per-student PDF/XLSX exports.
         </li>
         <li>
           <strong>Human resources:</strong> HR accounts, employee master
           records, positions, employment lifecycle status, reporting
-          relationships, documents, and self-service HR profile access.
+          relationships, documents, applicant/onboarding board columns and
+          cards, movement history, employee links, and self-service HR profile
+          access.
         </li>
         <li>
           <strong>UMS chatbot:</strong> public information answers,
@@ -1931,10 +2016,10 @@
       <p>
         PostgreSQL stores a normalized relational model partitioned by Django
         app. The central
-        <code>admin_app.Profile</code> extends Django's user identity with a
-        ums role. Role-detail models then hold student-, teacher-,
-        executive-, librarian-, caterer-, technician-, accountant-, admin-, or
-        applicant-specific attributes.
+        <code>auth_app.Profile</code> extends Django's user identity with a
+        UMS role. Role-detail models then hold student-, teacher-,
+        executive-, librarian-, caterer-, technician-, accountant-, HR-, admin-,
+        or applicant-specific attributes.
       </p>
 
       <h3>5.1 High-level domain relationships</h3>
@@ -1953,7 +2038,9 @@ Semester ── CourseOffering ── ClassMeeting ── Venue / TimetableSlot
                     └── Exam ── ExamVenueAllocation / ExamSlip
 
 Profile ── Subscription ── SubscriptionPlan ── PaymentAttempt
-FinanceGatewayConfig ── payment webhook / return flow</code></pre>
+FinanceGatewayConfig ── payment webhook / return flow
+Student ── StudentCharge / StudentLedgerEntry ── BalanceSnapshot / FinanceHold
+Employee ── Position / EmploymentRecord / OnboardingCard ── StageChange</code></pre>
 
       <h3 id="model-groups">5.2 Model groups by Django app</h3>
       <div class="table-container">
@@ -1970,10 +2057,9 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>admin_app</code></td>
               <td>26</td>
               <td>
-                Profile, Admin, Semester, Course, CourseOffering,
-                rooms/buildings/venues, hostels, ClassMeeting,
-                bookings, settings, exports, Notification, AuditLog, Election,
-                Vote.
+                Schools/centres, Semester, AcademicSession, Course,
+                CourseOffering, rooms/buildings/venues, hostels, ClassMeeting,
+                booking requests, settings, reports, and AuditLog.
               </td>
             </tr>
             <tr>
@@ -1989,7 +2075,8 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>auth_app</code></td>
               <td>2</td>
               <td>
-                JWT token utilities, password reset tokens.
+                Profile and Admin role details. JWT and reset-token behavior
+                uses these models but is implemented in views/services.
               </td>
             </tr>
             <tr>
@@ -2026,17 +2113,17 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td>13</td>
               <td>
                 Accountant, FinanceGatewayConfig, SubscriptionPlan,
-                Subscription, PaymentAttempt, FeeCategory, StudentLedgerEntry,
-                StudentBalance, FinanceHold, StudentFine, FinePayment,
-                CompensationRequest.
+                Subscription, PaymentAttempt, Fine, FeeCategory,
+                StudentCharge, StudentLedgerEntry, StudentBalanceSnapshot,
+                StudentFinanceHold, PaymentPlan, PaymentPlanInstallment.
               </td>
             </tr>
             <tr>
               <td><code>gradebook_app</code></td>
               <td>6</td>
               <td>
-                GradebookConfig, GradingScale, WeightedCategory,
-                GradebookEntry, GradebookComment, WeightedCategoryOverride.
+                GradebookScale, GradebookScaleRange, GradebookCategory,
+                GradebookItem, GradebookGrade, GradebookGradeHistory.
               </td>
             </tr>
             <tr>
@@ -2052,9 +2139,9 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td>15</td>
               <td>
                 Librarian, Shelf, Book, BookAcquisitionRequest, BookCopy,
-                Laptop, LibraryRoom, BorrowRequest, Loan, BookFine, BookLost,
-                LibrarySetting, BookReservation, LaptopReservation,
-                RoomReservation.
+                Laptop, LibraryRoom, BorrowRequest, Loan, Fine, WaitlistEntry,
+                InventoryAudit, InventoryAuditItem, AcquisitionBudget,
+                BorrowingLimit.
               </td>
             </tr>
             <tr>
@@ -2070,38 +2157,47 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>quiz_app</code></td>
               <td>14</td>
               <td>
-                Quiz, QuizQuestion, QuizQuestionVersion, QuizOption,
-                QuizAttempt, QuizAnswer, QuizRandomRule,
-                QuestionBankCategory, QuestionBankQuestion,
-                QuestionBankVersion, QuestionBankOption,
-                QuizSchedule, QuizResult, QuizStatistics.
+                QuestionBank, QuestionCategory, Question/QuestionVersion,
+                QuestionChoice, Quiz, QuizSection, QuizQuestionSlot,
+                QuizRandomRule, QuizAccessOverride, QuizAttempt,
+                QuestionAttempt/QuestionAttemptStep, and QuizGrade.
               </td>
             </tr>
             <tr>
               <td><code>technician_app</code></td>
               <td>8</td>
               <td>
-                Technician, HelpdeskTicket, HelpdeskTicketUpdate,
-                VenueBookingRequest, VenueBookingDecision,
-                VenueBookingConflict, VenueBookingNotification,
-                VenueBookingAudit.
+                Technician, HelpdeskTicket, HelpdeskTicketUpdate, Election,
+                SchoolElectionSeat, ElectionCandidate, Vote, and
+                ElectionResultSnapshot.
               </td>
             </tr>
             <tr>
               <td><code>hr_app</code></td>
-              <td>7</td>
+              <td>11</td>
               <td>
-                HR, EmployeeMaster, Position, EmploymentStatus,
-                EmploymentRecord, EmployeeDocument, HRStaffAccount.
+                HRStaff, Position, Employee, EmploymentRecord,
+                SalaryAdjustment, CompensationChangeRequest,
+                EmployeeDocument, OnboardingColumn, OnboardingCard,
+                OnboardingStageChange, OnboardingEmployeeLink.
               </td>
+            </tr>
+            <tr>
+              <td><code>chatbot_app</code></td>
+              <td>1</td>
+              <td>SearchDocument for approved chatbot retrieval content.</td>
+            </tr>
+            <tr>
+              <td><code>notifications_package</code></td>
+              <td>1</td>
+              <td>Notification records for user-facing event delivery.</td>
             </tr>
           </tbody>
         </table>
       </div>
       <p>
-        The shared <code>notifications_package</code> does not define a separate
-        notification table; it operates on
-        <code>admin_app.Notification</code> and provides list, summary, read,
+        The shared <code>notifications_package</code> owns the
+        <code>Notification</code> table and provides list, summary, read,
         fan-out, due-reminder, and background task services.
       </p>
       <p>
@@ -2120,7 +2216,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
       <ol>
         <li>
           A user submits <code>username</code> and <code>password</code> to the
-          Next.js <code>/portal-auth/session</code> route, which forwards only
+          Next.js <code>/ums-auth/session</code> route, which forwards only
           approved login/register endpoints to Django.
         </li>
         <li>
@@ -2133,12 +2229,12 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
           sanitized session/user payload.
         </li>
         <li>
-          The Next.js proxy and <code>/portal-auth/backend/...</code> route
+          The Next.js proxy and <code>/ums-auth/backend/...</code> route
           handlers refresh expired access tokens while the rotating refresh
           token remains valid.
         </li>
         <li>
-          Client API calls go through <code>/portal-auth/backend</code>; the
+          Client API calls go through <code>/ums-auth/backend</code>; the
           route handler attaches the Bearer token server-side before forwarding
           to Django.
         </li>
@@ -2150,9 +2246,9 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
       <div class="callout warning">
         <p>
           This is a unified portal login, not external identity-provider SSO.
-          Tokens are currently stored in browser local storage. A future
-          production hardening path would evaluate secure, HTTP-only session
-          cookies and token rotation.
+          The Next.js session layer uses HttpOnly SameSite cookies and refresh
+          token rotation. Production review should cover CSRF, revocation, and
+          session/device management.
         </p>
       </div>
       <p>
@@ -2223,6 +2319,12 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               Students submit content and attachments; teachers review and
               return feedback. Announcements and assignment events can notify
               enrolled students.
+            </li>
+            <li>
+              Teachers can search the enrolled course roster, review tutorial
+              and lab groups plus attendance summaries, and export the visible
+              rows as CSV. The roster API checks that the offering belongs to
+              the requesting teacher.
             </li>
           </ul>
         </div>
@@ -2329,9 +2431,26 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
         <div class="card">
           <h4>Elections</h4>
           <p>
-            Admins configure election type, timing, seats, and candidates.
+            Technicians configure election type, timing, seats, and candidates.
             Eligibility and exact ballot counts are enforced; result snapshots
             can be published to eligible students.
+          </p>
+        </div>
+        <div class="card">
+          <h4>HR onboarding</h4>
+          <p>
+            HR staff manage applicant and onboarding columns, create cards,
+            move them with recorded history and optional reasons, and link a
+            card to one employee record after it enters onboarding. Stale moves
+            and duplicate employee links are rejected.
+          </p>
+        </div>
+        <div class="card">
+          <h4>Student ledger export</h4>
+          <p>
+            Accountants review a student's charges and posted ledger entries,
+            then download that student's ledger as PDF or XLSX. The export API
+            validates the format and student role.
           </p>
         </div>
       </div>
@@ -2373,7 +2492,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td>Administrators</td>
               <td>
                 Directory, accounts, people, semesters, settings, reports,
-                elections, hostels, venues, bookings, canteen, accountants,
+                hostels, venues, bookings, setup wizard, backups, accountants,
                 subscriptions, public CMS, statistics, audit.
               </td>
             </tr>
@@ -2410,16 +2529,18 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td>
                 Accountant dashboard, gateway settings, plans, purchases,
                 payment return/webhook, subscription records, printable cards,
-                fee categories, student ledgers, balances, and finance holds.
+                fee categories, student ledgers, PDF/XLSX export, balances,
+                finance holds, bulk charges, and payment plans.
               </td>
             </tr>
             <tr>
               <td><code>/api/hr/</code></td>
               <td>Human resources staff and active employees</td>
               <td>
-                HR dashboard, position management, employee master creation,
-                profile options, own employee profile, and HR staff account
-                listing.
+                HR dashboard, position management, employee records,
+                compensation, applicant/onboarding board columns and cards,
+                movement history, employee links, own employee profile, and
+                HR staff account listing.
               </td>
             </tr>
             <tr>
@@ -2431,6 +2552,16 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               </td>
             </tr>
             <tr>
+              <td><code>/api/gradebook/</code></td>
+              <td>Administrators, teachers, students</td>
+              <td>Grade scale configuration, teacher grade entry, and student grade views.</td>
+            </tr>
+            <tr>
+              <td><code>/api/quiz/</code></td>
+              <td>Teachers and students</td>
+              <td>Question banks, quizzes, attempts, answers, grading, and results.</td>
+            </tr>
+            <tr>
               <td><code>/api/canteen/</code></td>
               <td>Caterers</td>
               <td>Dashboard, student account lookup, transaction creation.</td>
@@ -2439,8 +2570,14 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/api/ict-helpdesk/</code></td>
               <td>Students and technicians</td>
               <td>
-                Student ticket list/create, technician dashboard, ticket update.
+                Student ticket list/create, technician dashboard, ticket update,
+                elections, and venue-booking decisions.
               </td>
+            </tr>
+            <tr>
+              <td><code>/api/schema/</code>, <code>/api/docs/</code></td>
+              <td>Authorized API consumers</td>
+              <td>Generated OpenAPI schema and Swagger UI; schema serving is admin restricted.</td>
             </tr>
             <tr>
               <td><code>/api/notifications/</code></td>
@@ -2513,6 +2650,21 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               </td>
             </tr>
             <tr>
+              <td><span class="badge badge-live">GET</span></td>
+              <td><code>/api/finance/ledger/export?student_id={id}&amp;export_format=pdf|xlsx</code></td>
+              <td>Download an accountant-authorized student ledger.</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-live">GET</span></td>
+              <td><code>/api/teacher/courses/{course_id}/roster</code></td>
+              <td>Read an assigned offering's enrollment and attendance summary.</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-post">POST</span></td>
+              <td><code>/api/hr/onboarding-board/cards/{card_id}/move</code></td>
+              <td>Move an HR onboarding card with stale-state protection.</td>
+            </tr>
+            <tr>
               <td><span class="badge badge-post">POST</span></td>
               <td><code>/api/chatbot/query</code></td>
               <td>
@@ -2577,7 +2729,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
 
       <h2 id="frontend-map">8. Frontend route map</h2>
       <p>
-        The App Router contains 265 page files. Route groups do not appear in
+        The App Router contains 268 page files. Route groups do not appear in
         the browser URL; for example,
         <code>app/(student)/student/results/page.tsx</code> renders at
         <code>/student/results</code>.
@@ -2625,7 +2777,8 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/teacher</code></td>
               <td>
                 Dashboard, courses, content/resources, assignments/submissions,
-                attendance, results, gradebook, quizzes, question bank,
+                attendance, course roster with CSV export, results, gradebook,
+                quizzes, question bank,
                 leave requests, timetable, calendar, venue
                 bookings, statistics, and subscriptions.
               </td>
@@ -2635,7 +2788,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/executive</code></td>
               <td>
                 Dashboard, organization, programmes, courses/offerings,
-                schedule, people, course evaluations, results, exams, reports,
+                schedule, scoped academic-event calendar, people, course evaluations, results, exams, reports,
                 statistics, subscriptions, and audit.
               </td>
             </tr>
@@ -2647,15 +2800,17 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
                 subscription records, student ledger (with sub-pages for
                 bulk-charge, fines, holds, payment-plans, and per-student
                 detail), fines, compensation requests, canteen oversight,
-                statistics, personal subscription card, and notifications.
+                per-student PDF/XLSX ledger export, statistics, personal
+                subscription card, and notifications.
               </td>
             </tr>
             <tr>
               <td>Human Resources</td>
               <td><code>/hr</code></td>
               <td>
-                Dashboard, employee master records, positions, self-service HR
-                profile, statistics, subscriptions, and notifications.
+                Dashboard, employee master records, positions, configurable
+                applicant/onboarding board, self-service HR profile,
+                statistics, subscriptions, and notifications.
               </td>
             </tr>
             <tr>
@@ -2663,9 +2818,10 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>/admin</code></td>
               <td>
                 Dashboard, accounts/people, academics, semesters,
-                venues/bookings, hostels, canteen, elections, public content,
-                reports, subscriptions, settings, statistics, backup/restore,
-                gradebook, HR management, UI customization, and audit. Class
+                venues/bookings, hostels, public content, reports,
+                subscriptions, setup wizard, settings, statistics,
+                backup/restore, gradebook, HR management, UI customization,
+                and audit. Class
                 timetable management is not an admin responsibility.
               </td>
             </tr>
@@ -2798,7 +2954,7 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
           <tbody>
             <tr>
               <td><code>postgresql</code></td>
-              <td>PostgreSQL 17 Alpine</td>
+              <td>PostgreSQL 18.4 Alpine</td>
               <td>
                 Persistent relational database with readiness health check.
               </td>
@@ -2807,8 +2963,8 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>redis</code></td>
               <td>Redis 8 Alpine with append-only persistence</td>
               <td>
-                Celery broker/result storage and a ready foundation for shared
-                Django caching and distributed throttling.
+                Celery broker/result storage, shared Django caching, and
+                distributed throttle state.
               </td>
             </tr>
             <tr>
@@ -2830,13 +2986,14 @@ FinanceGatewayConfig ── payment webhook / return flow</code></pre>
               <td><code>celery_beat</code></td>
               <td>Backend image, non-root scheduler</td>
               <td>
-                Enqueues one-minute due-reminder checks and monthly canteen
-                allowance initialization.
+                Enqueues due-reminder checks, hourly overdue-fine processing,
+                monthly canteen allowance initialization, and configured
+                monthly backup email delivery.
               </td>
             </tr>
             <tr>
             <td><code>frontend</code></td>
-            <td>Node.js 24.17.0 Alpine</td>
+            <td>Node.js 24.18.0 Alpine</td>
             <td>
               Builds and runs the Next.js standalone server on port 3000 behind
               Nginx.
@@ -2862,19 +3019,18 @@ docker compose up
 docker compose -f docker-compose.yml up -d --build
 
 # Framework checks inside containers
-docker compose exec backend python manage.py check
-docker compose exec backend python manage.py check --deploy
-docker compose exec backend python manage.py migrate
+docker compose exec -T backend python manage.py check
+docker compose exec -T backend python manage.py makemigrations --check --dry-run
+docker compose exec -T backend python manage.py check --deploy
 
 # Background task checks
-docker compose exec celery_worker celery -A core inspect ping
+docker compose exec -T celery_worker celery -A core inspect ping
 docker compose logs celery_worker celery_beat
 
 # Frontend checks
-cd frontend
-npm run lint
-npm run typecheck
-npm run build</code></pre>
+docker compose exec -T frontend npm run lint
+docker compose exec -T frontend npm run typecheck
+docker compose exec -T frontend npm run build</code></pre>
       <p>
         Persistent volumes store PostgreSQL data, uploaded media, and collected
         static files; Redis uses a separate append-only volume. The development
@@ -2885,10 +3041,13 @@ npm run build</code></pre>
 
       <h2 id="testing">11. Quality assurance and test coverage</h2>
       <p>
-        The repository contains 292 Django test methods across 37 backend test
-        modules. There are no frontend test/spec files at the time of this
-        audit, so frontend confidence currently comes from TypeScript, ESLint,
-        production builds, and manual browser verification.
+        The repository contains 348 Django test methods across 41 backend test
+        modules. No frontend test/spec files are present. The dated October
+        browser audit exercised many cross-role workflows but explicitly did
+        not complete every route or upload/download path; its ordinary 346-test
+        run had four shared-throttle HTTP 429 failures, while the affected
+        classes passed in isolation. Current runtime checks must be rerun
+        against the environment being assessed.
       </p>
       <div class="grid-2">
         <div class="card">
@@ -2900,7 +3059,7 @@ npm run build</code></pre>
             </li>
             <li>Applicant application and role access.</li>
             <li>Course registration and prerequisites.</li>
-            <li>Assignments, resources, attendance, and notifications.</li>
+            <li>Assignments, resources, attendance, teacher roster, and notifications.</li>
             <li>Results ums and final exam scheduling.</li>
             <li>
               Leave, elections, venue booking, canteen, library, ICT helpdesk,
@@ -2908,32 +3067,25 @@ npm run build</code></pre>
             </li>
             <li>
               Semesters, settings, reports, public content, audit logs, calendar
-              aggregation, due reminders, and background task dispatch.
+              aggregation, due reminders, HR onboarding, ledger exports, and
+              background task dispatch.
             </li>
           </ul>
         </div>
         <div class="card">
           <h4>Recommended targeted commands</h4>
-          <pre><code>cd backend
-python manage.py test applicant_app.tests
-python manage.py test student_app.tests
-python manage.py test student_app.test_results_portal
-python manage.py test teacher_app.tests
-python manage.py test executive_app.test_results_workflow
-python manage.py test executive_app.test_final_exam_schedule
-python manage.py test accountant_app.tests chatbot_app.tests
-python manage.py test librarian_app.tests
-python manage.py test caterer_app.tests
-python manage.py test technician_app.tests</code></pre>
+          <pre><code>docker compose exec -T backend python manage.py check
+docker compose exec -T backend python manage.py makemigrations --check --dry-run
+docker compose exec -T backend python manage.py test hr_app.test_onboarding --keepdb
+docker compose exec -T backend python manage.py test teacher_app.test_learning_management_portal --keepdb
+docker compose exec -T backend python manage.py test accountant_app.tests --keepdb
+docker compose exec -T frontend npm run typecheck
+docker compose exec -T frontend npm run lint</code></pre>
           <p>
-            The Docker backend image is the canonical dependency-complete test
-            environment. On 4 August 2026,
-            <code>docker exec ums_backend python manage.py check</code> and
-            <code
-              >docker exec ums_backend python manage.py test
-              accountant_app.tests chatbot_app.tests</code
-            >
-            passed.
+            Use the Docker images as the dependency-complete test environment.
+            The commands above are recommended checks, not results from this
+            documentation edit. See the dated browser QA report for observed
+            October passes, failures, and untested flows.
           </p>
         </div>
       </div>
@@ -2959,12 +3111,28 @@ python manage.py test technician_app.tests</code></pre>
             <tr>
               <td>Frontend completion</td>
               <td>
-                29 pages use generic role/schedule factories; several teacher
-                detail pages are explicit placeholders.
+                25 pages use shared role/schedule factories. Teacher course,
+                assignment, and submission detail pages are API-backed.
+                Executive calendar events are scoped, while recurring class
+                timetable occurrences remain a separate presentation.
               </td>
               <td>
-                Replace the highest-value placeholders with dedicated workflow
-                components and API mutations.
+                Expand recurring class meetings in the executive calendar if
+                one combined view is required; keep role dashboards as
+                navigation pages where that matches their purpose.
+              </td>
+            </tr>
+            <tr>
+              <td>HR staff leave</td>
+              <td>
+                Staff leave balances and charts are unavailable. The HR API
+                returns null balance fields and an empty placeholder chart;
+                the UI does not present a default allowance as a real balance.
+              </td>
+              <td>
+                Define configurable staff leave policies and implement
+                accrual, requests, approvals, and balance history before
+                showing calculated entitlements.
               </td>
             </tr>
             <tr>
@@ -2978,21 +3146,24 @@ python manage.py test technician_app.tests</code></pre>
             <tr>
               <td>Current frontend quality gate</td>
               <td>
-                Docker TypeScript now passes and <code>qrcode.react</code> is
-                installed in the frontend container. ESLint still reports
-                React effect/state errors and warnings.
+                The October browser QA recorded passing targeted typecheck and
+                lint after its fixes. This revision did not rerun those gates;
+                a complete production build is not documented as passing.
               </td>
               <td>
-                Fix the remaining effect/state errors, then rerun lint,
-                typecheck, and build.
+                Rerun lint, typecheck, and a production build in Docker before
+                release.
               </td>
             </tr>
             <tr>
               <td>API schema</td>
-              <td>No OpenAPI/Swagger generation dependency is configured.</td>
               <td>
-                Add generated schema documentation and contract checks for
-                frontend clients.
+                <code>drf-spectacular</code> provides an admin-restricted
+                <code>/api/schema/</code> and <code>/api/docs/</code>.
+              </td>
+              <td>
+                Review schema coverage and add contract checks for frontend
+                clients.
               </td>
             </tr>
             <tr>
@@ -3010,20 +3181,22 @@ python manage.py test technician_app.tests</code></pre>
             <tr>
               <td>Observability and recovery</td>
               <td>
-                Health checks and audit logs exist, but no metrics/error-tracing
-                stack, backup automation, or restore rehearsal is defined.
+                Health checks, audit logs, admin backup/restore endpoints, and
+                a monthly backup email task exist. The October browser audit
+                did not exercise restore; metrics/error tracing and restore
+                rehearsal remain open.
               </td>
               <td>
                 Add structured logs, error reporting, service metrics, backup
-                checks, restore drills, and alerting.
+                delivery checks, restore drills, and alerting.
               </td>
             </tr>
             <tr>
               <td>Dependency hygiene</td>
               <td>
-                The current production dependency audit may report
-                vulnerabilities. Knip may report unused or unlisted
-                dependencies.
+                Dependency findings from the older audit are not a current
+                security result. A fresh production dependency audit and Knip
+                review have not been run for this revision.
               </td>
               <td>
                 Upgrade patched packages, review dependencies, declare direct
@@ -3031,15 +3204,15 @@ python manage.py test technician_app.tests</code></pre>
               </td>
             </tr>
             <tr>
-              <td>Working-tree reproducibility</td>
+              <td>End-to-end coverage</td>
               <td>
-                The repository has grown significantly with new apps (quiz_app,
-                gradebook_app, auth_app), expanded models, and 265 frontend
-                pages. All changes should be committed in coherent groups.
+                The page and URL inventory is large, and the browser QA report
+                lists routes and high-impact flows that have not been exercised
+                end to end.
               </td>
               <td>
-                Commit changes in coherent feature/cleanup groups and regenerate
-                Graphify after the source changes are finalized.
+                Prioritize upload, export/download, payment checkout, backup
+                restore, and remaining same-role authorization checks.
               </td>
             </tr>
           </tbody>
@@ -3066,18 +3239,17 @@ python manage.py test technician_app.tests</code></pre>
           <tbody>
             <tr>
               <td class="priority-critical">P0</td>
-              <td>Finance, fees, and student ledger</td>
+              <td>Finance integration and fee policy</td>
               <td>
-                Expand the new accountant/subscription/payment foundation into
-                tuition fee structures, invoices, scholarships/sponsorship
-                offsets, receipts, outstanding balances, finance holds, and
-                gateway reconciliation.
+                Connect the existing charges, student ledger, holds, bulk
+                charges, and payment plans to tuition fee structures, invoices,
+                scholarships/sponsorship offsets, receipts, and gateway
+                reconciliation.
               </td>
               <td>
-                The current subscription-card workflow proves the gateway and
-                accountant role path; the next step is connecting admissions,
-                registration, exam clearance, results, and graduation to one
-                authoritative financial status.
+                Student balances and PDF/XLSX ledger exports now exist; the
+                remaining step is a consistent financial status across
+                admissions, registration, exams, results, and graduation.
               </td>
             </tr>
             <tr>
@@ -3115,19 +3287,20 @@ python manage.py test technician_app.tests</code></pre>
               </td>
               <td>
                 Reduces password risk and improves onboarding/offboarding across
-                all nine roles.
+                all ten roles.
               </td>
             </tr>
             <tr>
               <td class="priority-high">P1</td>
-              <td>Library fines, renewals, and reservations</td>
+              <td>Library policy and circulation depth</td>
               <td>
-                Renewal policy, waitlists, overdue fines, waivers, lost-item
-                charges, inventory audits, and acquisition budgeting.
+                Complete UI and policy coverage for existing renewals,
+                waitlists, fines, lost-item handling, borrowing limits,
+                inventory audits, and acquisition budgets.
               </td>
               <td>
-                Extends the newly completed circulation, acquisition-request,
-                loan, and reminder foundation.
+                The models and several APIs already exist; the next step is
+                consistent user journeys and verified cross-role behavior.
               </td>
             </tr>
             <tr>
@@ -3241,40 +3414,37 @@ python manage.py test technician_app.tests</code></pre>
           </thead>
           <tbody>
             <tr>
-              <td class="priority-critical">P0</td>
+              <td class="priority-high">P1</td>
               <td>
-                Nginx serves the entire <code>/media/</code> tree directly,
-                while applicant documents, medical certificates, leave
-                attachments, assignment files, and generated reports use that
-                storage.
+                Nginx proxies <code>/media/</code> to Django's protected media
+                view and uses an internal location for authorized files. Public
+                settings images have a separate direct route. The authorization
+                map still needs coverage review as file types grow.
               </td>
               <td>
-                Separate public and private media. Serve sensitive files only
-                through authenticated, object-authorized download endpoints or
-                short-lived signed URLs; keep private uploads outside the public
-                web root.
-              </td>
-            </tr>
-            <tr>
-              <td class="priority-critical">P0</td>
-              <td>
-                <code>npm audit --omit=dev</code> reports 12 vulnerabilities,
-                including three high-severity findings affecting Next.js and
-                transitive packages.
-              </td>
-              <td>
-                Upgrade to patched dependency versions, rerun tests/build/audit,
-                and review <code>mina-scheduler</code>, whose dependency range
-                conflicts with the installed Next.js major and carries an
-                unpatched <code>uuid</code> advisory.
+                Test access to each private file type across roles and owners,
+                verify the internal redirect is unreachable externally, and
+                keep new upload types on the protected-media path.
               </td>
             </tr>
             <tr>
               <td class="priority-critical">P0</td>
               <td>
-                Direct Django execution defaults to an insecure development
-                secret, <code>DEBUG=True</code>, and
-                <code>ALLOWED_HOSTS="*"</code>; the Nginx configuration is HTTP
+                The August dependency-audit counts are stale after package
+                changes; this revision did not run a fresh audit.
+              </td>
+              <td>
+                Run <code>npm audit --omit=dev</code> in the frontend container,
+                triage current findings, and review packages with incompatible
+                peer dependency ranges before release.
+              </td>
+            </tr>
+            <tr>
+              <td class="priority-critical">P0</td>
+              <td>
+                The Compose stack requires database and Django secrets in its
+                environment, but local direct execution can still use
+                development defaults; the bundled Nginx configuration is HTTP
                 only.
               </td>
               <td>
@@ -3288,30 +3458,27 @@ python manage.py test technician_app.tests</code></pre>
             <tr>
               <td class="priority-critical">P0</td>
               <td>
-                Global DRF anonymous and authenticated throttles are now
-                configured, but login, applicant auth, password recovery,
-                chatbot, payment webhooks, uploads, reports, and expensive
-                searches do not yet have endpoint-specific budgets or edge
-                limits.
+                DRF and Nginx throttling are configured. The October browser
+                audit observed shared anonymous 20/minute HTTP 429 responses,
+                including a centre lookup displayed as a misleading 404.
               </td>
               <td>
-                Add burst and endpoint-specific throttles backed by shared
-                Redis, plus Nginx limits for login, recovery, uploads, chatbot,
-                finance webhooks, reports, and expensive searches.
+                Separate public-read and sensitive-action budgets, test error
+                propagation for 429 responses, and isolate throttle state in
+                the Django test suite.
               </td>
             </tr>
             <tr>
               <td class="priority-high">P1</td>
               <td>
-                Password reset tokens are stored directly on the profile with no
-                explicit expiry timestamp; email-verification endpoints are
-                effectively placeholders.
+                Password reset tokens are stored as digests with a request
+                timestamp, a configured TTL, and one-use invalidation. The
+                email-verification endpoints remain informational placeholders.
               </td>
               <td>
-                Store only a token hash, add issue/expiry/used timestamps,
-                invalidate previous tokens, notify after password change, rate
-                limit requests, and either implement or remove the verification
-                contract.
+                Implement a real email-verification contract if required by
+                policy, or remove the placeholder endpoints. Add operational
+                monitoring for reset email delivery and abuse.
               </td>
             </tr>
             <tr>
@@ -3326,7 +3493,7 @@ python manage.py test technician_app.tests</code></pre>
                 Add CSRF analysis for unsafe proxied requests, session/device
                 management, reuse-detection handling, logout/blacklist
                 semantics, CSP, and integration tests for the
-                <code>/portal-auth</code> proxy.
+                <code>/ums-auth</code> proxy.
               </td>
             </tr>
             <tr>
@@ -3451,7 +3618,8 @@ python manage.py test technician_app.tests</code></pre>
           <ul>
             <li>
               Keep data fetching server-side where interaction is unnecessary;
-              115 TSX files are currently client-marked.
+              review client component boundaries before adding more browser
+              bundles.
             </li>
             <li>
               Split heavy role workspaces by tab/dialog, dynamically load
@@ -3467,10 +3635,9 @@ python manage.py test technician_app.tests</code></pre>
       </div>
       <div class="callout">
         <p>
-          Redis is already deployed, so the next optimization step is not adding
-          another infrastructure service. It is configuring a shared Django
-          cache, measuring the endpoints that deserve caching, and defining
-          invalidation rules. See the
+          Redis and Django's Redis cache backend are configured. Measure cache
+          hit rates, identify endpoints that benefit from caching, and define
+          invalidation rules before expanding cache use. See the
           <a href="https://docs.djangoproject.com/en/6.0/topics/cache/"
             >Django cache framework</a
           >.
@@ -3482,16 +3649,17 @@ python manage.py test technician_app.tests</code></pre>
       </h2>
       <p>
         Fewer lines are useful only when behavior becomes easier to understand
-        and test. The safest order is deletion of proven dead code, removal of
-        duplicate public APIs, consolidation behind characterization tests, and
-        only then deeper refactoring.
+        and test. The table below preserves leads from the August 2026 static
+        audit; its exact counts are historical and should be revalidated before
+        any deletion. Prefer proven dead code removal and behavior-preserving
+        consolidation behind characterization tests.
       </p>
       <div class="table-container">
         <table>
           <thead>
             <tr>
               <th>Order</th>
-              <th>Opportunity verified in this audit</th>
+              <th>August 2026 audit observation</th>
               <th>Potential reduction</th>
               <th>Safety mechanism</th>
             </tr>
@@ -3622,7 +3790,7 @@ python manage.py test technician_app.tests</code></pre>
 
       <h2 id="frontend-inventory">17. Complete frontend page inventory</h2>
       <p>
-        This appendix explains all 265 current Next.js
+        This appendix explains all 268 current Next.js
         <code>app/**/page.tsx</code> routes. Every entry states what the page
         does, the pages that directly continue or support its workflow, the
         major functional pipeline it belongs to, and the type of frontend
@@ -3659,7 +3827,7 @@ python manage.py test technician_app.tests</code></pre>
         </button>
       </div>
       <p class="inventory-summary" id="pageInventorySummary">
-        Showing all 265 pages in 12 route groups.
+        Showing all 268 pages in 11 route groups.
       </p>
       <div class="page-inventory" id="frontendPageInventory"></div>
       <p class="inventory-empty" id="pageInventoryEmpty">
@@ -3676,19 +3844,18 @@ python manage.py test technician_app.tests</code></pre>
 
       <h2 id="backend-inventory">18. Complete backend URL inventory</h2>
       <p>
-        This appendix lists 373 first-party backend URL declarations in the
-        current source, including slash/no-slash compatibility aliases. API
-        paths use their browser-facing <code>/api</code> prefix; Nginx removes
-        that prefix before forwarding to Django. The Django admin remains
-        mounted at <code>/super_admin/</code>; generated admin model CRUD URLs
-        are intentionally summarized rather than enumerated as product APIs. In
-        local <code>DEBUG</code> mode, Django may additionally serve
-        <code>/media/&lt;path&gt;</code>.
+        This appendix lists 384 first-party URL declarations from the current
+        Django URL modules, including routing includes and slash/no-slash
+        compatibility aliases. API paths use their browser-facing
+        <code>/api</code> prefix; Nginx removes that prefix before forwarding
+        to Django. The Django admin remains at <code>/super_admin/</code>;
+        generated admin model CRUD URLs are not enumerated. The protected
+        <code>/media/&lt;path&gt;</code> route is shown in the core group.
       </p>
 
       <div class="callout">
         <p>
-          <strong>Why backend URLs (373) outnumber frontend routes (265):</strong>
+          <strong>Why backend declarations (384) outnumber frontend routes (268):</strong>
           The REST API is granular by design—one frontend page often consumes
           multiple API endpoints (e.g., <code>/student/assignments</code> lists
           all assignments while <code>/student/assignments/&lt;id&gt;</code>,
@@ -3696,46 +3863,47 @@ python manage.py test technician_app.tests</code></pre>
           URLs). The backend also exposes separate CRUD endpoints for each
           resource model, action endpoints (submit, approve, publish, deduct),
           and trailing-slash variants, all of which inflate the URL count. The
-          frontend, by contrast, groups related functionality under a single
-            page route with dynamic segments. Expanded features in
-          accountant (ledger, fines, compensation), librarian (fine/lost/reservation actions),
-          quiz (15 URLs), gradebook, notifications,
-          and technician (venue booking) account for the increase from the previous 326/232 counts.
+          frontend groups related functionality under page routes with dynamic
+          segments. Current declarations include HR onboarding, student-ledger
+          export, generated schema/docs, protected media, finance payment plans,
+          library operations, and technician election and venue actions.
         </p>
       </div>
 
       <details class="route-group">
-        <summary>
-          Core routing, authentication and Django admin
-          <span>28 URL declarations</span>
-        </summary>
-        <pre><code>/super_admin/                                     (Django admin)
-/api/auth/register                                 (endpoint)
-/api/auth/login                                    (endpoint)
-/api/auth/me                                       (endpoint)
-/api/auth/send-email-verification                  (endpoint)
-/api/auth/verify-email                             (endpoint)
-/api/auth/forgot-password                          (endpoint)
-/api/auth/reset-password                           (endpoint)
-/api/auth/change-password                          (endpoint)
-/api/auth/token/refresh                            (endpoint)
-/api/finance/                                      (routing include → accountant_app)
-/api/admin/                                        (routing include → admin_app)
-/api/applicant/                                    (routing include → applicant_app)
-/api/canteen/                                      (routing include → caterer_app)
-/api/chatbot/                                      (routing include → chatbot_app)
-/api/executive/                                    (routing include → executive_app)
-/api/librarian/                                    (routing include → librarian_app)
-/api/quiz/                                         (routing include → quiz_app)
-/api/student/                                      (routing include → student_app)
-/api/teacher/                                      (routing include → teacher_app)
-/api/ict-helpdesk/                                 (routing include → technician_app)
-/api/notifications/                                (routing include → notifications_package)
-/api/                                              (routing include → home_app)</code></pre>
+        <summary>Core routing, authentication, schema and Django admin <span>28 URL declarations</span></summary>
+        <pre><code>/media/&lt;path&gt;    (protected media view)
+/super_admin/    (Django admin)
+/api/auth/register
+/api/auth/login
+/api/auth/me
+/api/auth/send-email-verification
+/api/auth/verify-email
+/api/auth/forgot-password
+/api/auth/reset-password
+/api/auth/change-password
+/api/auth/token/refresh
+/api/schema/
+/api/docs/
+/api/finance/    (routing include)
+/api/admin/    (routing include)
+/api/applicant/    (routing include)
+/api/canteen/    (routing include)
+/api/chatbot/    (routing include)
+/api/executive/    (routing include)
+/api/gradebook/    (routing include)
+/api/hr/    (routing include)
+/api/librarian/    (routing include)
+/api/quiz/    (routing include)
+/api/student/    (routing include)
+/api/teacher/    (routing include)
+/api/ict-helpdesk/    (routing include)
+/api/notifications/    (routing include)
+/api/    (routing include)</code></pre>
       </details>
 
       <details class="route-group">
-        <summary>Admin API <span>78 URL declarations</span></summary>
+        <summary>Admin API <span>79 URL declarations</span></summary>
         <pre><code>/api/admin/
 /api/admin/academics
 /api/admin/academics/centres
@@ -3750,16 +3918,14 @@ python manage.py test technician_app.tests</code></pre>
 /api/admin/academics/units
 /api/admin/academics/units/&lt;int:pk&gt;
 /api/admin/audit-log
-/api/admin/canteen
 /api/admin/create-account
-/api/admin/create-account/&lt;str:role&gt;
 /api/admin/create-account/&lt;str:role&gt;/import
+/api/admin/create-account/&lt;str:role&gt;
+/api/admin/database-backup
+/api/admin/database-backup/settings
+/api/admin/database-backup/maintenance
+/api/admin/database-backup/restore
 /api/admin/dashboard
-/api/admin/elections
-/api/admin/elections/&lt;int:pk&gt;
-/api/admin/elections/candidates
-/api/admin/elections/candidates/&lt;int:pk&gt;
-/api/admin/elections/results
 /api/admin/hostels
 /api/admin/hostels/export
 /api/admin/hostels/student-life
@@ -3777,6 +3943,7 @@ python manage.py test technician_app.tests</code></pre>
 /api/admin/manage/executives
 /api/admin/manage/executives/export
 /api/admin/manage/executives/&lt;int:profile_id&gt;
+/api/admin/manage/hr
 /api/admin/manage/librarians
 /api/admin/manage/caterers
 /api/admin/manage/technicians
@@ -3801,19 +3968,21 @@ python manage.py test technician_app.tests</code></pre>
 /api/admin/reports/exports
 /api/admin/reports/exports/&lt;int:pk&gt;
 /api/admin/semesters
+/api/admin/setup-wizard
 /api/admin/settings
+/api/admin/ui-customization
 /api/admin/statistics
 /api/admin/centres
 /api/admin/centres/&lt;int:pk&gt;
 /api/admin/schools
 /api/admin/schools/&lt;int:pk&gt;
+/api/admin/venue-bookings
+/api/admin/venue-bookings/&lt;int:pk&gt;/decision
 /api/admin/venues
 /api/admin/venues/buildings
 /api/admin/venues/buildings/&lt;int:pk&gt;
 /api/admin/venues/venues
-/api/admin/venues/venues/&lt;int:pk&gt;
-/api/admin/venue-bookings
-/api/admin/venue-bookings/&lt;int:pk&gt;/decision</code></pre>
+/api/admin/venues/venues/&lt;int:pk&gt;</code></pre>
       </details>
 
       <details class="route-group">
@@ -3851,11 +4020,11 @@ python manage.py test technician_app.tests</code></pre>
 /api/executive/courses/offer
 /api/executive/courses/offered
 /api/executive/dashboard
+/api/executive/evaluations/templates
+/api/executive/evaluations/templates/&lt;int:pk&gt;
 /api/executive/evaluations/surveys
 /api/executive/evaluations/surveys/&lt;int:pk&gt;
 /api/executive/evaluations/surveys/&lt;int:pk&gt;/export
-/api/executive/evaluations/templates
-/api/executive/evaluations/templates/&lt;int:pk&gt;
 /api/executive/manage
 /api/executive/manage/schedule
 /api/executive/manage/students
@@ -3876,23 +4045,32 @@ python manage.py test technician_app.tests</code></pre>
       </details>
 
       <details class="route-group">
-        <summary>
-          Finance/accountant API <span>20 URL declarations</span>
-        </summary>
+        <summary>Finance/accountant API <span>31 URL declarations</span></summary>
         <pre><code>/api/finance/
 /api/finance/dashboard
-/api/finance/fee-categories
+/api/finance/canteen
+/api/finance/hr-compensation-requests
 /api/finance/gateway
-/api/finance/holds
-/api/finance/my-subscriptions
-/api/finance/payments/return
-/api/finance/payments/webhook
 /api/finance/plans
+/api/finance/my-subscriptions
+/api/finance/subscriptions
+/api/finance/subscriptions/purchase
+/api/finance/subscriptions/&lt;int:pk&gt;/card
+/api/finance/fee-categories
 /api/finance/student-ledgers
 /api/finance/students/&lt;int:student_id&gt;/balance
-/api/finance/subscriptions
-/api/finance/subscriptions/&lt;int:pk&gt;/card
-/api/finance/subscriptions/purchase
+/api/finance/students/&lt;int:student_id&gt;/entries
+/api/finance/students/&lt;int:student_id&gt;/charges
+/api/finance/holds
+/api/finance/ledger/dashboard
+/api/finance/ledger/audit
+/api/finance/ledger/export
+/api/finance/ledger/bulk-charge
+/api/finance/ledger/payment-plans
+/api/finance/ledger/payment-plans/&lt;int:plan_id&gt;
+/api/finance/ledger/payment-plans/&lt;int:plan_id&gt;/pay
+/api/finance/payments/return
+/api/finance/payments/webhook
 /api/finance/students
 /api/finance/fines
 /api/finance/fines/&lt;int:pk&gt;
@@ -3902,18 +4080,30 @@ python manage.py test technician_app.tests</code></pre>
       </details>
 
       <details class="route-group">
-        <summary>Human resources API <span>7 URL declarations</span></summary>
+        <summary>Human resources API <span>19 URL declarations</span></summary>
         <pre><code>/api/hr/
 /api/hr/dashboard
+/api/hr/statistics
 /api/hr/employees
+/api/hr/employees/&lt;int:employee_id&gt;
+/api/hr/employees/&lt;int:employee_id&gt;/compensation-requests
+/api/hr/employees/&lt;int:employee_id&gt;/salary-adjustments
+/api/hr/compensation-requests
 /api/hr/my-profile
 /api/hr/positions
 /api/hr/profiles
-/api/hr/staff-accounts</code></pre>
+/api/hr/staff-accounts
+/api/hr/onboarding-board
+/api/hr/onboarding-board/cards
+/api/hr/onboarding-board/cards/&lt;int:card_id&gt;/move
+/api/hr/onboarding-board/cards/&lt;int:card_id&gt;/employee-link
+/api/hr/onboarding-board/cards/&lt;int:card_id&gt;/history
+/api/hr/onboarding-board/columns
+/api/hr/onboarding-board/columns/&lt;int:column_id&gt;</code></pre>
       </details>
 
       <details class="route-group">
-        <summary>Public/home API <span>31 URL declarations</span></summary>
+        <summary>Public/home API <span>32 URL declarations</span></summary>
         <pre><code>/api/
 /api/about
 /api/admissions
@@ -3932,6 +4122,7 @@ python manage.py test technician_app.tests</code></pre>
 /api/news/&lt;slug:slug&gt;
 /api/notifications
 /api/official-links
+/api/pages/navigation
 /api/pages
 /api/pages/&lt;path:route_path&gt;
 /api/ums-overview
@@ -3948,12 +4139,21 @@ python manage.py test technician_app.tests</code></pre>
       </details>
 
       <details class="route-group">
-        <summary>Chatbot API <span>1 URL declaration</span></summary>
-        <pre><code>/api/chatbot/query</code></pre>
+        <summary>Chatbot API <span>3 URL declarations</span></summary>
+        <pre><code>/api/chatbot/query
+/api/chatbot/search
+/api/chatbot/search/</code></pre>
       </details>
 
       <details class="route-group">
-        <summary>Librarian API <span>22 URL declarations</span></summary>
+        <summary>Gradebook API <span>3 URL declarations</span></summary>
+        <pre><code>/api/gradebook/admin
+/api/gradebook/teacher
+/api/gradebook/student</code></pre>
+      </details>
+
+      <details class="route-group">
+        <summary>Librarian API <span>26 URL declarations</span></summary>
         <pre><code>/api/librarian/
 /api/librarian/dashboard
 /api/librarian/books
@@ -3974,8 +4174,12 @@ python manage.py test technician_app.tests</code></pre>
 /api/librarian/requests/&lt;int:pk&gt;
 /api/librarian/loans
 /api/librarian/loans/&lt;int:pk&gt;/return
+/api/librarian/loans/&lt;int:pk&gt;/renew
 /api/librarian/loans/&lt;int:pk&gt;/apply-fine
-/api/librarian/loans/&lt;int:pk&gt;/mark-lost</code></pre>
+/api/librarian/loans/&lt;int:pk&gt;/mark-lost
+/api/librarian/borrowing-limits
+/api/librarian/borrowing-limits/&lt;int:pk&gt;
+/api/librarian/library-settings</code></pre>
       </details>
 
       <details class="route-group">
@@ -3987,10 +4191,10 @@ python manage.py test technician_app.tests</code></pre>
 /api/notifications/read-all/
 /api/notifications/read
 /api/notifications/read/
-/api/notifications/&lt;int:notification_id&gt;
-/api/notifications/&lt;int:notification_id&gt;/
 /api/notifications/&lt;int:notification_id&gt;/read
-/api/notifications/&lt;int:notification_id&gt;/read/</code></pre>
+/api/notifications/&lt;int:notification_id&gt;/read/
+/api/notifications/&lt;int:notification_id&gt;
+/api/notifications/&lt;int:notification_id&gt;/</code></pre>
       </details>
 
       <details class="route-group">
@@ -4082,10 +4286,17 @@ python manage.py test technician_app.tests</code></pre>
       </details>
 
       <details class="route-group">
-        <summary>ICT helpdesk API <span>3 URL declarations</span></summary>
+        <summary>ICT helpdesk, elections and venue API <span>10 URL declarations</span></summary>
         <pre><code>/api/ict-helpdesk/student/tickets
 /api/ict-helpdesk/technician/dashboard
-/api/ict-helpdesk/technician/tickets/&lt;int:pk&gt;</code></pre>
+/api/ict-helpdesk/technician/elections
+/api/ict-helpdesk/technician/elections/&lt;int:pk&gt;
+/api/ict-helpdesk/technician/elections/candidates
+/api/ict-helpdesk/technician/elections/candidates/&lt;int:pk&gt;
+/api/ict-helpdesk/technician/elections/results
+/api/ict-helpdesk/technician/tickets/&lt;int:pk&gt;
+/api/ict-helpdesk/technician/venue-bookings
+/api/ict-helpdesk/technician/venue-bookings/&lt;int:pk&gt;/decision</code></pre>
       </details>
 
       <details class="route-group">
@@ -4108,7 +4319,7 @@ python manage.py test technician_app.tests</code></pre>
       </details>
 
       <p class="footer">
-        University Management System repository documentation · Updated 4 August 2026 ·
+        University Management System repository documentation · Updated 21 October 2026 ·
         Generated from direct source inspection, static checks, and
         Graphify-assisted navigation.
       </p>
@@ -4147,6 +4358,7 @@ python manage.py test technician_app.tests</code></pre>
             "/admissions",
             "/centers",
             "/centres",
+            "/class-attendance",
             "/contact",
             "/departments",
             "/directories",
@@ -4154,11 +4366,11 @@ python manage.py test technician_app.tests</code></pre>
             "/forgot-password",
             "/login",
             "/maintenance",
+            "/module-unavailable",
             "/news",
             "/notifications",
             "/official-links",
             "/payment-return",
-            "/ums-overview",
             "/profile",
             "/programmes",
             "/programs",
@@ -4168,6 +4380,7 @@ python manage.py test technician_app.tests</code></pre>
             "/schools",
             "/services",
             "/student-life",
+            "/ums-overview",
             "/units",
           ],
         },
@@ -4188,7 +4401,6 @@ python manage.py test technician_app.tests</code></pre>
         {
           name: "Student",
           routes: [
-            "/class-attendance",
             "/student",
             "/student/academic-records",
             "/student/assignments",
@@ -4218,8 +4430,6 @@ python manage.py test technician_app.tests</code></pre>
             "/student/fines",
             "/student/gradebook",
             "/student/ict-helpdesk",
-            "/student/quizzes",
-            "/student/quizzes/[quizId]",
             "/student/leave",
             "/student/leave/apply",
             "/student/leave/history",
@@ -4228,6 +4438,8 @@ python manage.py test technician_app.tests</code></pre>
             "/student/library/laptops",
             "/student/library/rooms",
             "/student/notifications",
+            "/student/quizzes",
+            "/student/quizzes/[quizId]",
             "/student/registration",
             "/student/registration/history",
             "/student/registration/offered-courses",
@@ -4344,6 +4556,20 @@ python manage.py test technician_app.tests</code></pre>
           ],
         },
         {
+          name: "Human Resources",
+          routes: [
+            "/hr",
+            "/hr/dashboard",
+            "/hr/employees",
+            "/hr/my-profile",
+            "/hr/notifications",
+            "/hr/onboarding",
+            "/hr/positions",
+            "/hr/statistics",
+            "/hr/subscriptions",
+          ],
+        },
+        {
           name: "Admin",
           routes: [
             "/admin",
@@ -4356,7 +4582,6 @@ python manage.py test technician_app.tests</code></pre>
             "/admin/academics/units",
             "/admin/audit-log",
             "/admin/backup-restore",
-            "/admin/canteen",
             "/admin/centres",
             "/admin/create-account",
             "/admin/create-account/accountant",
@@ -4368,9 +4593,6 @@ python manage.py test technician_app.tests</code></pre>
             "/admin/create-account/teacher",
             "/admin/create-account/technician",
             "/admin/dashboard",
-            "/admin/elections",
-            "/admin/elections/candidates",
-            "/admin/elections/results",
             "/admin/gradebook",
             "/admin/hostels",
             "/admin/imports",
@@ -4402,6 +4624,7 @@ python manage.py test technician_app.tests</code></pre>
             "/admin/schools",
             "/admin/semesters",
             "/admin/settings",
+            "/admin/setup-wizard",
             "/admin/statistics",
             "/admin/subscriptions",
             "/admin/ui-customization",
@@ -4502,7 +4725,7 @@ python manage.py test technician_app.tests</code></pre>
         },
         elections: {
           name: "Student election governance",
-          flow: "Admin creates election → candidate approval → student ballot → result publication",
+          flow: "Technician creates election → candidate approval → student ballot → result publication",
         },
         evaluations: {
           name: "Course evaluation and feedback",
@@ -4518,11 +4741,15 @@ python manage.py test technician_app.tests</code></pre>
         },
         canteen: {
           name: "Canteen allowance and transactions",
-          flow: "Admin initializes allowance → caterer identifies student → purchase deduction → balance/history",
+          flow: "Allowance policy → caterer identifies student → purchase deduction → balance/history",
         },
         finance: {
-          name: "Finance subscriptions and payment cards",
-          flow: "Accountant configures gateway/plans → eligible user purchases → gateway callback activates subscription → card is printed",
+          name: "Finance subscriptions and student ledger",
+          flow: "Accountant configures charges or plans → payment/ledger posting → balance review → export or card",
+        },
+        "hr-onboarding": {
+          name: "HR applicant and employee onboarding",
+          flow: "HR creates card → moves between columns → records history → links employee",
         },
         helpdesk: {
           name: "ICT helpdesk",
@@ -4530,7 +4757,7 @@ python manage.py test technician_app.tests</code></pre>
         },
         venue: {
           name: "Venue booking",
-          flow: "Venue availability → student/teacher request → admin decision → booking history",
+          flow: "Venue availability → student/teacher request → technician or admin decision → booking history",
         },
         welfare: {
           name: "Student welfare and residential support",
@@ -4654,12 +4881,6 @@ python manage.py test technician_app.tests</code></pre>
             purpose:
               "Collects authoritative external and internal university resources while preserving clear routes back to services and ums login.",
             related: ["/services", "/login", "/contact"],
-          },
-          "/portal-overview": {
-            purpose:
-              "Redirects to /ums-overview, which explains the role-based portal and its main academic workflows.",
-            related: ["/ums-overview"],
-            surface: "Redirect",
           },
           "/ums-overview": {
             purpose:
@@ -4991,7 +5212,7 @@ python manage.py test technician_app.tests</code></pre>
 
       addPageDocs(
         "canteen",
-        ["/student/canteen", "/caterer/dashboard", "/admin/canteen"],
+        ["/student/canteen", "/caterer/dashboard", "/accountant/canteen"],
         "Student finance view",
         {
           "/student/canteen":
@@ -5069,7 +5290,7 @@ python manage.py test technician_app.tests</code></pre>
 
       addPageDocs(
         "elections",
-        ["/student/elections", "/admin/elections", "/admin/elections/results"],
+        ["/student/elections", "/technician/elections", "/technician/elections/results"],
         "Student ballot",
         {
           "/student/elections":
@@ -5360,7 +5581,7 @@ python manage.py test technician_app.tests</code></pre>
           },
           "/teacher/courses/[courseId]/roster": {
             purpose:
-              "Reserves the course roster surface for enrolled students, groups, attendance state, and exports; the current implementation explicitly presents planned placeholder behavior.",
+              "Lists the teacher's enrolled students with tutorial/lab groups and attendance summaries, supports search, and exports the visible roster as CSV.",
             related: [
               "/teacher/courses/[courseId]",
               "/teacher/courses/[courseId]/attendance",
@@ -5464,7 +5685,7 @@ python manage.py test technician_app.tests</code></pre>
         "Scheduling workspace",
         {
           "/executive/calendar":
-            "Shows institution-level academic calendar and schedule information from the executive perspective.",
+            "Shows AcademicEvent records for the executive's assigned school or centre, with loading and error states. Weekly class meetings remain in the separate schedule workspace.",
           "/executive/manage/schedule":
             "Creates and manages timetable slots by course, teacher, venue, day, and time, forming the source schedule consumed by student and teacher views.",
         },
@@ -5567,7 +5788,7 @@ python manage.py test technician_app.tests</code></pre>
         "Role landing",
         {
           "/admin":
-            "Acts as the administrative module index for accounts, academics, public content, reports, elections, facilities, configuration, and service operations.",
+            "Acts as the administrative module index for accounts, academics, public content, reports, facilities, configuration, and service operations.",
           "/admin/dashboard":
             "Shows the administrator's cross-domain operational summary and shortcuts into high-volume management and oversight tasks.",
         },
@@ -5615,16 +5836,6 @@ python manage.py test technician_app.tests</code></pre>
             "Provides the admin course-directory surface for reviewing course records inside the broader academic structure.",
           "/admin/academics/units":
             "Manages operational units, parent structures, descriptions, and executive assignments exposed to public and internal directories.",
-        },
-      );
-
-      addPageDocs(
-        "canteen",
-        ["/admin/canteen", "/caterer/dashboard", "/student/canteen"],
-        "Canteen administration",
-        {
-          "/admin/canteen":
-            "Configures or initializes student canteen allowances and reviews balances and transaction-level operational data.",
         },
       );
 
@@ -5801,18 +6012,18 @@ python manage.py test technician_app.tests</code></pre>
       addPageDocs(
         "elections",
         [
-          "/admin/elections",
-          "/admin/elections/candidates",
-          "/admin/elections/results",
+          "/technician/elections",
+          "/technician/elections/candidates",
+          "/technician/elections/results",
           "/student/elections",
         ],
         "Election administration",
         {
-          "/admin/elections":
+          "/technician/elections":
             "Creates and maintains elections, offices, eligibility windows, ballot status, and publication controls.",
-          "/admin/elections/candidates":
+          "/technician/elections/candidates":
             "Reviews candidate applications or nominations and records approval state before candidates appear on student ballots.",
-          "/admin/elections/results":
+          "/technician/elections/results":
             "Calculates and reviews vote totals and controls when finalized election results become visible.",
         },
       );
@@ -5943,7 +6154,7 @@ python manage.py test technician_app.tests</code></pre>
 
       addPageDocs(
         "canteen",
-        ["/caterer/dashboard", "/student/canteen", "/admin/canteen"],
+        ["/caterer/dashboard", "/student/canteen", "/accountant/canteen"],
         "Caterer workspace",
         {
           "/caterer/dashboard":
@@ -6047,6 +6258,80 @@ python manage.py test technician_app.tests</code></pre>
         {
           "/librarian/settings":
             "Lets librarians configure library policies, loan periods, fine rates, and operational settings.",
+        },
+      );
+
+      addPageDocs(
+        "finance",
+        ["/accountant/ledger", "/accountant/dashboard"],
+        "Finance operations",
+        {
+          "/accountant/canteen":
+            "Reviews dining balances and transactions from the accountant workspace.",
+          "/accountant/compensation-requests":
+            "Reviews employee compensation requests and records finance-side decisions.",
+          "/accountant/ledger/[studentId]":
+            "Shows one student's charges, ledger entries, balance, payment actions, and PDF/XLSX exports.",
+          "/accountant/ledger/bulk-charge":
+            "Posts a validated charge to a selected group of student accounts.",
+          "/accountant/ledger/fines":
+            "Reviews fine-related ledger activity from the finance workspace.",
+          "/accountant/ledger/holds":
+            "Places or releases student finance holds and reviews their status.",
+          "/accountant/ledger/payment-plans":
+            "Creates and monitors installment plans and records plan payments.",
+          "/caterer/subscriptions":
+            "Uses the shared subscription page for any plans available to caterers.",
+        },
+      );
+
+      addPageDocs(
+        "hr-onboarding",
+        ["/hr/employees", "/hr/positions"],
+        "HR onboarding board",
+        {
+          "/hr/onboarding":
+            "Manages applicant and onboarding columns and cards, drag or confirmed moves, movement history, and employee linking.",
+        },
+      );
+
+      addPageDocs(
+        "admissions",
+        ["/admin/manage/applicants", "/apply/status"],
+        "Applicant detail",
+        {
+          "/admin/manage/applicants/[applicantId]":
+            "Reviews one applicant's profile, application material, status history, and staff decisions.",
+        },
+      );
+
+      addPageDocs(
+        "configuration",
+        ["/admin/settings", "/admin/semesters"],
+        "Setup wizard",
+        {
+          "/admin/setup-wizard":
+            "Guides administrators through institution identity, terminology, localization, academic structure, roles, modules, and readiness steps.",
+        },
+      );
+
+      addPageDocs(
+        "role-navigation",
+        ["/login", "/"],
+        "Availability notice",
+        {
+          "/module-unavailable":
+            "Explains that a requested optional module is disabled or incomplete using configured module labels and setup progress.",
+        },
+      );
+
+      addPageDocs(
+        "venue",
+        ["/student/venue-bookings", "/teacher/venue-bookings"],
+        "Technician venue workspace",
+        {
+          "/technician/venue-bookings":
+            "Reviews venue requests and records technician approval or rejection decisions.",
         },
       );
 

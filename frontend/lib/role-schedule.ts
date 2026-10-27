@@ -16,7 +16,7 @@ export type ScheduleCategory =
 
 export type ScheduleTemplate = {
   id: string
-  role: Extract<UserRole, "student" | "teacher">
+  role: Extract<UserRole, "student" | "teacher" | "executive">
   title: string
   description: string
   location: string
@@ -284,7 +284,7 @@ export function buildScheduleEvents(
 }
 
 export function normalizeScheduleApiEvents(
-  role: Extract<UserRole, "student" | "teacher">,
+  role: Extract<UserRole, "student" | "teacher" | "executive">,
   apiEvents: readonly ScheduleApiEvent[]
 ): ScheduleEvent[] {
   return apiEvents

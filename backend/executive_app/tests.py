@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from admin_app.models import (
+    AcademicEvent,
     ClassMeeting,
     Course,
     CourseOffering,
@@ -25,6 +26,62 @@ from student_app.registration_service import register_student
 
 
 User = get_user_model()
+
+
+class ExecutiveCalendarTests(TestCase):
+    def test_calendar_only_returns_events_in_assigned_scope(self):
+        school = School.objects.create(code="CAL-A", name="Calendar School A")
+        other_school = School.objects.create(code="CAL-B", name="Calendar School B")
+        user = User.objects.create_user(username="calendar_exec", password="pass")
+        executive = user.profile
+        executive.role = Profile.ROLE_EXECUTIVE
+        executive.school = school
+        executive.save(update_fields=["role", "school", "updated_at"])
+
+        own_event = AcademicEvent.objects.create(
+            title="Own academic event", starts_at=timezone.now(), school=school,
+        )
+        semester = Semester.objects.create(
+            name="Calendar Semester", start_date="2026-10-01", end_date="2027-02-01",
+        )
+        course = Course.objects.create(
+            code="CAL101", title="Calendar Course", credits=3, school=school,
+        )
+        offering = CourseOffering.objects.create(course=course, semester=semester, section="A")
+        linked_event = AcademicEvent.objects.create(
+            title="Linked course event", starts_at=timezone.now(), offering=offering,
+        )
+        AcademicEvent.objects.create(
+            title="Other academic event", starts_at=timezone.now(), school=other_school,
+        )
+        AcademicEvent.objects.create(
+            title="Conflicting ownership", starts_at=timezone.now(), school=other_school, offering=offering,
+        )
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.get("/executive/calendar")
+
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.json()["scope"]["id"], school.id)
+        self.assertEqual(response.json()["schedule"]["count"], 2)
+        self.assertEqual(
+            {event["id"] for event in response.json()["schedule"]["events"]},
+            {str(own_event.id), str(linked_event.id)},
+        )
+
+    def test_calendar_requires_an_assigned_scope(self):
+        user = User.objects.create_user(username="unassigned_calendar_exec", password="pass")
+        executive = user.profile
+        executive.role = Profile.ROLE_EXECUTIVE
+        executive.save(update_fields=["role", "updated_at"])
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.get("/executive/calendar")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("assigned", response.json()["detail"])
 
 
 class ExecutiveCoursePrerequisiteTests(TestCase):

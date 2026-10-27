@@ -97,12 +97,12 @@ def manager_payload(employee):
 
 def leave_placeholder_payload():
     return {
-        "vacation_days_total": 21,
-        "vacation_days_used": 0,
-        "vacation_days_remaining": 21,
-        "leave_days_total": 14,
-        "leave_days_used": 0,
-        "leave_days_remaining": 14,
+        "vacation_days_total": None,
+        "vacation_days_used": None,
+        "vacation_days_remaining": None,
+        "leave_days_total": None,
+        "leave_days_used": None,
+        "leave_days_remaining": None,
         "is_placeholder": True,
     }
 
@@ -392,7 +392,7 @@ def dashboard_payload():
             "total_bonus": money_payload(payroll["total_bonus"]),
             "average_bonus": money_payload(payroll["average_bonus"]),
             "pending_compensation_requests": CompensationChangeRequest.objects.filter(status=CompensationChangeRequest.STATUS_PENDING).count(),
-            "vacation_days_available": employees.count() * 21,
+            "vacation_days_available": None,
         },
         "statistics": {
             "status_counts": _status_counts(employees),
@@ -425,7 +425,6 @@ def hr_statistics_payload():
         for row in requests.values("request_type").annotate(count=Count("id"))
     }
     total_employees = employees.count()
-    leave = leave_placeholder_payload()
     return {
         "summary": {
             "employees": total_employees,
@@ -436,9 +435,9 @@ def hr_statistics_payload():
             "total_bonus": money_payload(payroll["total_bonus"]),
             "average_bonus": money_payload(payroll["average_bonus"]),
             "pending_compensation_requests": request_status_counts.get(CompensationChangeRequest.STATUS_PENDING, 0),
-            "vacation_days_total": total_employees * leave["vacation_days_total"],
-            "vacation_days_used": total_employees * leave["vacation_days_used"],
-            "vacation_days_remaining": total_employees * leave["vacation_days_remaining"],
+            "vacation_days_total": None,
+            "vacation_days_used": None,
+            "vacation_days_remaining": None,
             "leave_placeholder": True,
         },
         "charts": {
@@ -455,12 +454,7 @@ def hr_statistics_payload():
                 {"type": request_type, "label": label, "count": request_type_counts.get(request_type, 0)}
                 for request_type, label in CompensationChangeRequest.REQUEST_CHOICES
             ],
-            "leave_placeholder": [
-                {"label": "Vacation Used", "count": total_employees * leave["vacation_days_used"]},
-                {"label": "Vacation Remaining", "count": total_employees * leave["vacation_days_remaining"]},
-                {"label": "Leave Used", "count": total_employees * leave["leave_days_used"]},
-                {"label": "Leave Remaining", "count": total_employees * leave["leave_days_remaining"]},
-            ],
+            "leave_placeholder": [],
         },
         "recent_compensation_requests": [
             compensation_request_payload(item)
